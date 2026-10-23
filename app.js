@@ -175,9 +175,12 @@ function icoHtml(b, cls = 'ico') {
 
 function render() {
   const nav = ui.tab === 'month' || ui.tab === 'calendar';
-  $('.topbar').classList.toggle('hide-nav', !nav);
-  $('#monthTitle').textContent = nav ? thMonthYear(ui.ym)
-    : ui.tab === 'bills' ? 'บิลทั้งหมด' : 'ตั้งค่า';
+  const title = nav ? thMonthYear(ui.ym) : ui.tab === 'bills' ? 'บิลทั้งหมด' : 'ตั้งค่า';
+  $('#largeHead').classList.toggle('hide-nav', !nav);
+  $('#monthTitle').textContent = title;
+  $('#monthTitle').disabled = !nav;
+  $('#barTitle').textContent = title;
+  $('#todayBtn').hidden = !nav || ui.ym === ymOf(new Date());
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
   $('#addBtn').hidden = ui.tab === 'settings';
   if (ui.tab === 'month') renderMonth();
@@ -185,6 +188,8 @@ function render() {
   else if (ui.tab === 'bills') renderBills();
   else renderSettings();
 }
+
+const CHECK_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function occItem(o) {
   const b = o.bill;
@@ -200,7 +205,7 @@ function occItem(o) {
         ${statusBadge(o)}
       </div>
       <div class="right"><div class="amt">${amt}</div></div>
-      <button class="check ${o.paid ? 'on' : ''}" data-toggle="${b.id}" data-ym="${o.ym}" aria-label="${o.paid ? 'ยกเลิกจ่ายแล้ว' : 'ทำเครื่องหมายว่าจ่ายแล้ว'}">${o.paid ? '✓' : ''}</button>
+      <button class="check ${o.paid ? 'on' : ''}" data-toggle="${b.id}" data-ym="${o.ym}" aria-label="${o.paid ? 'ยกเลิกจ่ายแล้ว' : 'ทำเครื่องหมายว่าจ่ายแล้ว'}">${CHECK_SVG}</button>
     </div>`;
 }
 
@@ -397,20 +402,190 @@ function renderSettings() {
 
 /* ---------- Sheets ---------- */
 
-function openSheet(html) {
-  const sheet = $('#sheet');
-  sheet.innerHTML = `<div class="grabber"></div>${html}`;
-  sheet.hidden = false;
-  $('#backdrop').hidden = false;
-  sheet.scrollTop = 0;
-  document.body.style.overflow = 'hidden';
+/*
+  The sheet is positioned by a spring rather than CSS keyframes so it can be
+  grabbed mid-flight, follows the finger 1:1, and inherits release velocity.
+  Spring params follow Apple's damping/response model.
+*/
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function spring({ from, to, velocity = 0, damping = 1, response = 0.4, onUpdate, onDone }) {
+  const k = (2 * Math.PI / response) ** 2;
+  const c = (4 * Math.PI * damping) / response;
+  let x = from, v = velocity, last = performance.now(), raf = 0;
+  const step = (now) => {
+    let dt = Math.min((now - last) / 1000, 0.064);
+    last = now;
+    while (dt > 0) {
+      const h = Math.min(dt, 1 / 240);
+      v += (-k * (x - to) - c * v) * h;
+      x += v * h;
+      dt -= h;
+    }
+    if (Math.abs(v) < 5 && Math.abs(x - to) < 0.5) { onUpdate(to); if (onDone) onDone(); return; }
+    onUpdate(x);
+    raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  return { stop: () => cancelAnimationFrame(raf) };
 }
 
-function closeSheet() {
-  $('#sheet').hidden = true;
-  $('#backdrop').hidden = true;
-  document.body.style.overflow = '';
+// Apple's momentum projection: where a flick would come to rest.
+function project(velocity, decel = 0.998) { return (velocity / 1000) * decel / (1 - decel); }
+
+function rubberband(overshoot, dimension, constant = 0.55) {
+  return (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
 }
+
+const sheetState = { open: false, y: 0, anim: null };
+
+function sheetHeight() { return $('#sheet').offsetHeight || window.innerHeight; }
+
+function setSheetY(y) {
+  sheetState.y = y;
+  $('#sheet').style.transform = `translate3d(0, ${y}px, 0)`;
+  $('#backdrop').style.opacity = String(Math.min(1, Math.max(0, 1 - y / sheetHeight())));
+}
+
+function moveSheet(to, { velocity = 0, damping = 1, response = 0.35, done } = {}) {
+  if (sheetState.anim) sheetState.anim.stop();
+  sheetState.anim = null;
+  if (reduceMotion.matches) {
+    // Cross-fade instead of sliding.
+    const sheet = $('#sheet'), bd = $('#backdrop');
+    const show = to === 0;
+    sheet.style.transform = 'none';
+    sheet.style.transition = bd.style.transition = 'opacity 200ms ease';
+    sheet.style.opacity = bd.style.opacity = show ? '1' : '0';
+    sheetState.y = show ? 0 : sheetHeight();
+    if (done) setTimeout(done, 200);
+    return;
+  }
+  sheetState.anim = spring({
+    from: sheetState.y, to, velocity, damping, response, onUpdate: setSheetY,
+    onDone: () => { sheetState.anim = null; if (done) done(); },
+  });
+}
+
+function openSheet(html) {
+  const sheet = $('#sheet'), bd = $('#backdrop');
+  sheet.innerHTML = `<div class="grabber"></div>${html}`;
+  sheet.scrollTop = 0;
+  if (sheet.hidden) {
+    // Fully closed: start just below the screen. (If it was still closing,
+    // it simply turns around from where it is now.)
+    sheet.hidden = false;
+    bd.hidden = false;
+    if (reduceMotion.matches) {
+      sheet.style.opacity = bd.style.opacity = '0';
+      sheet.getBoundingClientRect();
+    } else {
+      sheet.style.opacity = '';
+      sheet.style.transition = bd.style.transition = '';
+      setSheetY(sheetHeight());
+    }
+  }
+  sheetState.open = true;
+  document.body.style.overflow = 'hidden';
+  moveSheet(0);
+}
+
+function closeSheet(velocity = 0) {
+  if (!sheetState.open) return;
+  sheetState.open = false;
+  document.body.style.overflow = '';
+  if (document.activeElement && $('#sheet').contains(document.activeElement)) document.activeElement.blur();
+  moveSheet(sheetHeight() + 12, {
+    velocity: typeof velocity === 'number' ? velocity : 0,
+    done: () => {
+      if (sheetState.open) return;
+      $('#sheet').hidden = true;
+      $('#backdrop').hidden = true;
+      $('#sheet').innerHTML = '';
+    },
+  });
+}
+
+/* Drag to dismiss: hysteresis, 1:1 tracking, rubber-band past the top,
+   decide with velocity + projection, then hand velocity to the spring. */
+let drag = null;
+
+function dragStart(y, target) {
+  const sheet = $('#sheet');
+  if (sheet.hidden || reduceMotion.matches) return;
+  if (target.closest('input, select, textarea')) return;
+  const caught = !!sheetState.anim; // grabbing a sheet that is still moving
+  if (caught) { sheetState.anim.stop(); sheetState.anim = null; sheetState.open = true; }
+  drag = {
+    y0: y, sheetY0: sheetState.y, active: caught, caught,
+    handle: !!target.closest('.grabber, .sheet-head'),
+    hist: [{ y, t: performance.now() }],
+  };
+}
+
+function dragMove(y, e) {
+  if (!drag) return;
+  const sheet = $('#sheet');
+  const dy = y - drag.y0;
+  if (!drag.active) {
+    const atTop = sheet.scrollTop <= 0;
+    if (dy > 0 && (atTop || drag.handle) && e.cancelable) e.preventDefault(); // nothing to scroll; avoid content bounce
+    if (Math.abs(dy) < 10) return;
+    if (dy < 0 || (!atTop && !drag.handle)) { drag = null; return; } // it's a scroll
+    drag.active = true;
+    drag.y0 = y; // track from here so there's no jump at the threshold
+    drag.sheetY0 = sheetState.y;
+  }
+  if (e.cancelable) e.preventDefault();
+  let ny = drag.sheetY0 + (y - drag.y0);
+  if (ny < 0) ny = -rubberband(-ny, sheetHeight());
+  setSheetY(ny);
+  const now = performance.now();
+  drag.hist.push({ y, t: now });
+  while (drag.hist.length > 2 && now - drag.hist[0].t > 100) drag.hist.shift();
+}
+
+function dragEnd() {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  if (!d.active) return;
+  const sheet = $('#sheet');
+  sheet.dataset.dragged = '1';
+  setTimeout(() => { delete sheet.dataset.dragged; }, 0);
+  const a = d.hist[0], b = d.hist[d.hist.length - 1];
+  const velocity = b.t > a.t ? ((b.y - a.y) / (b.t - a.t)) * 1000 : 0; // px/s
+  const h = sheetHeight();
+  const projected = sheetState.y + project(velocity);
+  const dismiss = velocity > 400 || (velocity > -400 && projected > h * 0.5);
+  sheetState.open = true;
+  if (dismiss) {
+    closeSheet(velocity);
+  } else {
+    document.body.style.overflow = 'hidden';
+    // A flick back up carried momentum, so allow a little bounce.
+    moveSheet(0, { velocity, damping: Math.abs(velocity) > 300 ? 0.8 : 1, response: 0.3 });
+  }
+}
+
+(() => {
+  const sheet = $('#sheet');
+  sheet.addEventListener('touchstart', (e) => { if (e.touches.length === 1) dragStart(e.touches[0].clientY, e.target); }, { passive: true });
+  sheet.addEventListener('touchmove', (e) => { if (e.touches.length === 1) dragMove(e.touches[0].clientY, e); }, { passive: false });
+  sheet.addEventListener('touchend', dragEnd);
+  sheet.addEventListener('touchcancel', dragEnd);
+  sheet.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    dragStart(e.clientY, e.target);
+    const move = (ev) => dragMove(ev.clientY, ev);
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); dragEnd(); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+  // A drag shouldn't also count as a tap on whatever it started on.
+  sheet.addEventListener('click', (e) => { if (sheet.dataset.dragged) { e.stopPropagation(); e.preventDefault(); } }, true);
+  $('#backdrop').addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+})();
 
 function billForm(b) {
   const isNew = !b;
@@ -614,6 +789,13 @@ function togglePaid(id, ym) {
   }
   save();
   render();
+  const btn = document.querySelector(`[data-toggle="${id}"][data-ym="${ym}"]`);
+  if (btn && btn.classList.contains('on')) {
+    btn.classList.remove('on');
+    btn.classList.add('pop');
+    btn.getBoundingClientRect(); // commit the unchecked frame so the stroke draws in
+    btn.classList.add('on');
+  }
 }
 
 /* ---------- Export / import / ICS ---------- */
@@ -768,24 +950,42 @@ let toastTimer;
 function toast(msg) {
   const t = $('#toast');
   t.textContent = msg;
-  t.hidden = false;
+  t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
+
+/* Scroll edge: the bar becomes material only once content is under it,
+   and the compact title appears once the large title has scrolled away. */
+function updateBar() {
+  const s = window.scrollY;
+  const bar = $('#topbar');
+  bar.classList.toggle('scrolled', s > 1);
+  bar.classList.toggle('compact', s > $('#largeHead').offsetHeight - 10);
+}
+let barRaf = 0;
+window.addEventListener('scroll', () => {
+  if (!barRaf) barRaf = requestAnimationFrame(() => { barRaf = 0; updateBar(); });
+}, { passive: true });
+
+// iOS Safari only applies :active styles when a touch listener exists.
+document.addEventListener('touchstart', () => {}, { passive: true });
 
 /* ---------- Events ---------- */
 
 $('#prevMonth').addEventListener('click', () => { ui.ym = addMonths(ui.ym, -1); ui.selDay = null; render(); });
 $('#nextMonth').addEventListener('click', () => { ui.ym = addMonths(ui.ym, 1); ui.selDay = null; render(); });
 $('#monthTitle').addEventListener('click', () => { ui.ym = ymOf(new Date()); ui.selDay = null; render(); });
+$('#todayBtn').addEventListener('click', () => { ui.ym = ymOf(new Date()); ui.selDay = null; render(); });
 $('#addBtn').addEventListener('click', () => billForm());
-$('#backdrop').addEventListener('click', closeSheet);
+$('#backdrop').addEventListener('click', () => closeSheet());
 document.querySelector('.tabbar').addEventListener('click', (e) => {
   const b = e.target.closest('[data-tab]');
   if (!b) return;
   ui.tab = b.dataset.tab;
   window.scrollTo(0, 0);
   render();
+  updateBar();
 });
 
 document.addEventListener('click', (e) => {
@@ -831,4 +1031,5 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 render();
+updateBar();
 updateBadge();
