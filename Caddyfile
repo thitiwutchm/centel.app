@@ -10,7 +10,8 @@
 	# Always revalidate the shell and service worker so installed apps pick up updates.
 	@nocache path */ */index.html */sw.js */manifest.webmanifest
 	header @nocache Cache-Control "no-cache"
-	header */manifest.webmanifest Content-Type application/manifest+json
+	@manifest path */manifest.webmanifest
+	header @manifest Content-Type application/manifest+json
 	@static path /icons/* /themeb/fonts/*
 	header @static Cache-Control "public, max-age=604800"
 
