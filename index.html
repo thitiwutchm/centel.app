@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>วางแผนจ่ายบิล</title>
   <meta name="description" content="วางแผนการจ่ายค่าบัตรเครดิต ค่าน้ำ ค่าไฟ และบิลรายเดือน">
-  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#f4f5f9" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -18,51 +18,26 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar" id="topbar">
-    <span></span>
-    <div class="bar-title" id="barTitle" aria-hidden="true"></div>
-    <button class="bar-btn" id="addBtn" aria-label="เพิ่มบิล">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-    </button>
+  <header class="topbar">
+    <button class="icon-btn" id="prevMonth" aria-label="เดือนก่อนหน้า">‹</button>
+    <button class="month-title" id="monthTitle" aria-label="กลับไปเดือนปัจจุบัน"></button>
+    <button class="icon-btn" id="nextMonth" aria-label="เดือนถัดไป">›</button>
   </header>
-
-  <div class="large-head" id="largeHead">
-    <button class="large-title" id="monthTitle" aria-label="กลับไปเดือนปัจจุบัน"></button>
-    <div class="month-nav">
-      <button class="pill-btn" id="todayBtn" hidden>วันนี้</button>
-      <button class="round-btn" id="prevMonth" aria-label="เดือนก่อนหน้า">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button class="round-btn" id="nextMonth" aria-label="เดือนถัดไป">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-    </div>
-  </div>
 
   <main id="view"></main>
 
+  <button class="fab" id="addBtn" aria-label="เพิ่มบิล">＋</button>
+
   <nav class="tabbar">
-    <button data-tab="month" class="active">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="3.5"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
-      <span>เดือนนี้</span>
-    </button>
-    <button data-tab="calendar">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle class="fill" cx="12" cy="15" r="1.4"/></svg>
-      <span>ปฏิทิน</span>
-    </button>
-    <button data-tab="bills">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4z"/><path d="M9 8.5h6M9 12h6"/></svg>
-      <span>บิลทั้งหมด</span>
-    </button>
-    <button data-tab="settings">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg>
-      <span>ตั้งค่า</span>
-    </button>
+    <button data-tab="month" class="active"><span class="ti">📋</span><span>เดือนนี้</span></button>
+    <button data-tab="calendar"><span class="ti">📅</span><span>ปฏิทิน</span></button>
+    <button data-tab="bills"><span class="ti">🧾</span><span>บิลทั้งหมด</span></button>
+    <button data-tab="settings"><span class="ti">⚙️</span><span>ตั้งค่า</span></button>
   </nav>
 
   <div class="sheet-backdrop" id="backdrop" hidden></div>
   <section class="sheet" id="sheet" hidden aria-modal="true" role="dialog"></section>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast" hidden></div>
 
   <script src="app.js"></script>
 </body>
