@@ -1,5 +1,5 @@
 // ThemeB service worker, scoped to /themeb/. Bump CACHE when shipping changes.
-const CACHE = 'billplanner-themeb-v1';
+const CACHE = 'billplanner-themeb-v2';
 const ASSETS = [
   './',
   'index.html',
@@ -10,8 +10,10 @@ const ASSETS = [
   'fonts/plexthai-400-latin.woff2',
   'fonts/plexthai-500-thai.woff2',
   'fonts/plexthai-500-latin.woff2',
-  'fonts/plexmono-400-latin.woff2',
-  'fonts/plexmono-500-latin.woff2',
+  'fonts/plexthai-600-thai.woff2',
+  'fonts/plexthai-600-latin.woff2',
+  'fonts/intertight-600-latin.woff2',
+  'fonts/jetbrainsmono-500-latin.woff2',
   '../icons/icon-192.png',
   '../icons/apple-touch-icon.png',
 ];

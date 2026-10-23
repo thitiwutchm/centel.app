@@ -29,4 +29,5 @@
 ## ThemeB (ดีไซน์ทางเลือก)
 
 `themeb/` คือหน้าตาแบบที่สองของแอปเดียวกัน เปิดที่ `/themeb/` ใช้ข้อมูลชุดเดียวกับหน้าหลัก (localStorage `billplanner.v1`)
-แนวทาง: Dieter Rams / Braun — พื้นกระดาษ หมึกดำ สีส้มสัญญาณเฉพาะสถานะที่ต้องทำ ตัวเลข monospace ฟอนต์ IBM Plex Sans Thai/Mono (ฝังไว้ใน `themeb/fonts/`, OFL)
+แนวทาง: สูตร "raycast" จาก web-design-engineer skill — พื้นเทาเข้ม การ์ดกระจกโปร่งแสงบนแสงไล่สีอุ่น สีแดง #FF6363 เฉพาะปุ่มสำคัญ จุดสีประจำหมวด ชิปตัวเลขแบบปุ่มคีย์บอร์ด
+ฟอนต์ IBM Plex Sans Thai, Inter Tight, JetBrains Mono ฝังไว้ใน `themeb/fonts/` (OFL)

@@ -4,18 +4,18 @@
 
 const STORAGE_KEY = 'billplanner.v1';
 
-// `code` is the short label shown in the category tag (ThemeB uses no emoji icons).
+// `code` is the short label in the category chip; `color` is its small accent dot.
 const CATEGORIES = {
-  credit:    { label: 'บัตรเครดิต', code: 'บัตร' },
-  electric:  { label: 'ค่าไฟ',      code: 'ไฟ' },
-  water:     { label: 'ค่าน้ำ',      code: 'น้ำ' },
-  internet:  { label: 'อินเทอร์เน็ต', code: 'เน็ต' },
-  phone:     { label: 'ค่าโทรศัพท์', code: 'โทร' },
-  loan:      { label: 'ผ่อนชำระ',   code: 'ผ่อน' },
-  insurance: { label: 'ประกัน',     code: 'ประกัน' },
-  rent:      { label: 'ค่าเช่า/ส่วนกลาง', code: 'เช่า' },
-  subscription: { label: 'สมาชิกรายเดือน', code: 'สมาชิก' },
-  other:     { label: 'อื่นๆ',      code: 'อื่นๆ' },
+  credit:    { label: 'บัตรเครดิต', code: 'บัตร', color: '#ff8a65' },
+  electric:  { label: 'ค่าไฟ',      code: 'ไฟ', color: '#ffc531' },
+  water:     { label: 'ค่าน้ำ',      code: 'น้ำ', color: '#56c2ff' },
+  internet:  { label: 'อินเทอร์เน็ต', code: 'เน็ต', color: '#59d499' },
+  phone:     { label: 'ค่าโทรศัพท์', code: 'โทร', color: '#a78bfa' },
+  loan:      { label: 'ผ่อนชำระ',   code: 'ผ่อน', color: '#f97316' },
+  insurance: { label: 'ประกัน',     code: 'ประกัน', color: '#a3e635' },
+  rent:      { label: 'ค่าเช่า/ส่วนกลาง', code: 'เช่า', color: '#e2a26f' },
+  subscription: { label: 'สมาชิกรายเดือน', code: 'สมาชิก', color: '#f472b6' },
+  other:     { label: 'อื่นๆ',      code: 'อื่นๆ', color: '#9ca3af' },
 };
 
 const TH_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -153,12 +153,12 @@ function occurrences(ym) {
 
 const TWEAKS_KEY = 'themeb.tweaks';
 const tweaks = (() => {
-  try { return { accent: 'orange', readout: 'dark', ...JSON.parse(localStorage.getItem(TWEAKS_KEY) || '{}') }; }
-  catch (e) { return { accent: 'orange', readout: 'dark' }; }
+  const d = { accent: 'red', glow: 'on' };
+  try { return { ...d, ...JSON.parse(localStorage.getItem(TWEAKS_KEY) || '{}') }; } catch (e) { return d; }
 })();
 function applyTweaks() {
   document.documentElement.dataset.accent = tweaks.accent;
-  document.documentElement.dataset.readout = tweaks.readout;
+  document.documentElement.dataset.glow = tweaks.glow;
 }
 function setTweak(k, v) {
   tweaks[k] = v;
@@ -181,7 +181,7 @@ function cat(b) { return CATEGORIES[b.category] || CATEGORIES.other; }
 // Money with the baht sign set in the sans face and digits in mono.
 function money(n) { return `<span class="cur">฿</span>${fmt.format(n || 0)}`; }
 
-function tagHtml(b) { return `<span class="tag">${cat(b).code}</span>`; }
+function tagHtml(b) { const c = cat(b); return `<span class="tag"><i style="background:${c.color}"></i>${c.code}</span>`; }
 
 function stateHtml(o) {
   if (o.status === 'paid') return `<span class="state ok">จ่ายแล้ว</span>`;
@@ -192,10 +192,8 @@ function stateHtml(o) {
   return '';
 }
 
-function meter(pct, n = 24) {
-  const on = Math.round((pct / 100) * n);
-  return `<div class="meter" aria-hidden="true">${Array.from({ length: n }, (_, i) =>
-    `<i class="${i < on ? 'on' : ''}${i === on - 1 && on < n ? ' edge' : ''}"></i>`).join('')}</div>`;
+function meter(pct) {
+  return `<div class="meter" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
 }
 
 function render() {
@@ -213,14 +211,15 @@ function render() {
 
 function occItem(o) {
   const b = o.bill;
-  const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
+  const inst = o.inst ? `<span class="kbd">${o.inst.n}/${o.inst.of}</span>` : '';
+  const extra = b.note ? esc(b.note) : '';
   const amt = o.needsAmount ? `<span class="need">ระบุยอด</span>` : money(o.amount);
   return `
     <div class="item ${o.paid ? 'paid' : ''} ${o.status === 'overdue' && !b.autopay ? 'overdue' : ''}" data-occ="${b.id}" data-ym="${o.ym}" role="button" tabindex="0">
       <div class="day"><b>${pad(o.due.getDate())}</b><span>${TH_MONTHS_SHORT[o.due.getMonth()]}</span></div>
       <div class="main">
         <div class="name">${esc(b.name)}</div>
-        <div class="sub">${tagHtml(b)}${extra ? `<span>${extra}</span>` : ''}${stateHtml(o)}</div>
+        <div class="sub">${tagHtml(b)}${inst}${stateHtml(o)}${extra ? `<span class="note">${extra}</span>` : ''}</div>
       </div>
       <div class="amt">${amt}</div>
       <button class="key ${o.paid ? 'on' : ''}" data-toggle="${b.id}" data-ym="${o.ym}" aria-label="${o.paid ? 'ยกเลิกจ่ายแล้ว' : 'ทำเครื่องหมายว่าจ่ายแล้ว'}"><i></i></button>
@@ -258,7 +257,7 @@ function renderMonth() {
 
   view.innerHTML = `
     <section class="readout" aria-label="สรุปเดือนนี้">
-      <div class="r-head"><span class="label">คงเหลือต้องจ่าย</span><span class="label mono">${pad(parseYm(ui.ym).m)}/${parseYm(ui.ym).y + 543}</span></div>
+      <div class="r-head"><span class="label">คงเหลือต้องจ่าย</span><span class="kbd">${pad(parseYm(ui.ym).m)}/${parseYm(ui.ym).y + 543}</span></div>
       <div class="r-big">${money(left)}</div>
       ${meter(pct)}
       <div class="r-foot"><span>จ่ายแล้ว ${pct}%</span><span>${done.length}/${occ.length} รายการ</span></div>
@@ -272,9 +271,9 @@ function renderMonth() {
       </div>
     </div>
     ${notices}
-    <div class="section-title"><span>ยังไม่จ่าย</span><span class="num">${pad(unpaid.length)}</span></div>
+    <div class="section-title"><span>ยังไม่จ่าย</span><span class="kbd">${unpaid.length}</span></div>
     ${unpaid.length ? `<div class="list">${unpaid.map(occItem).join('')}</div>` : `<div class="list"><div class="done-line">จ่ายครบทุกบิลแล้วเดือนนี้</div></div>`}
-    ${done.length ? `<div class="section-title"><span>จ่ายแล้ว</span><span class="num">${pad(done.length)}</span></div><div class="list">${done.map(occItem).join('')}</div>` : ''}
+    ${done.length ? `<div class="section-title"><span>จ่ายแล้ว</span><span class="kbd">${done.length}</span></div><div class="list">${done.map(occItem).join('')}</div>` : ''}
   `;
 }
 
@@ -340,14 +339,14 @@ function renderBills() {
     .reduce((s, b) => s + (b.amount || 0), 0);
   let html = `
     <section class="readout compact">
-      <div class="r-head"><span class="label">ประมาณการรายจ่ายประจำต่อเดือน</span><span class="label mono">${pad(state.bills.length)}</span></div>
+      <div class="r-head"><span class="label">ประมาณการรายจ่ายประจำต่อเดือน</span><span class="kbd">${pad(state.bills.length)}</span></div>
       <div class="r-big">${money(monthlyTotal)}</div>
       <div class="r-foot"><span>${state.bills.length} รายการ</span><span>บิลยอดไม่แน่นอนคิดจากยอดประมาณ</span></div>
     </section>`;
   Object.keys(CATEGORIES).forEach((k) => {
     const list = groups[k];
     if (!list) return;
-    html += `<div class="section-title"><span>${CATEGORIES[k].label}</span><span class="num">${pad(list.length)}</span></div><div class="list">`;
+    html += `<div class="section-title"><span class="cat-h"><i style="background:${CATEGORIES[k].color}"></i>${CATEGORIES[k].label}</span><span class="kbd">${list.length}</span></div><div class="list">`;
     list.sort((a, b) => (a.dueDay || 0) - (b.dueDay || 0)).forEach((b) => {
       const d = b.type === 'once' ? Number(b.onceDate.slice(8, 10)) : b.dueDay;
       html += `
@@ -412,8 +411,8 @@ function renderSettings() {
 
     <div class="section-title"><span>Tweaks · การแสดงผล</span></div>
     <div class="form">
-      <div class="opt-row"><span>สีสัญญาณ</span>${segHtml('accent', [['orange', 'ส้ม'], ['yellow', 'เหลือง']])}</div>
-      <div class="opt-row"><span>จอสรุปยอด</span>${segHtml('readout', [['dark', 'เข้ม'], ['light', 'สว่าง']])}</div>
+      <div class="opt-row"><span>สีหลัก</span>${segHtml('accent', [['red', 'แดง'], ['lavender', 'ม่วง']])}</div>
+      <div class="opt-row"><span>พื้นหลังไล่สี</span>${segHtml('glow', [['on', 'เปิด'], ['off', 'ปิด']])}</div>
     </div>
 
     <div class="section-title"><span>สำรองข้อมูล</span></div>
@@ -427,7 +426,7 @@ function renderSettings() {
     <div class="section-title"><span>อื่นๆ</span></div>
     <button class="btn danger" data-action="reset">ลบข้อมูลทั้งหมด</button>
     <a class="switch-link" href="../">เปิดดีไซน์หลัก</a>
-    <p class="hint" style="text-align:center">วางแผนจ่ายบิล · ThemeB · เวอร์ชัน 1.0</p>
+    <p class="hint" style="text-align:center">วางแผนจ่ายบิล · ThemeB · Raycast · เวอร์ชัน 1.1</p>
   `;
   $('#remindDays').addEventListener('change', (e) => {
     state.settings.remindDays = Number(e.target.value);
@@ -612,7 +611,7 @@ function occurrenceSheet(id, ym) {
       <button class="link-btn ink" data-edit="${b.id}">แก้ไขบิล</button>
     </div>
     <div class="detail-head">
-      <span class="tag">${c.label}</span>
+      <span class="tag"><i style="background:${c.color}"></i>${c.label}</span>
       <h3>${esc(b.name)}</h3>
       <div class="sub"><span>ครบกำหนด ${thShortDate(o.due)} ${o.due.getFullYear() + 543}</span>${stateHtml(o)}</div>
     </div>
