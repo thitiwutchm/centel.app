@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>วางแผนจ่ายบิล</title>
+  <meta name="description" content="วางแผนการจ่ายค่าบัตรเครดิต ค่าน้ำ ค่าไฟ และบิลรายเดือน">
+  <meta name="theme-color" content="#f4f5f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="จ่ายบิล">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn" id="prevMonth" aria-label="เดือนก่อนหน้า">‹</button>
+    <button class="month-title" id="monthTitle" aria-label="กลับไปเดือนปัจจุบัน"></button>
+    <button class="icon-btn" id="nextMonth" aria-label="เดือนถัดไป">›</button>
+  </header>
+
+  <main id="view"></main>
+
+  <button class="fab" id="addBtn" aria-label="เพิ่มบิล">＋</button>
+
+  <nav class="tabbar">
+    <button data-tab="month" class="active"><span class="ti">📋</span><span>เดือนนี้</span></button>
+    <button data-tab="calendar"><span class="ti">📅</span><span>ปฏิทิน</span></button>
+    <button data-tab="bills"><span class="ti">🧾</span><span>บิลทั้งหมด</span></button>
+    <button data-tab="settings"><span class="ti">⚙️</span><span>ตั้งค่า</span></button>
+  </nav>
+
+  <div class="sheet-backdrop" id="backdrop" hidden></div>
+  <section class="sheet" id="sheet" hidden aria-modal="true" role="dialog"></section>
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
