@@ -1,0 +1,9 @@
+.git
+.github
+.claude
+Dockerfile
+.dockerignore
+Caddyfile
+railway.json
+README.md
+CNAME

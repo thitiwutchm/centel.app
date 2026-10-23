@@ -8,10 +8,11 @@
 	encode gzip zstd
 
 	# Always revalidate the shell and service worker so installed apps pick up updates.
-	@nocache path / /index.html /sw.js /manifest.webmanifest
+	@nocache path */ */index.html */sw.js */manifest.webmanifest
 	header @nocache Cache-Control "no-cache"
-	header /manifest.webmanifest Content-Type application/manifest+json
-	header /icons/* Cache-Control "public, max-age=604800"
+	header */manifest.webmanifest Content-Type application/manifest+json
+	@static path /icons/* /themeb/fonts/*
+	header @static Cache-Control "public, max-age=604800"
 
 	header {
 		X-Content-Type-Options nosniff
