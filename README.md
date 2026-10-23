@@ -28,3 +28,8 @@
 - **GitHub Pages** (สำรอง): `.github/workflows/pages.yml` จะ deploy เมื่อ push เข้า `main`
 
 ทดสอบในเครื่อง: `npx http-server .` แล้วเปิด http://localhost:8080
+
+## ThemeA (ดีไซน์สไตล์ Apple)
+
+`themea/` คือหน้าตาแบบ Apple ของแอปเดียวกัน เปิดที่ `/themea/` ใช้ข้อมูลชุดเดียวกับหน้าหลัก (localStorage `billplanner.v1`)
+แนวทาง: สีระบบ iOS, หัวข้อใหญ่ที่ย่อเข้าแถบโปร่งแสง, หน้าต่างล่างลากปิดได้ด้วยแอนิเมชันสปริง, รองรับลดการเคลื่อนไหว/ความโปร่งใส
