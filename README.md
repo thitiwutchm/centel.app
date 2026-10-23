@@ -25,3 +25,23 @@
 เมื่อ push เข้า `main` (ต้องเปิด Settings → Pages → Source: **GitHub Actions** ก่อน)
 
 ทดสอบในเครื่อง: `npx http-server .` แล้วเปิด http://localhost:8080
+
+## โดเมน centel.app (Namecheap)
+
+ไฟล์ `CNAME` ระบุโดเมน `centel.app` ไว้ ตั้งค่า DNS ใน Namecheap → Domain List → Manage → **Advanced DNS**
+(ลบ record เดิมของ Namecheap เช่น parking page / URL Redirect ก่อน):
+
+| Type | Host | Value |
+|------|------|-------|
+| A | @ | 185.199.108.153 |
+| A | @ | 185.199.109.153 |
+| A | @ | 185.199.110.153 |
+| A | @ | 185.199.111.153 |
+| AAAA | @ | 2606:50c0:8000::153 |
+| AAAA | @ | 2606:50c0:8001::153 |
+| AAAA | @ | 2606:50c0:8002::153 |
+| AAAA | @ | 2606:50c0:8003::153 |
+| CNAME | www | thitiwutchm.github.io. |
+
+จากนั้นที่ GitHub → Settings → Pages → Custom domain ใส่ `centel.app` → Save แล้วเปิด **Enforce HTTPS**
+(โดเมน .app บังคับ HTTPS เสมอ เว็บจะเปิดได้หลังใบรับรองออกเสร็จ ปกติไม่เกิน 1 ชั่วโมง)
