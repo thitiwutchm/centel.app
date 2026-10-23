@@ -25,3 +25,8 @@
 เมื่อ push เข้า `main` (ต้องเปิด Settings → Pages → Source: **GitHub Actions** ก่อน)
 
 ทดสอบในเครื่อง: `npx http-server .` แล้วเปิด http://localhost:8080
+
+## ThemeB (ดีไซน์ทางเลือก)
+
+`themeb/` คือหน้าตาแบบที่สองของแอปเดียวกัน เปิดที่ `/themeb/` ใช้ข้อมูลชุดเดียวกับหน้าหลัก (localStorage `billplanner.v1`)
+แนวทาง: Dieter Rams / Braun — พื้นกระดาษ หมึกดำ สีส้มสัญญาณเฉพาะสถานะที่ต้องทำ ตัวเลข monospace ฟอนต์ IBM Plex Sans Thai/Mono (ฝังไว้ใน `themeb/fonts/`, OFL)

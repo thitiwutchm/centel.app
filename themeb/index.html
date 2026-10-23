@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>วางแผนจ่ายบิล · ThemeB</title>
+  <meta name="description" content="วางแผนการจ่ายค่าบัตรเครดิต ค่าน้ำ ค่าไฟ และบิลรายเดือน (ดีไซน์ ThemeB)">
+  <meta name="theme-color" content="#f2f0eb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1c1b" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="จ่ายบิล B">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="../icons/icon-192.png">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <link rel="preload" href="fonts/plexthai-400-thai.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/plexmono-500-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="nav-key" id="prevMonth" aria-label="เดือนก่อนหน้า"><span class="chev l"></span></button>
+    <button class="month-title" id="monthTitle" aria-label="กลับไปเดือนปัจจุบัน"></button>
+    <button class="nav-key" id="nextMonth" aria-label="เดือนถัดไป"><span class="chev r"></span></button>
+  </header>
+
+  <main id="view"></main>
+
+  <button class="fab" id="addBtn" aria-label="เพิ่มบิล"><span class="plus"></span></button>
+
+  <nav class="tabbar">
+    <button data-tab="month" class="active"><i class="led"></i><span>เดือนนี้</span></button>
+    <button data-tab="calendar"><i class="led"></i><span>ปฏิทิน</span></button>
+    <button data-tab="bills"><i class="led"></i><span>บิลทั้งหมด</span></button>
+    <button data-tab="settings"><i class="led"></i><span>ตั้งค่า</span></button>
+  </nav>
+
+  <div class="sheet-backdrop" id="backdrop" hidden></div>
+  <section class="sheet" id="sheet" hidden aria-modal="true" role="dialog"></section>
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

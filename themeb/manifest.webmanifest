@@ -1,0 +1,17 @@
+{
+  "name": "วางแผนจ่ายบิล · ThemeB",
+  "short_name": "จ่ายบิล B",
+  "description": "วางแผนการจ่ายค่าบัตรเครดิต ค่าน้ำ ค่าไฟ และบิลรายเดือน (ดีไซน์ ThemeB)",
+  "lang": "th",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f0eb",
+  "theme_color": "#f2f0eb",
+  "icons": [
+    { "src": "../icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "../icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
