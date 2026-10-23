@@ -20,5 +20,7 @@
 		Referrer-Policy strict-origin-when-cross-origin
 	}
 
-	file_server
+	file_server {
+		hide Caddyfile Dockerfile railway.json .dockerignore
+	}
 }
