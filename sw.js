@@ -1,9 +1,10 @@
 // Bump CACHE when shipping changes so installed apps pick up the new files.
-const CACHE = 'billplanner-v2';
+const CACHE = 'billplanner-v3';
 const ASSETS = [
   './',
   'index.html',
   'styles.css',
+  'cloud.js',
   'money.js',
   'app.js',
   'manifest.webmanifest',
@@ -27,7 +28,9 @@ self.addEventListener('activate', (e) => {
 // Network first so updates arrive when online; fall back to cache offline.
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  // API answers are per-account and must never be served from the cache.
+  if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
   e.respondWith(
     fetch(req)
       .then((res) => {

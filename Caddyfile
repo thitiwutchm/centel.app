@@ -20,7 +20,14 @@
 		Referrer-Policy strict-origin-when-cross-origin
 	}
 
-	file_server {
-		hide Caddyfile Dockerfile railway.json .dockerignore
+	# The API runs as its own Railway service; reach it over private networking.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api.railway.internal:8080}
+	}
+
+	handle {
+		file_server {
+			hide Caddyfile Dockerfile railway.json .dockerignore server
+		}
 	}
 }
