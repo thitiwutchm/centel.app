@@ -34,9 +34,16 @@ const defaultState = () => ({
 
 let state = load();
 const ui = {
-  tab: 'month',
+  tab: 'home',          // home | txns | bills | budgets | account
+  billView: 'month',    // month | calendar | list (inside the bills tab)
   ym: ymOf(new Date()),
   selDay: null,
+  wallet: 'total',
+  period: 'this',
+  search: '',
+  searchOpen: false,
+  reportType: 'expense',
+  budgetOff: 0,
 };
 
 function load() {
@@ -174,16 +181,36 @@ function icoHtml(b, cls = 'ico') {
 }
 
 function render() {
-  const nav = ui.tab === 'month' || ui.tab === 'calendar';
+  const bills = ui.tab === 'bills';
+  const nav = bills && ui.billView !== 'list';
+  document.body.classList.toggle('with-topbar', bills);
+  $('.topbar').hidden = !bills;
   $('.topbar').classList.toggle('hide-nav', !nav);
-  $('#monthTitle').textContent = nav ? thMonthYear(ui.ym)
-    : ui.tab === 'bills' ? 'บิลทั้งหมด' : 'ตั้งค่า';
+  $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : 'บิลทั้งหมด';
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
-  $('#addBtn').hidden = ui.tab === 'settings';
-  if (ui.tab === 'month') renderMonth();
-  else if (ui.tab === 'calendar') renderCalendar();
-  else if (ui.tab === 'bills') renderBills();
-  else renderSettings();
+  const fab = $('#addBtn');
+  fab.hidden = ui.tab === 'account';
+  fab.classList.toggle('ext', ui.tab === 'home' && !ui.fabMini);
+  fab.setAttribute('aria-label', bills ? 'เพิ่มบิล' : 'เพิ่มรายการ');
+  $('#addLabel').textContent = bills ? 'เพิ่มบิล' : 'เพิ่มรายการ';
+  if (ui.tab === 'home') renderHome();
+  else if (ui.tab === 'txns') renderTxns();
+  else if (ui.tab === 'budgets') renderBudgets();
+  else if (ui.tab === 'account') renderSettings();
+  else {
+    if (ui.billView === 'month') renderMonth();
+    else if (ui.billView === 'calendar') renderCalendar();
+    else renderBills();
+    view.insertAdjacentHTML('afterbegin', `<div class="seg bill-seg">${[['month', 'เดือนนี้'], ['calendar', 'ปฏิทิน'], ['list', 'บิลทั้งหมด']]
+      .map(([k, l]) => `<button data-billview="${k}" class="${ui.billView === k ? 'on' : ''}">${l}</button>`).join('')}</div>`);
+  }
+}
+
+function setTab(tab) {
+  ui.tab = tab;
+  ui.fabMini = false;
+  window.scrollTo(0, 0);
+  render();
 }
 
 function occItem(o) {
@@ -365,6 +392,7 @@ function installTip() {
 function renderSettings() {
   const s = state.settings;
   view.innerHTML = `
+    ${accountTop()}
     <div class="section-title">การแจ้งเตือน</div>
     <div class="form">
       <div class="field"><label for="remindDays">เตือนล่วงหน้า</label>
@@ -385,8 +413,13 @@ function renderSettings() {
 
     <div class="section-title">อื่นๆ</div>
     <button class="btn danger" data-action="reset">ลบข้อมูลทั้งหมด</button>
-    <p class="hint" style="text-align:center">วางแผนจ่ายบิล · เวอร์ชัน 1.0</p>
+    <p class="hint" style="text-align:center">วางแผนจ่ายบิล · เวอร์ชัน 2.0</p>
   `;
+  $('#billWallet').addEventListener('change', (e) => {
+    money.prefs.billWallet = e.target.value;
+    saveMoney();
+    toast('บันทึกแล้ว');
+  });
   $('#remindDays').addEventListener('change', (e) => {
     state.settings.remindDays = Number(e.target.value);
     save();
@@ -532,7 +565,10 @@ function billForm(b) {
       if (!confirm(`ลบ "${b.name}" และประวัติการจ่ายทั้งหมดของบิลนี้?`)) return;
       state.bills = state.bills.filter((x) => x.id !== b.id);
       Object.keys(state.records).forEach((ym) => setRecord(ym, b.id, { amount: undefined, paid: undefined, paidAt: undefined }));
+      // Payments already made stay in the wallets as ordinary expenses.
+      money.txns.forEach((t) => { if (t.billId === b.id) { delete t.billId; delete t.billYm; } });
       save();
+      saveMoney();
       closeSheet();
       render();
       toast('ลบแล้ว');
@@ -575,6 +611,10 @@ function occurrenceSheet(id, ym) {
       ${o.inst ? `<div class="kv"><span>งวดที่</span><span>${o.inst.n} / ${o.inst.of}</span></div>` : ''}
       ${o.paid && o.paidAt ? `<div class="kv"><span>จ่ายเมื่อ</span><span>${thShortDate(new Date(o.paidAt))} ${new Date(o.paidAt).getFullYear() + 543}</span></div>` : ''}
       ${b.note ? `<div class="kv"><span>บันทึก</span><span style="text-align:right;max-width:65%">${esc(b.note)}</span></div>` : ''}
+      ${o.paid ? '' : `<div class="field"><label for="oWallet">จ่ายจาก</label><select id="oWallet">
+        <option value="">ไม่บันทึกเป็นรายการ</option>
+        ${money.wallets.map((w) => `<option value="${w.id}" ${billPayWallet() === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+      </select></div>`}
     </div>
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
@@ -588,16 +628,24 @@ function occurrenceSheet(id, ym) {
   };
   const pay = $('#oPay');
   if (pay) pay.addEventListener('click', () => {
-    setRecord(ym, id, { amount: readAmount(), paid: true, paidAt: new Date().toISOString() });
-    save(); closeSheet(); render(); toast(`จ่าย ${b.name} แล้ว`);
+    const amount = readAmount();
+    const walletId = $('#oWallet').value;
+    setRecord(ym, id, { amount, paid: true, paidAt: new Date().toISOString() });
+    money.prefs.billWallet = walletId;
+    recordBillTxn(b, ym, amount != null ? amount : (b.amount || 0), walletId);
+    save(); saveMoney(); closeSheet(); render(); toast(`จ่าย ${b.name} แล้ว`);
   });
   const unpay = $('#oUnpay');
   if (unpay) unpay.addEventListener('click', () => {
     setRecord(ym, id, { paid: undefined, paidAt: undefined });
-    save(); closeSheet(); render();
+    removeBillTxn(id, ym);
+    save(); saveMoney(); closeSheet(); render();
   });
   $('#oSave').addEventListener('click', () => {
-    setRecord(ym, id, { amount: readAmount() });
+    const amount = readAmount();
+    setRecord(ym, id, { amount });
+    const tx = billTxn(id, ym);
+    if (tx) { tx.amount = amount != null ? amount : (b.amount || 0); saveMoney(); }
     save(); closeSheet(); render(); toast('บันทึกยอดแล้ว');
   });
 }
@@ -607,12 +655,15 @@ function togglePaid(id, ym) {
   const b = state.bills.find((x) => x.id === id);
   if (rec.paid) {
     setRecord(ym, id, { paid: undefined, paidAt: undefined });
+    removeBillTxn(id, ym);
   } else {
     if (b.variable && rec.amount == null) { occurrenceSheet(id, ym); toast('กรอกยอดจริงของเดือนนี้ก่อน'); return; }
     setRecord(ym, id, { paid: true, paidAt: new Date().toISOString() });
+    recordBillTxn(b, ym, rec.amount != null ? rec.amount : (b.amount || 0), billPayWallet());
     toast(`จ่าย ${b.name} แล้ว`);
   }
   save();
+  saveMoney();
   render();
 }
 
@@ -641,7 +692,7 @@ async function deliverFile(name, mime, text) {
 
 function exportData() {
   const stamp = dateStr(new Date());
-  deliverFile(`bill-planner-${stamp}.json`, 'application/json', JSON.stringify({ app: 'bill-planner', version: 1, exportedAt: new Date().toISOString(), ...state }, null, 2));
+  deliverFile(`bill-planner-${stamp}.json`, 'application/json', JSON.stringify({ app: 'bill-planner', version: 2, exportedAt: new Date().toISOString(), ...state, money }, null, 2));
 }
 
 function importData(e) {
@@ -658,7 +709,12 @@ function importData(e) {
         records: data.records || {},
         settings: { ...defaultState().settings, ...(data.settings || {}) },
       };
+      if (data.money) {
+        localStorage.setItem(MONEY_KEY, JSON.stringify(data.money));
+        money = loadMoney();
+      }
       save();
+      saveMoney();
       render();
       toast('นำเข้าข้อมูลแล้ว');
     } catch (err) {
@@ -735,6 +791,7 @@ function exportIcs() {
 /* ---------- Sample data ---------- */
 
 function loadSample() {
+  if ((state.bills.length || money.txns.length) && !confirm('แทนที่ข้อมูลปัจจุบันด้วยข้อมูลตัวอย่าง?')) return;
   const ym = ymOf(new Date());
   state.bills = [
     { id: uid(), name: 'บัตร KBank', category: 'credit', amount: 8000, variable: true, type: 'monthly', dueDay: 5, startMonth: ym, note: 'ตัดรอบวันที่ 20' },
@@ -750,7 +807,9 @@ function loadSample() {
   occurrences(ym).filter((o) => o.daysLeft < 0 && o.bill.name !== 'ค่าน้ำ (MWA)').forEach((o) => {
     setRecord(ym, o.bill.id, { amount: o.bill.variable ? Math.round(o.bill.amount * 0.9) : undefined, paid: true, paidAt: new Date().toISOString() });
   });
+  sampleMoney();
   save();
+  saveMoney();
   render();
   toast('เพิ่มข้อมูลตัวอย่างแล้ว');
 }
@@ -778,15 +837,20 @@ function toast(msg) {
 $('#prevMonth').addEventListener('click', () => { ui.ym = addMonths(ui.ym, -1); ui.selDay = null; render(); });
 $('#nextMonth').addEventListener('click', () => { ui.ym = addMonths(ui.ym, 1); ui.selDay = null; render(); });
 $('#monthTitle').addEventListener('click', () => { ui.ym = ymOf(new Date()); ui.selDay = null; render(); });
-$('#addBtn').addEventListener('click', () => billForm());
+$('#addBtn').addEventListener('click', () => (ui.tab === 'bills' ? billForm() : txnForm()));
 $('#backdrop').addEventListener('click', closeSheet);
 document.querySelector('.tabbar').addEventListener('click', (e) => {
   const b = e.target.closest('[data-tab]');
-  if (!b) return;
-  ui.tab = b.dataset.tab;
-  window.scrollTo(0, 0);
-  render();
+  if (b) setTab(b.dataset.tab);
 });
+
+// The home screen's "＋ เพิ่มรายการ" pill shrinks to a round button once you scroll.
+window.addEventListener('scroll', () => {
+  const mini = window.scrollY > 60;
+  if (mini === !!ui.fabMini) return;
+  ui.fabMini = mini;
+  $('#addBtn').classList.toggle('ext', ui.tab === 'home' && !mini);
+}, { passive: true });
 
 document.addEventListener('click', (e) => {
   const t = e.target;
@@ -798,8 +862,12 @@ document.addEventListener('click', (e) => {
   if (occ) { occurrenceSheet(occ.dataset.occ, occ.dataset.ym); return; }
   const day = t.closest('[data-day]');
   if (day) { ui.selDay = Number(day.dataset.day); render(); return; }
+  const bv = t.closest('[data-billview]');
+  if (bv) { ui.billView = bv.dataset.billview; render(); return; }
+  if (moneyClick(t)) return;
   const act = t.closest('[data-action]');
   if (!act) return;
+  if (moneyAction(act.dataset.action, act)) return;
   switch (act.dataset.action) {
     case 'close': closeSheet(); break;
     case 'add': billForm(); break;
@@ -808,7 +876,10 @@ document.addEventListener('click', (e) => {
     case 'import': $('#importFile').click(); break;
     case 'ics': exportIcs(); break;
     case 'reset':
-      if (confirm('ลบบิลและประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) { state = defaultState(); save(); render(); toast('ลบข้อมูลแล้ว'); }
+      if (confirm('ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) {
+        state = defaultState(); money = defaultMoney(); ui.wallet = 'total';
+        save(); saveMoney(); render(); toast('ลบข้อมูลแล้ว');
+      }
       break;
   }
 });
