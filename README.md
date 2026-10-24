@@ -37,8 +37,11 @@
 
 ## Deploy
 
-ไฟล์ทั้งหมดเป็น static (ไม่มีขั้นตอน build) — `.github/workflows/pages.yml` จะ deploy ขึ้น GitHub Pages
-เมื่อ push เข้า `main` (ต้องเปิด Settings → Pages → Source: **GitHub Actions** ก่อน)
+ไฟล์ทั้งหมดเป็น static (ไม่มีขั้นตอน build)
+
+- **Railway** (โดเมน centel.app): Railway build จาก `Dockerfile` ซึ่งเสิร์ฟไฟล์ด้วย Caddy ตาม `Caddyfile`
+  (ฟังที่ `$PORT`) และ deploy ใหม่อัตโนมัติเมื่อ push เข้า `main`
+- **GitHub Pages** (สำรอง): `.github/workflows/pages.yml` จะ deploy เมื่อ push เข้า `main`
 
 ทดสอบในเครื่อง: `npx http-server .` แล้วเปิด http://localhost:8080
 
