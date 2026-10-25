@@ -445,6 +445,64 @@ function closeSheet() {
   document.body.style.overflow = '';
 }
 
+/* ---------- PEA electricity bill lookup ---------- */
+
+// Convert a PEA billperiod into our "YYYY-MM". PEA tends to send 6-digit YYYYMM
+// (Gregorian or Buddhist year); also tolerate "YYYY-MM", "MM/YYYY", ISO dates.
+function peaPeriodToYm(p) {
+  if (p == null) return null;
+  const s = String(p).trim();
+  let y, m;
+  let mm = s.match(/^(\d{4})[-/.](\d{1,2})$/);          // YYYY-MM
+  if (mm) { y = +mm[1]; m = +mm[2]; }
+  else if ((mm = s.match(/^(\d{1,2})[-/.](\d{4})$/))) { m = +mm[1]; y = +mm[2]; } // MM/YYYY
+  else if ((mm = s.match(/^(\d{4})(\d{2})$/))) { y = +mm[1]; m = +mm[2]; }        // YYYYMM
+  else if ((mm = s.match(/^(\d{4})-(\d{2})-\d{2}/))) { y = +mm[1]; m = +mm[2]; }  // ISO date
+  else return null;
+  if (y > 2400) y -= 543;                                // Buddhist -> Gregorian
+  if (!(m >= 1 && m <= 12) || !(y >= 2000 && y <= 2100)) return null;
+  return `${y}-${pad(m)}`;
+}
+
+// Pull a money amount from a PEA row regardless of exact field casing.
+function peaRowAmount(row) {
+  if (!row || typeof row !== 'object') return null;
+  const keys = ['totalAmountInv', 'totalamountinv', 'totalAmount', 'totalamount',
+    'amount', 'netAmount', 'netamount'];
+  for (const k of keys) if (row[k] != null && row[k] !== '') return num(row[k]);
+  return null;
+}
+
+async function fetchPeaBills(ca, peano) {
+  const res = await fetch('/api/pea-bill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ca: String(ca).trim(), peano: String(peano).trim(), lang: 'th' }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data || !data.result) throw new Error((data && data.message) || 'ไม่พบข้อมูลค่าไฟ');
+  const rows = Array.isArray(data.data) ? data.data : [];
+  // Newest period first, with our parsed month and amount attached.
+  return rows
+    .map((r) => ({ raw: r, ym: peaPeriodToYm(r.billperiod ?? r.billPeriod ?? r.period), amount: peaRowAmount(r) }))
+    .sort((a, b2) => (a.ym && b2.ym ? (a.ym < b2.ym ? 1 : -1) : 0));
+}
+
+// Write fetched monthly amounts into a bill's records (keeps paid status).
+function applyPeaRows(billId, rows) {
+  let n = 0;
+  rows.forEach((r) => {
+    if (!r.ym || r.amount == null) return;
+    const prev = record(r.ym, billId);
+    setRecord(r.ym, billId, { amount: r.amount });
+    const tx = billTxn(billId, r.ym);
+    if (tx && prev.paid) { tx.amount = r.amount; }
+    n++;
+  });
+  return n;
+}
+
 function billForm(b) {
   const isNew = !b;
   b = b || {
@@ -470,6 +528,8 @@ function billForm(b) {
         <span style="flex:1"></span><label class="switch"><input type="checkbox" id="fVariable" ${draft.variable ? 'checked' : ''}><span></span></label></div>
     </div>
     <p class="hint">เปิด "ยอดไม่แน่นอน" สำหรับบัตรเครดิต ค่าน้ำ ค่าไฟ แล้วกรอกยอดจริงในแต่ละเดือน ยอดด้านบนจะใช้เป็นยอดประมาณ</p>
+
+    <div id="peaFields"></div>
 
     <div class="seg" id="typeSeg">
       <button type="button" data-type="monthly">ทุกเดือน</button>
@@ -514,7 +574,64 @@ function billForm(b) {
     if ($('#fStart')) draft.startMonth = $('#fStart').value || ui.ym;
     if ($('#fMonths')) draft.months = parseInt($('#fMonths').value, 10) || 1;
     if ($('#fOnce')) draft.onceDate = $('#fOnce').value;
+    if ($('#fPeaCa')) draft.pea = { ca: $('#fPeaCa').value.trim(), peano: $('#fPeaNo') ? $('#fPeaNo').value.trim() : '' };
   };
+
+  // Rows last fetched from PEA, written into records when the bill is saved.
+  let peaRows = null;
+
+  const renderPeaResult = (rows) => {
+    const box = $('#peaResult');
+    if (!box) return;
+    if (!rows || !rows.length) { box.innerHTML = '<p class="hint">ไม่พบข้อมูลย้อนหลัง</p>'; return; }
+    const items = rows.map((r) => {
+      const label = r.ym ? thMonthYear(r.ym) : esc(String(r.raw.billperiod ?? r.raw.billPeriod ?? ''));
+      return `<div class="kv"><span>${label}</span><span>${r.amount != null ? baht(r.amount) : '-'}</span></div>`;
+    }).join('');
+    box.innerHTML = `<div class="form history">${items}</div><p class="hint">กด "บันทึก" เพื่อเติมยอดเหล่านี้เข้าบิลแต่ละเดือน</p>`;
+  };
+
+  const onPeaFetch = async () => {
+    sync();
+    const ca = ($('#fPeaCa').value || '').trim();
+    const peano = ($('#fPeaNo').value || '').trim();
+    if (!ca || !peano) { toast('กรอกหมายเลขผู้ใช้ไฟฟ้าและรหัสเครื่องวัดก่อน'); return; }
+    const btn = $('#peaFetch');
+    btn.disabled = true; btn.textContent = 'กำลังดึงข้อมูล…';
+    try {
+      const rows = await fetchPeaBills(ca, peano);
+      peaRows = rows;
+      const latest = rows.find((r) => r.amount != null);
+      if (latest && $('#fAmount')) { $('#fAmount').value = latest.amount; draft.amount = String(latest.amount); }
+      renderPeaResult(rows);
+      toast(latest ? `ยอดล่าสุด ${baht(latest.amount)}` : 'ดึงข้อมูลแล้ว');
+    } catch (err) {
+      const box = $('#peaResult');
+      if (box) box.innerHTML = `<p class="hint pea-err">ดึงไม่สำเร็จ: ${esc(err.message || 'ลองใหม่อีกครั้ง')}</p>`;
+      toast('ดึงยอดค่าไฟไม่สำเร็จ');
+    } finally {
+      btn.disabled = false; btn.textContent = '⚡ ดึงยอดค่าไฟจาก PEA';
+    }
+  };
+
+  const renderPea = () => {
+    const box = $('#peaFields');
+    if (!box) return;
+    if (draft.category !== 'electric') { box.innerHTML = ''; return; }
+    const p = draft.pea || {};
+    box.innerHTML = `
+      <div class="section-title">⚡ เชื่อมกับการไฟฟ้าส่วนภูมิภาค (PEA)</div>
+      <div class="form">
+        <div class="field"><label for="fPeaCa">หมายเลขผู้ใช้ไฟฟ้า</label><input id="fPeaCa" inputmode="numeric" placeholder="เลข 12 หลักบนใบแจ้งค่าไฟ" value="${esc(p.ca || '')}" autocomplete="off"></div>
+        <div class="field"><label for="fPeaNo">รหัสเครื่องวัด</label><input id="fPeaNo" inputmode="numeric" placeholder="เลขมิเตอร์บนใบแจ้งค่าไฟ" value="${esc(p.peano || '')}" autocomplete="off"></div>
+      </div>
+      <button class="btn" id="peaFetch" type="button">⚡ ดึงยอดค่าไฟจาก PEA</button>
+      <div id="peaResult"></div>
+      <p class="hint">ดึงยอดค่าไฟย้อนหลังได้สูงสุด 6 เดือนจากเว็บ กฟภ. โดยตรง ไม่ต้องล็อกอิน · ตั้ง "ชื่อบิล" เป็นชื่อบ้าน เช่น บ้านหลังใหญ่ เพื่อแยกหลายมิเตอร์</p>
+    `;
+    $('#peaFetch').addEventListener('click', onPeaFetch);
+  };
+  renderPea();
 
   $('#catChips').addEventListener('click', (e) => {
     const c = e.target.closest('[data-cat]');
@@ -524,6 +641,7 @@ function billForm(b) {
     if (['credit', 'electric', 'water'].includes(draft.category) && isNew) $('#fVariable').checked = true;
     if (['loan', 'insurance', 'rent', 'subscription', 'internet'].includes(draft.category) && isNew) $('#fVariable').checked = false;
     if (draft.category === 'loan' && isNew && draft.type === 'monthly') { sync(); draft.type = 'installment'; renderSched(); }
+    renderPea();
   });
   $('#typeSeg').addEventListener('click', (e) => {
     const t = e.target.closest('[data-type]');
@@ -552,12 +670,18 @@ function billForm(b) {
       out.startMonth = draft.startMonth || ui.ym;
       if (draft.type === 'installment') out.months = Math.max(1, draft.months || 1);
     }
+    if (draft.category === 'electric' && draft.pea && (draft.pea.ca || draft.pea.peano)) {
+      out.pea = { ca: draft.pea.ca || '', peano: draft.pea.peano || '' };
+    }
     const i = state.bills.findIndex((x) => x.id === out.id);
     if (i >= 0) state.bills[i] = out; else state.bills.push(out);
+    let filled = 0;
+    if (out.pea && peaRows && peaRows.length) filled = applyPeaRows(out.id, peaRows);
     save();
+    saveMoney();
     closeSheet();
     render();
-    toast(isNew ? 'เพิ่มบิลแล้ว' : 'บันทึกแล้ว');
+    toast(filled ? `บันทึกและเติมยอดค่าไฟ ${filled} เดือน` : (isNew ? 'เพิ่มบิลแล้ว' : 'บันทึกแล้ว'));
   });
   const del = $('#delBill');
   if (del) {
@@ -616,6 +740,7 @@ function occurrenceSheet(id, ym) {
         ${money.wallets.map((w) => `<option value="${w.id}" ${billPayWallet() === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
       </select></div>`}
     </div>
+    ${b.pea && (b.pea.ca || b.pea.peano) ? `<button class="btn ghost" id="oPea" type="button">⚡ ดึงยอดจาก PEA</button>` : ''}
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
       : `<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button><button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
@@ -647,6 +772,22 @@ function occurrenceSheet(id, ym) {
     const tx = billTxn(id, ym);
     if (tx) { tx.amount = amount != null ? amount : (b.amount || 0); saveMoney(); }
     save(); closeSheet(); render(); toast('บันทึกยอดแล้ว');
+  });
+  const oPea = $('#oPea');
+  if (oPea) oPea.addEventListener('click', async () => {
+    const label = oPea.textContent;
+    oPea.disabled = true; oPea.textContent = 'กำลังดึง…';
+    try {
+      const rows = await fetchPeaBills(b.pea.ca, b.pea.peano);
+      const filled = applyPeaRows(id, rows);
+      const match = rows.find((r) => r.ym === ym && r.amount != null);
+      save(); saveMoney();
+      toast(match ? `อัปเดตยอดเดือนนี้ ${baht(match.amount)}` : `อัปเดต ${filled} เดือน`);
+      occurrenceSheet(id, ym);
+    } catch (err) {
+      oPea.disabled = false; oPea.textContent = label;
+      toast('ดึงไม่สำเร็จ: ' + (err.message || 'ลองใหม่'));
+    }
   });
 }
 

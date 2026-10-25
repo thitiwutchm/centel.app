@@ -530,3 +530,5 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 26px; }
 .halves + .section-title { margin-top: 22px; }
 .field[hidden] { display: none; }
+
+.hint.pea-err { color: var(--bad); }
