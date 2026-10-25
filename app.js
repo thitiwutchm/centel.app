@@ -456,6 +456,7 @@ function peaPeriodToYm(p) {
   let mm = s.match(/^(\d{4})[-/.](\d{1,2})$/);          // YYYY-MM
   if (mm) { y = +mm[1]; m = +mm[2]; }
   else if ((mm = s.match(/^(\d{1,2})[-/.](\d{4})$/))) { m = +mm[1]; y = +mm[2]; } // MM/YYYY
+  else if ((mm = s.match(/^(\d{4})(\d{2})(\d{2})$/))) { y = +mm[1]; m = +mm[2]; } // YYYYMMDD (PEA mrdate)
   else if ((mm = s.match(/^(\d{4})(\d{2})$/))) { y = +mm[1]; m = +mm[2]; }        // YYYYMM
   else if ((mm = s.match(/^(\d{4})-(\d{2})-\d{2}/))) { y = +mm[1]; m = +mm[2]; }  // ISO date
   else return null;
@@ -484,8 +485,13 @@ async function fetchPeaBills(ca, peano) {
   if (!data || !data.result) throw new Error((data && data.message) || 'ไม่พบข้อมูลค่าไฟ');
   const rows = Array.isArray(data.data) ? data.data : [];
   // Newest period first, with our parsed month and amount attached.
+  // PEA's billperiod is Thai text ("ต.ค. 2569"); mrdate (YYYYMMDD) is the reliable month.
   return rows
-    .map((r) => ({ raw: r, ym: peaPeriodToYm(r.billperiod ?? r.billPeriod ?? r.period), amount: peaRowAmount(r) }))
+    .map((r) => ({
+      raw: r,
+      ym: peaPeriodToYm(r.mrdate) || peaPeriodToYm(r.billperiod ?? r.billPeriod ?? r.period),
+      amount: peaRowAmount(r),
+    }))
     .sort((a, b2) => (a.ym && b2.ym ? (a.ym < b2.ym ? 1 : -1) : 0));
 }
 

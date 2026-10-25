@@ -15,6 +15,10 @@
 			header_up Host www.pea.co.th
 			# CloudFront returns 500 when it sees a bogus X-Forwarded-Host.
 			header_up -X-Forwarded-Host
+			# PEA only returns bill data when the request looks like it came from
+			# their own page; the browser's centel.app Origin/Referer gets "not found".
+			header_up Origin https://www.pea.co.th
+			header_up Referer https://www.pea.co.th/our-services/bill-history
 		}
 	}
 
