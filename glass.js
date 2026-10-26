@@ -47,8 +47,9 @@ function dissolve(el) {
   document.body.appendChild(cv);
   const ctx = cv.getContext('2d');
   ctx.scale(dpr, dpr);
-  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const tints = dark ? ['214,232,255', '160,196,240', '255,255,255'] : ['255,255,255', '214,232,255', '178,208,240'];
+  const tints = themeId() === 'pink' ? ['255,255,255', '255,214,230', '244,170,200']
+    : themeId() === 'white' ? ['200,204,212', '170,176,186', '226,228,232']
+    : themeIsDark() ? ['214,232,255', '160,196,240', '255,255,255'] : ['255,255,255', '214,232,255', '178,208,240'];
 
   el.style.transition = 'transform .28s cubic-bezier(.3,.7,.4,1)';
   el.style.transform = 'scale(.96)';
