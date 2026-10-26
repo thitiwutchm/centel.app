@@ -70,7 +70,7 @@ function mapExpense(e, me) {
     id: e.id, ownerId: e.ownerId, type: e.type, date: e.date, amount: e.amount, category: e.category && newCat(e.category),
     note: e.note || '', merchant: e.merchant || '', walletId: e.walletId, toWalletId: e.toWalletId,
     reviewNeeded: e.reviewNeeded, receiptKey: e.receiptKey, slipRef: e.slipRef, billId: e.billId, billYm: e.billYm,
-    scope: e.scope, status: e.status,
+    scope: e.scope, status: e.status, labels: e.labels || [],
   };
   if (!base.billId) { delete base.billId; delete base.billYm; }
   if (e.scope !== 'shared') return base;
@@ -117,6 +117,7 @@ function applyBootstrap(b) {
     wallets: b.wallets.length ? b.wallets : [{ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0 }],
     txns,
     budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId })),
+    labels: (b.labels || []).map((l) => ({ id: l.id, name: l.name })),
     prefs,
   };
   if (ui.wallet !== 'total' && !walletById(ui.wallet)) ui.wallet = 'total';
@@ -159,6 +160,7 @@ function cloudSignedOut() {
   money = loadMoney();
   ui.wallet = 'total';
   ui.txFilter = 'all';
+  ui.txLabel = '';
   render();
 }
 
@@ -191,6 +193,7 @@ function cloudSaveTxn(t, extra = {}) {
     merchant: t.merchant, category: t.category, note: t.note, walletId: t.walletId, toWalletId: t.toWalletId,
     reviewNeeded: !!t.reviewNeeded, receiptKey: t.receiptKey, slipRef: t.slipRef, billId: t.billId, billYm: t.billYm,
     payerId: t.payerId, shares: shared ? { [cloud.user.id]: t.amount } : undefined, submit: !!extra.submit,
+    labels: t.labels || [],
   };
   const known = cloud.ids.has(t.id);
   cloud.ids.add(t.id);
@@ -232,9 +235,10 @@ function shrinkImage(file, max = 1600) {
   });
 }
 
-async function uploadReceipt(file) {
+// labels: the person's label names, so AI Slips can suggest the ones that fit.
+async function uploadReceipt(file, labels = []) {
   const image = await shrinkImage(file);
-  return api('POST', '/receipts', { image, mediaType: 'image/jpeg' });
+  return api('POST', '/receipts', { image, mediaType: 'image/jpeg', labels });
 }
 
 async function openReceipt(key) {
@@ -353,6 +357,8 @@ function sharedSheet(t) {
         ${t.receiptKey ? '<button class="btn ghost" id="shReceipt">🧾 ดูสลิป</button>' : ''}
       </div>
     </div>
+    <div class="section-title">ป้ายกำกับของฉัน</div>
+    <div class="chips lab-pick" id="shLabels"></div>
     ${canRespond ? `
       <div class="form">${t.payerId === me ? walletSelect('shWallet', 'จ่ายจาก') : ''}</div>
       <p class="hint">ตรวจสอบยอดและการแบ่งให้ถูกต้อง ถ้าไม่ถูกให้ปฏิเสธพร้อมเหตุผล ผู้สร้างจะแก้ไขแล้วส่งใหม่</p>
@@ -367,6 +373,9 @@ function sharedSheet(t) {
   `);
   const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
   const done = (msg) => { closeSheet(); render(); toast(msg); };
+  // My own labels on this row; the partner never sees them and no re-approval is needed.
+  const picked = new Set(t.labels || []);
+  labelPicker($('#shLabels'), picked, () => setTxnLabels(t, money.labels.filter((l) => picked.has(l.id)).map((l) => l.id)));
   on('#shEdit', () => txnForm(t));
   on('#shResubmit', () => txnForm(t));
   on('#shReceipt', () => openReceipt(t.receiptKey));
@@ -589,6 +598,7 @@ async function cloudImport(data) {
       wallets: data.wallets || [],
       txns: (data.txns || []).filter((t) => t.type !== 'settle' && t.scope !== 'shared'),
       budgets: (data.budgets || []).filter((x) => x.scope !== 'shared'),
+      labels: data.labels || [],
     });
     if (data.prefs) { money.prefs = { ...money.prefs, ...data.prefs }; cloudSavePrefs(); }
     await cloudRefresh();

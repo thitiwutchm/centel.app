@@ -23,6 +23,10 @@ const walletIcon = (v) => {
   if (v.startsWith('data:')) return v.length <= 120000 && IMG_ICON.test(v) ? v : null;
   return v.length <= 16 && !/[<>&"']/.test(v) ? v : null;
 };
+// Label ids on a transaction: at most 30 distinct short strings; null when not sent.
+const labelIds = (v) => (Array.isArray(v)
+  ? [...new Set(v.map((x) => str(x, 60)).filter(Boolean))].slice(0, 30)
+  : null);
 
 /* ---------- Auth ---------- */
 
@@ -93,7 +97,7 @@ router.use(requireUser);
 
 const uid = (req) => req.user.id;
 
-function expenseOut(e, shares, events) {
+function expenseOut(e, shares, events, labels) {
   return {
     id: e.id, ownerId: e.owner_id, coupleId: e.couple_id, scope: e.scope, type: e.type, date: e.date,
     merchant: e.merchant, amount: e.amount, category: e.category, note: e.note, walletId: e.wallet_id,
@@ -103,7 +107,18 @@ function expenseOut(e, shares, events) {
     rejectedAt: e.rejected_at, rejectReason: e.reject_reason, createdAt: e.created_at,
     shares: shares ? Object.fromEntries(shares.map((s) => [s.user_id, s.amount])) : undefined,
     events: events || undefined,
+    labels: labels || [],
   };
+}
+
+// Replaces my labels on one expense. Unknown label ids are dropped.
+async function writeLabels(db, id, ids) {
+  await db.query('delete from expense_labels where expense_id = $1', [id]);
+  if (ids.length) {
+    await db.query(
+      'insert into expense_labels (expense_id, label_id) select $1, l.id from labels l where l.id = any($2::text[])',
+      [id, ids]);
+  }
 }
 
 router.get('/bootstrap', wrap(async (req, res) => {
@@ -118,6 +133,8 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const settlements = (await db.query('select * from settlements order by created_at')).rows;
     const budgets = (await db.query('select * from budgets order by created_at')).rows;
     const prefs = (await db.query('select data from prefs where user_id = app_uid()')).rows[0];
+    const labels = (await db.query('select id, name, sort from labels order by sort, name')).rows;
+    const links = (await db.query('select expense_id, label_id from expense_labels')).rows;
     let invite = null;
     if (couple && !partner) {
       // The pending invite code is read with the owner role: invites are not exposed to app_user.
@@ -126,7 +143,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
         [couple])).rows[0] || null;
     }
     const byExp = (rows) => rows.reduce((m, r) => ((m[r.expense_id] = m[r.expense_id] || []).push(r), m), {});
-    const sh = byExp(shares), ev = byExp(events);
+    const sh = byExp(shares), ev = byExp(events), lb = byExp(links);
     return {
       user: { id: me.id, email: me.email, name: me.display_name },
       partner: partner && { id: partner.id, email: partner.email, name: partner.display_name },
@@ -135,7 +152,8 @@ router.get('/bootstrap', wrap(async (req, res) => {
       wallets: wallets.map((w) => ({ id: w.id, name: w.name, type: w.type, initial: w.initial, excluded: w.excluded, sort: w.sort, icon: w.icon || undefined })),
       expenses: expenses.map((e) => expenseOut(e, sh[e.id] || [], (ev[e.id] || []).map((x) => ({
         actorId: x.actor_id, action: x.action, revision: x.revision, note: x.note, at: x.created_at,
-      })))),
+      })), (lb[e.id] || []).map((x) => x.label_id))),
+      labels: labels.map((l) => ({ id: l.id, name: l.name, sort: l.sort })),
       settlements: settlements.map((s) => ({
         id: s.id, expenseId: s.expense_id, debtorId: s.debtor_id, creditorId: s.creditor_id, amount: s.amount,
         status: s.status, paidAt: s.paid_at, markedBy: s.marked_by, debtorWalletId: s.debtor_wallet_id,
@@ -199,6 +217,7 @@ function readExpense(body) {
     note: str(body.note, 500), walletId: str(body.walletId, 60), toWalletId: type === 'transfer' ? str(body.toWalletId, 60) : null,
     reviewNeeded: !!body.reviewNeeded, receiptKey: str(body.receiptKey, 200), slipRef: str(body.slipRef, 80),
     billId: str(body.billId, 60), billYm: str(body.billYm, 7), payerId: body.payerId, shares: body.shares || {},
+    labels: labelIds(body.labels),
   };
 }
 
@@ -245,6 +264,7 @@ router.post('/expenses', wrap(async (req, res) => {
       await writeShares(db, id, x, me);
       if (req.body.submit) await db.query('select submit_expense($1)', [id]);
     }
+    if (x.labels) await writeLabels(db, id, x.labels);
     return { id };
   });
   if (out.duplicate) return res.status(409).json({ error: 'duplicate', id: out.duplicate });
@@ -281,6 +301,7 @@ router.put('/expenses/:id', wrap(async (req, res) => {
     } else {
       await db.query('delete from expense_shares where expense_id = $1', [id]);
     }
+    if (x.labels) await writeLabels(db, id, x.labels);
     return { id };
   });
   if (out.duplicate) return res.status(409).json({ error: 'duplicate', id: out.duplicate });
@@ -294,6 +315,18 @@ router.delete('/expenses/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Labels only: works on any expense I can see (a partner's shared row, an approved
+// row) because the links are mine and the expense itself is not changed.
+router.put('/expenses/:id/labels', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('bad_id');
+  const ids = labelIds(req.body.labels) || [];
+  await asUser(uid(req), async (db) => {
+    if (!(await db.query('select 1 from expenses where id = $1', [req.params.id])).rowCount) throw bad('not_found', 404);
+    await writeLabels(db, req.params.id, ids);
+  });
+  res.json({ ok: true });
+}));
+
 router.post('/expenses/:id/submit', wrap(async (req, res) => {
   await asUser(uid(req), (db) => db.query('select submit_expense($1)', [req.params.id]));
   res.json({ ok: true });
@@ -302,6 +335,25 @@ router.post('/expenses/:id/submit', wrap(async (req, res) => {
 router.post('/expenses/:id/respond', wrap(async (req, res) => {
   await asUser(uid(req), (db) => db.query('select respond_expense($1, $2, $3, $4)',
     [req.params.id, !!req.body.approve, str(req.body.reason, 300), str(req.body.walletId, 60)]));
+  res.json({ ok: true });
+}));
+
+/* ---------- Labels ---------- */
+
+router.put('/labels/:id', wrap(async (req, res) => {
+  const id = str(req.params.id, 60);
+  const name = str(String(req.body.name || '').trim(), 60);
+  if (!id || !name) throw bad('bad_label');
+  await asUser(uid(req), (db) => db.query(
+    `insert into labels (owner_id, id, name, sort) values (app_uid(), $1, $2, $3)
+     on conflict (owner_id, id) do update set name = excluded.name, sort = excluded.sort`,
+    [id, name, Number(req.body.sort) || 0]));
+  res.json({ ok: true });
+}));
+
+// Removing a label takes it off every transaction (expense_labels cascades).
+router.delete('/labels/:id', wrap(async (req, res) => {
+  await asUser(uid(req), (db) => db.query('delete from labels where id = $1', [req.params.id]));
   res.json({ ok: true });
 }));
 
@@ -355,8 +407,8 @@ router.put('/prefs', wrap(async (req, res) => {
 /* ---------- Import local data on first sign-in ---------- */
 
 router.post('/import', wrap(async (req, res) => {
-  const { wallets = [], txns = [], budgets = [] } = req.body || {};
-  if (wallets.length > 200 || txns.length > 20000 || budgets.length > 200) throw bad('too_large', 413);
+  const { wallets = [], txns = [], budgets = [], labels = [] } = req.body || {};
+  if (wallets.length > 200 || txns.length > 20000 || budgets.length > 200 || labels.length > 500) throw bad('too_large', 413);
   const n = await asUser(uid(req), async (db) => {
     for (const [i, w] of wallets.entries()) {
       if (!str(w.id, 60) || !str(w.name)) continue;
@@ -365,14 +417,21 @@ router.post('/import', wrap(async (req, res) => {
          on conflict (owner_id, id) do nothing`,
         [str(w.id, 60), str(w.name, 60), str(w.type, 20) || 'cash', money(w.initial || 0), !!w.excluded, i, walletIcon(w.icon)]);
     }
+    for (const [i, l] of labels.entries()) {
+      if (!str(l.id, 60) || !str(l.name, 60)) continue;
+      await db.query(
+        'insert into labels (owner_id, id, name, sort) values (app_uid(), $1, $2, $3) on conflict (owner_id, id) do nothing',
+        [str(l.id, 60), str(String(l.name).trim(), 60), i]);
+    }
     let count = 0;
     for (const t of txns) {
       let x;
       try { x = readExpense({ ...t, scope: 'personal' }); } catch { continue; }
-      await db.query(
+      const r = await db.query(
         `insert into expenses (owner_id, scope, type, date, merchant, amount, category, note, wallet_id, to_wallet_id, status, bill_id, bill_ym)
-         values (app_uid(), 'personal', $1, $2, $3, $4, $5, $6, $7, $8, 'approved', $9, $10)`,
+         values (app_uid(), 'personal', $1, $2, $3, $4, $5, $6, $7, $8, 'approved', $9, $10) returning id`,
         [x.type, x.date, x.merchant, x.amount, x.category, x.note, x.walletId, x.toWalletId, x.billId, x.billYm]);
+      if (x.labels && x.labels.length) await writeLabels(db, r.rows[0].id, x.labels);
       count++;
     }
     for (const b of budgets) {
@@ -397,9 +456,12 @@ router.post('/receipts', rateLimit(60, 60 * 60000), wrap(async (req, res) => {
   if (buf.length > 6 * 1024 * 1024) throw bad('too_large', 413);
   const key = `${uid(req)}/${crypto.randomUUID()}.${mediaType.split('/')[1]}`;
   await putReceipt(key, buf, mediaType);
+  // The person's label names, so the AI can suggest ones that fit this slip.
+  const labelNames = Array.isArray(req.body.labels)
+    ? [...new Set(req.body.labels.map((x) => str(String(x).trim(), 60)).filter(Boolean))].slice(0, 50) : [];
   let analysis;
   try {
-    analysis = await analyzeReceipt(data, mediaType);
+    analysis = await analyzeReceipt(data, mediaType, labelNames);
   } catch (e) {
     console.error('receipt analysis failed', e.status || '', e.message);
     analysis = { status: 'failed', result: null };

@@ -40,13 +40,30 @@ Extract the fields in the schema from the image only; do not invent values.
 
 const client = aiEnabled ? new Anthropic() : null;
 
-export async function analyzeReceipt(base64, mediaType) {
+// With the person's label names, the schema also asks which of them fit this slip.
+function schemaFor(labels) {
+  if (!labels.length) return SCHEMA;
+  return {
+    ...SCHEMA,
+    required: [...SCHEMA.required, 'labels'],
+    properties: {
+      ...SCHEMA.properties,
+      labels: {
+        type: 'array',
+        items: { type: 'string', enum: labels },
+        description: "The person's own labels that clearly fit this payment (e.g. a label named after the shop, app or service). Empty when none clearly fit.",
+      },
+    },
+  };
+}
+
+export async function analyzeReceipt(base64, mediaType, labels = []) {
   if (!client) return { status: 'skipped', result: null };
   const response = await client.beta.messages.create({
     model: RECEIPT_MODEL,
     max_tokens: 4000,
     ...(useFallbacks ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: schemaFor(labels) } },
     system: SYSTEM,
     messages: [{
       role: 'user',
@@ -64,6 +81,7 @@ export async function analyzeReceipt(base64, mediaType) {
   try { r = JSON.parse(text); } catch { return { status: 'failed', result: null, reason: 'bad_json' }; }
   // A transfer slip with no stated purpose waits for the person to choose (PRD: "รอตรวจสอบ").
   if (r.kind === 'bank_transfer_slip' && !r.purpose_known) r.category = null;
+  r.labels = Array.isArray(r.labels) ? r.labels.filter((x) => labels.includes(x)) : [];
   const needsReview = r.confidence === 'low' || r.category == null || r.amount == null || r.date == null
     || r.kind === 'not_a_receipt';
   return { status: needsReview ? 'needs_review' : 'ok', result: r, model: response.model };
