@@ -1071,10 +1071,9 @@ function txnForm(t, preset = {}) {
     <div class="receipt-row">
       <button type="button" class="chip" id="rcCam">📷 ถ่ายสลิป</button>
       <button type="button" class="chip" id="rcPick">🖼️ เลือกรูปสลิป</button>
-      ${d.receiptKey ? '<button type="button" class="chip" id="rcView">🧾 ดูสลิป</button>' : ''}
       <input type="file" id="rcCamIn" accept="image/*" capture="environment" hidden>
       <input type="file" id="rcPickIn" accept="image/jpeg,image/png,image/webp,image/*" hidden>
-    </div><div id="rcStatus"></div>` : ''}
+    </div><div id="rcStatus"></div>${receiptThumbHtml(d.receiptKey)}` : ''}
     <div class="amount-input" id="tAmtWrap"><span>฿</span><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
     <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่ รายการจะถูกบันทึกเป็น "รอตรวจสอบ" จนกว่าจะเลือก</p></div>
     <div class="form">
@@ -1176,6 +1175,8 @@ function txnForm(t, preset = {}) {
       try {
         const r = await uploadReceipt(file, money.labels.map((l) => l.name));
         d.receiptKey = r.key;
+        // Saved with the row as receiptKey, so it shows on every device; preview the local file for now.
+        showReceiptThumb(document.querySelector('[data-rc-thumb]'), r.key, URL.createObjectURL(file));
         const x = r.result;
         if (x) {
           if (x.amount) $('#tAmount').value = x.amount;
@@ -1205,7 +1206,7 @@ function txnForm(t, preset = {}) {
     $('#rcPick').addEventListener('click', () => $('#rcPickIn').click());
     $('#rcCamIn').addEventListener('change', (e) => onFile(e.target.files[0]));
     $('#rcPickIn').addEventListener('change', (e) => onFile(e.target.files[0]));
-    if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
+    showReceiptThumb(document.querySelector('[data-rc-thumb]'), d.receiptKey);
   }
 
   const save = (submit) => {
