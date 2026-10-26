@@ -264,6 +264,8 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 
 /* Sign in with Google: Google renders the button inside .gbtn. */
 .gsignin .gbtn { display: flex; justify-content: center; min-height: 44px; }
+/* Match the iframe's own (light) scheme so dark mode doesn't paint a white box behind it. */
+.gsignin .gbtn iframe { color-scheme: light; }
 .gsignin .or { display: flex; align-items: center; gap: 10px; margin: 14px 4px; color: var(--muted); font-size: 13px; }
 .gsignin .or::before, .gsignin .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 
