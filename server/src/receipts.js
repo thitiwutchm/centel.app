@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-export const RECEIPT_MODEL = process.env.RECEIPT_MODEL || 'claude-opus-5-5';
+export const RECEIPT_MODEL = process.env.RECEIPT_MODEL || 'claude-haiku-5-5';
+// Haiku has no server-side refusal fallback; larger models route refusals with it.
+const useFallbacks = !RECEIPT_MODEL.startsWith('claude-haiku');
 export const aiEnabled = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
 // Keys match the expense categories in money.js.
@@ -43,8 +45,7 @@ export async function analyzeReceipt(base64, mediaType) {
   const response = await client.beta.messages.create({
     model: RECEIPT_MODEL,
     max_tokens: 4000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
+    ...(useFallbacks ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
     output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
     system: SYSTEM,
     messages: [{
