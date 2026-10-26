@@ -1,6 +1,6 @@
 {
-  "name": "วางแผนจ่ายบิล",
-  "short_name": "จ่ายบิล",
+  "name": "Centel",
+  "short_name": "Centel",
   "description": "วางแผนการจ่ายค่าบัตรเครดิต ค่าน้ำ ค่าไฟ และบิลรายเดือน",
   "lang": "th",
   "start_url": "./",
