@@ -70,6 +70,7 @@ function save() {
     toast('บันทึกข้อมูลไม่สำเร็จ');
   }
   updateBadge();
+  plannerChanged(); // signed in: send to the account (cloud.js)
 }
 
 /* ---------- Date helpers ---------- */
@@ -412,7 +413,7 @@ function renderSettings() {
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
     <button class="btn ghost" data-action="import">⬆️ นำเข้าข้อมูล</button>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
-    <p class="hint">${isCloud() ? 'รายการรับจ่าย งบประมาณ และรายจ่ายร่วมซิงก์กับบัญชีออนไลน์ ส่วนรายการบิลเก็บในเครื่องนี้ ควรส่งออกเก็บไว้เป็นระยะ' : 'ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ'}</p>
+    <p class="hint">${isCloud() ? 'บิล ประวัติการจ่าย ไฟล์ใบแจ้งหนี้ รายการรับจ่าย และงบประมาณ ซิงก์กับบัญชีออนไลน์ทุกเครื่องที่เข้าสู่ระบบ' : 'ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ'}</p>
 
     ${installTip()}
 
@@ -1141,7 +1142,8 @@ document.addEventListener('click', (e) => {
     case 'gmail': gmailSheet(); break;
     case 'reset':
       if (isCloud()) {
-        if (confirm('ลบข้อมูลบิลในเครื่องนี้? (รายการรับจ่ายในบัญชีออนไลน์จะไม่ถูกลบ)')) {
+        if (confirm('ลบบิลและประวัติการจ่ายทั้งหมด? จะลบจากบัญชีออนไลน์และทุกเครื่องด้วย (รายการรับจ่ายไม่ถูกลบ)')) {
+          Object.entries(state.records).forEach(([ym, m]) => Object.entries(m).forEach(([id, r]) => { if (r.file) billFileDel(id, ym); }));
           state = defaultState(); save(); render(); toast('ลบข้อมูลบิลแล้ว');
         }
       } else if (confirm('ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) {

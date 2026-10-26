@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Railway buckets are S3-compatible; the service gets these variables from the bucket.
@@ -17,13 +17,31 @@ const s3 = bucket
 
 export const storageEnabled = !!s3;
 
+const disabled = () => Object.assign(new Error('storage_disabled'), { status: 503, expose: true });
+
 export async function putReceipt(key, body, contentType) {
-  if (!s3) throw Object.assign(new Error('storage_disabled'), { status: 503 });
+  if (!s3) throw disabled();
   await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
 }
 
 // Short-lived link so receipts never sit at a public URL.
 export async function receiptUrl(key) {
-  if (!s3) throw Object.assign(new Error('storage_disabled'), { status: 503 });
+  if (!s3) throw disabled();
   return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 300 });
+}
+
+// Bill invoice files are streamed through the API (same origin, so no bucket CORS needed).
+export async function getObject(key) {
+  if (!s3) throw disabled();
+  try {
+    return await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  } catch (e) {
+    if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return null;
+    throw e;
+  }
+}
+
+export async function deleteObject(key) {
+  if (!s3) throw disabled();
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

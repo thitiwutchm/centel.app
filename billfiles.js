@@ -3,6 +3,8 @@
 /* ---------- Bill files (invoice PDFs/images per bill per month) ----------
  * Files are too big for localStorage, so the blobs live in IndexedDB keyed by
  * "billId/YYYY-MM"; the month's record keeps { file: name } so lists stay synchronous.
+ * Signed in, each file is also uploaded to the account ({ fileCloud: true } on the record)
+ * and other devices fetch it the first time it is opened (see cloud.js).
  */
 
 const FILES_DB = 'centel.files';
@@ -37,14 +39,35 @@ async function filesTx(mode, fn) {
 
 function billFileKey(billId, ym) { return `${billId}/${ym}`; }
 function billFileGet(billId, ym) { return filesTx('readonly', (s) => s.get(billFileKey(billId, ym))); }
-function billFileDel(billId, ym) { return filesTx('readwrite', (s) => s.delete(billFileKey(billId, ym))).catch(() => {}); }
+function billFileDel(billId, ym) {
+  billFileRemoteDel(billId, ym);
+  return filesTx('readwrite', (s) => s.delete(billFileKey(billId, ym))).catch(() => {});
+}
 function billFilesClear() { return filesTx('readwrite', (s) => s.clear()).catch(() => {}); }
 
 // Store a file for a bill's month and mark the record. Caller saves state.
 async function billFilePut(billId, ym, blob, name) {
   if (blob.size > BILL_FILE_MAX) throw new Error('ไฟล์ใหญ่เกิน 10 MB');
   await filesTx('readwrite', (s) => s.put({ name, type: blob.type || 'application/pdf', blob, added: new Date().toISOString() }, billFileKey(billId, ym)));
-  setRecord(ym, billId, { file: name });
+  setRecord(ym, billId, { file: name, fileCloud: undefined });
+  billFileUpload(billId, ym);
+}
+
+// A bill took another id (matched to the account's copy of the same bill): move its files.
+async function billFileMove(fromId, toId) {
+  try {
+    const db = await filesDb();
+    const keys = await new Promise((resolve, reject) => {
+      const req = db.transaction('files').objectStore('files').getAllKeys();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    for (const k of keys.filter((x) => String(x).startsWith(`${fromId}/`))) {
+      const ym = String(k).slice(fromId.length + 1);
+      const f = await filesTx('readonly', (s) => s.get(k));
+      await filesTx('readwrite', (s) => { s.put(f, billFileKey(toId, ym)); return s.delete(k); });
+    }
+  } catch (e) { /* the file stays under the old id; it can be attached again */ }
 }
 
 function loadPdfJs() {
@@ -76,8 +99,8 @@ async function billFileViewer(billId, ym) {
   `);
   const box = $('#fileView');
   try {
-    const f = await billFileGet(billId, ym);
-    if (!f) { box.innerHTML = '<p class="hint">ไม่พบไฟล์ในเครื่องนี้</p>'; return; }
+    const f = (await billFileGet(billId, ym).catch(() => null)) || await billFileDownload(billId, ym);
+    if (!f) { box.innerHTML = `<p class="hint">${record(ym, billId).fileCloud ? 'ดาวน์โหลดไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง' : 'ไม่พบไฟล์ในเครื่องนี้ (แนบจากเครื่องอื่นก่อนซิงก์ไฟล์ ให้แนบใหม่ที่เครื่องนั้น)'}</p>`; return; }
     $('#fileShare').addEventListener('click', () => deliverFile(f.name, f.type, f.blob));
     if (!/pdf/i.test(f.type)) {
       const url = URL.createObjectURL(f.blob);
