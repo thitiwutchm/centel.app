@@ -30,7 +30,7 @@ const TX_CATS = {
   beauty:        { type: 'expense', label: 'Beauty & Personal Care',  icon: '✂️', color: '#d0507f' },
   travel:        { type: 'expense', label: 'Travel & Trips',          icon: '✈️', color: '#3fae8c' },
   fitness:       { type: 'expense', label: 'Fitness & Sports',        icon: '🏋️', color: '#5b6a8f' },
-  pets:          { type: 'expense', label: 'Pets',                    icon: '🐾', color: '#e8a22e' },
+  pets:          { type: 'expense', label: 'Pets',                    icon: '🐶', color: '#e8a22e' },
   gift:          { type: 'expense', label: 'Gifts & Donations',       icon: '🧡', color: '#d97a3a' },
   gadget:        { type: 'expense', label: 'Gadgets & Electronics',   icon: '📱', color: '#5d6b85' },
   rent:          { type: 'expense', label: 'Rent & Insurance',        icon: '🏛️', color: '#c97a2b' },
@@ -147,8 +147,9 @@ function cleanCats(src) {
     const label = String(c.label || '').trim().slice(0, 40);
     if (!label) continue;
     const icon = typeof c.icon === 'string' && c.icon.length <= 16 && !/[<>&"']/.test(c.icon) && c.icon.trim() ? c.icon : '🏷️';
+    // 🐾 draws almost black on iPhone, so the built-in Pets icon moved to 🐶.
     seen.add(c.id);
-    out.push({ id: c.id, type: c.type, label, icon, color: CAT_COLOR.test(c.color) ? c.color : '#8a8f99', parent: typeof c.parent === 'string' ? c.parent : undefined });
+    out.push({ id: c.id, type: c.type, label, icon: c.id === 'pets' && icon === '🐾' ? '🐶' : icon, color: CAT_COLOR.test(c.color) ? c.color : '#8a8f99', parent: typeof c.parent === 'string' ? c.parent : undefined });
   }
   // A parent must be a top-level category of the same type.
   const top = new Map(out.filter((c) => !c.parent).map((c) => [c.id, c]));
@@ -1145,9 +1146,9 @@ function txnForm(t, preset = {}) {
       <button type="button" data-ttype="income">รายรับ</button>
       <button type="button" data-ttype="transfer">โอนเงิน</button>
     </div>
-    ${canShare ? `<div class="seg" id="txScope">
+    ${canShare ? `<div class="scope-row" id="txScope">
       <button type="button" data-scope="personal">ส่วนตัว</button>
-      <button type="button" data-scope="shared">ร่วมกับ ${esc(partnerName())}</button>
+      <button type="button" data-scope="shared" class="scope-partner" aria-label="ร่วมกับ ${esc(partnerName())}">${userAvatar({ name: partnerName(), avatar: cloud.partner.avatar }, 'scope-av')}<span>${esc(partnerName())}</span></button>
     </div>` : ''}
     ${receipts ? `<div class="section-title">✨ AI Slips</div>
     <p class="hint">อัปโหลดสลิป แล้ว AI จะกรอกหมวด ยอดเงิน และวันที่โอนให้ ตรวจแก้ได้ก่อนบันทึก</p>
@@ -1206,7 +1207,6 @@ function txnForm(t, preset = {}) {
     $('#tShareRows').hidden = !sh;
     $('#tShareHint').hidden = !sh;
     $('#draftTx').hidden = !sh;
-    $('#saveTx').textContent = sh ? 'ส่งขออนุมัติ' : 'บันทึก';
     // The wallet only matters when I am the one paying.
     $('#tWalletRow').hidden = sh && $('#tPayer').value !== me;
     $('#tWalletLab').textContent = transfer ? 'จาก' : sh ? 'จ่ายจาก' : 'กระเป๋าเงิน';
@@ -1640,7 +1640,7 @@ function labelFilterSheet() {
 /* ---------- Categories (settings) ---------- */
 
 const CAT_ICONS = ['🍴', '🍜', '☕', '🧋', '🍺', '🍸', '🛒', '👕', '👟', '👜', '💄', '✂️', '🏠', '🛏️', '🧹', '💡', '💧', '🔥', '📞', '🌐', '📺',
-  '💳', '🚗', '⛽', '🚕', '🚇', '✈️', '🏨', '🩺', '💊', '🏋️', '⚽', '🎮', '🎬', '🎵', '📚', '🎓', '🐾', '🧸', '👶', '🎁', '🧡', '🙏',
+  '💳', '🚗', '⛽', '🚕', '🚇', '✈️', '🏨', '🩺', '💊', '🏋️', '⚽', '🎮', '🎬', '🎵', '📚', '🎓', '🐶', '🐱', '🐾', '🧸', '👶', '🎁', '🧡', '🙏',
   '📱', '💻', '🏛️', '🛡️', '🏦', '📈', '💰', '💵', '🎉', '📦', '🤝', '🧾', '🏷️'];
 const CAT_COLORS = ['#a8844f', '#d98a2b', '#f0a92e', '#b8a12a', '#3fae8c', '#4fb3ad', '#3d8fe0', '#2f6bff', '#5b6a8f',
   '#7d7aa8', '#9b59b6', '#d0507f', '#d9534f', '#c97a2b', '#7a7f88', '#1a9e5c'];

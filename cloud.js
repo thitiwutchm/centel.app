@@ -18,7 +18,9 @@ const cloud = {
 };
 
 function isCloud() { return cloud.on; }
-function partnerName() { return (cloud.partner && cloud.partner.name) || 'คู่ของฉัน'; }
+// The partner by nickname (ชื่อเล่น) when they have set one.
+function partnerName() { return (cloud.partner && (cloud.partner.nickname || cloud.partner.name)) || 'คู่ของฉัน'; }
+function needNickname() { return isCloud() && !!cloud.user && !cloud.user.nickname; }
 // A person's picture: an uploaded photo, their Google photo or an emoji; otherwise the first letter of their name.
 const PHOTO_SRC = /^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*|https:\/\/[a-z0-9-]+\.googleusercontent\.com\/[^\s"'<>]+)$/;
 function userImg(u) { return u && PHOTO_SRC.test(u.avatar || '') ? u.avatar : ''; }
@@ -144,6 +146,7 @@ async function cloudRefresh() {
     applyBootstrap(b);
     try { localStorage.setItem(CLOUD_KEY, JSON.stringify(b)); } catch (e) { /* full */ }
     render();
+    if (needNickname() && $('#sheet').hidden) nicknameSheet();
     return b;
   } catch (e) {
     if (e.status === 401) {
@@ -565,7 +568,8 @@ function loginSheet(mode = 'login') {
     <div class="seg" id="lgMode"><button type="button" data-lg="login" class="${mode === 'login' ? 'on' : ''}">เข้าสู่ระบบ</button><button type="button" data-lg="register" class="${mode === 'register' ? 'on' : ''}">สมัครสมาชิก</button></div>
     <div class="gsignin" id="lgGoogle" hidden><div class="gbtn"></div><div class="or"><span>หรือใช้อีเมล</span></div></div>
     <form class="form" id="lgForm">
-      ${mode === 'register' ? '<div class="field"><label for="lgName">ชื่อที่แสดง</label><input id="lgName" autocomplete="nickname" placeholder="เช่น ต้น"></div>' : ''}
+      ${mode === 'register' ? `<div class="field"><label for="lgName">ชื่อที่แสดง</label><input id="lgName" autocomplete="name" placeholder="เช่น ต้นกล้า ใจดี"></div>
+        <div class="field"><label for="lgNick">ชื่อเล่น</label><input id="lgNick" maxlength="20" autocomplete="nickname" placeholder="เช่น ต้น"></div>` : ''}
       <div class="field"><label for="lgEmail">อีเมล</label><input id="lgEmail" type="email" autocomplete="email" inputmode="email"></div>
       <div class="field"><label for="lgPass">รหัสผ่าน</label><input id="lgPass" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" placeholder="${mode === 'login' ? '' : 'อย่างน้อย 8 ตัวอักษร'}"></div>
       <button class="btn" type="submit" id="lgGo" style="margin-top:12px">${mode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชี'}</button>
@@ -580,7 +584,11 @@ function loginSheet(mode = 'login') {
     btn.disabled = true;
     try {
       const body = { email: $('#lgEmail').value.trim(), password: $('#lgPass').value };
-      if (mode === 'register') body.name = $('#lgName').value.trim();
+      if (mode === 'register') {
+        body.name = $('#lgName').value.trim();
+        body.nickname = $('#lgNick').value.trim();
+        if (!body.nickname) { toast('กรุณาใส่ชื่อเล่น'); $('#lgNick').focus(); return; }
+      }
       await api('POST', mode === 'login' ? '/auth/login' : '/auth/register', body);
       await signedIn();
     } catch (err) {
@@ -704,7 +712,8 @@ function profileSheet() {
     <div class="gsignin gphoto" id="pGoogleBox" hidden><div class="gbtn"></div></div>
     <div class="chips w-emojis" id="pEmojis" hidden>${emojis}<input id="pEmojiIn" class="chip" placeholder="พิมพ์เอง" maxlength="8" autocomplete="off"></div>
     <div class="form">
-      <div class="field"><label for="pName">ชื่อที่แสดง</label><input id="pName" maxlength="60" autocomplete="nickname" value="${esc(d.name)}"></div>
+      <div class="field"><label for="pName">ชื่อที่แสดง</label><input id="pName" maxlength="60" autocomplete="name" value="${esc(d.name)}"></div>
+      <div class="field"><label for="pNick">ชื่อเล่น</label><input id="pNick" maxlength="20" autocomplete="nickname" placeholder="เช่น ต้น" value="${esc(cloud.user.nickname || '')}"></div>
       <div class="field"><label>อีเมล</label><span class="muted" style="flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis">${esc(cloud.user.email)}</span></div>
     </div>
     <p class="hint">ชื่อและรูปนี้จะแสดงในทุกเครื่องที่เข้าสู่ระบบ${cloud.partner ? ` และ ${esc(partnerName())} จะเห็นด้วย` : ' และคู่ของคุณเมื่อเชื่อมบัญชีแล้ว'}</p>
@@ -746,11 +755,13 @@ function profileSheet() {
   });
   $('#saveProfile').addEventListener('click', async (e) => {
     const name = $('#pName').value.trim();
+    const nickname = $('#pNick').value.trim();
     if (!name) { toast('กรุณาใส่ชื่อ'); $('#pName').focus(); return; }
+    if (!nickname) { toast('กรุณาใส่ชื่อเล่น'); $('#pNick').focus(); return; }
     e.target.disabled = true;
     try {
-      const r = await api('PUT', '/profile', { name, avatar: d.avatar || null });
-      cloud.user = { ...cloud.user, name, avatar: r.avatar || undefined };
+      const r = await api('PUT', '/profile', { name, nickname, avatar: d.avatar || null });
+      cloud.user = { ...cloud.user, name, nickname: r.nickname || nickname, avatar: r.avatar || undefined };
       closeSheet(); render(); toast('บันทึกโปรไฟล์แล้ว');
       cloudRefresh();
     } catch (err) {
@@ -758,6 +769,38 @@ function profileSheet() {
       e.target.disabled = false;
     }
   });
+}
+
+// Everyone needs a nickname (it names them on shared expenses), including accounts
+// made before it existed. The sheet stays until one is saved.
+function nicknameSheet() {
+  if (!needNickname()) return;
+  const guess = (cloud.user.name || '').trim().split(/\s+/)[0].slice(0, 20);
+  openSheet(`
+    <div class="sheet-head"><span style="width:40px"></span><h2>ตั้งชื่อเล่น</h2><button class="link-btn strong" id="saveNick">บันทึก</button></div>
+    <div class="nick-hero">${userAvatar(cloud.user, 'avatar big')}<p>ชื่อเล่นจะแสดงให้${cloud.partner ? esc(cloud.partner.nickname || cloud.partner.name || 'คู่ของคุณ') : 'คู่ของคุณ'}เห็นในรายจ่ายร่วม</p></div>
+    <form class="form" id="nickForm"><div class="field"><label for="nkName">ชื่อเล่น</label><input id="nkName" maxlength="20" autocomplete="nickname" placeholder="เช่น ต้น" value="${esc(guess)}"></div></form>
+    <p class="hint">เปลี่ยนได้ภายหลังที่ บัญชี → แตะการ์ดโปรไฟล์</p>
+  `);
+  $('#sheet').dataset.locked = '1';
+  const save = async (e) => {
+    if (e) e.preventDefault();
+    const nickname = $('#nkName').value.trim();
+    if (!nickname) { toast('กรุณาใส่ชื่อเล่น'); $('#nkName').focus(); return; }
+    $('#saveNick').disabled = true;
+    try {
+      const r = await api('PUT', '/profile', { name: cloud.user.name || nickname, nickname, avatar: cloud.user.avatar || null });
+      cloud.user = { ...cloud.user, nickname: r.nickname || nickname };
+      delete $('#sheet').dataset.locked;
+      closeSheet(); render(); toast('บันทึกชื่อเล่นแล้ว');
+    } catch (err) {
+      toast(cloudErr(err));
+      $('#saveNick').disabled = false;
+    }
+  };
+  $('#saveNick').addEventListener('click', save);
+  $('#nickForm').addEventListener('submit', save);
+  setTimeout(() => $('#nkName') && $('#nkName').focus(), 300);
 }
 
 async function googlePhotoButton(box, done) {
