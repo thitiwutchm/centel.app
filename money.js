@@ -119,13 +119,84 @@ function txCat(t) {
   if (t.type === 'transfer') return TRANSFER_CAT;
   if (t.type === 'settle') return SETTLE_CAT;
   if (!t.category) return REVIEW_CAT;
-  return TX_CATS[t.category] || TX_CATS.other_exp;
+  return catById(t.category) || catFallback(t.type);
 }
 function labelById(id) { return money.labels.find((l) => l.id === id); }
 // The labels on a transaction that still exist (a deleted label just disappears).
 function txLabels(t) { return (t.labels || []).map(labelById).filter(Boolean); }
-function budgetCat(bg) { return bg.category === 'all' ? ALL_CAT : (TX_CATS[bg.category] || TX_CATS.other_exp); }
-function catsOf(type) { return Object.entries(TX_CATS).filter(([, c]) => c.type === type); }
+function budgetCat(bg) { return bg.category === 'all' ? ALL_CAT : (catById(bg.category) || catFallback('expense')); }
+
+/* ---------- Categories ----------
+   The person's own list lives in money.prefs.cats (synced with prefs): [{ id, type, label, icon, color, parent? }]
+   in display order. Until they change anything it is null and TX_CATS is used. A category can have
+   sub-categories (parent = a top-level id of the same type); reports and budgets roll subs up into the parent.
+   Deleting one leaves its transactions alone and records where they now belong in money.prefs.catMoved. */
+
+const DEFAULT_CATS = Object.entries(TX_CATS).map(([id, c]) => ({ id, type: c.type, label: c.label, icon: c.icon, color: c.color }));
+// Kept even if the person's list loses them, so a transaction always has somewhere to show up.
+const CAT_FALLBACK = { expense: 'other_exp', income: 'other_inc' };
+const CAT_ID = /^[A-Za-z0-9_-]{1,40}$/;
+const CAT_COLOR = /^#[0-9a-fA-F]{6}$/;
+let catCache = { src: {}, list: [], map: new Map() };
+
+// prefs.cats comes from storage or the server, so it is checked before it reaches the page.
+function cleanCats(src) {
+  const out = [], seen = new Set();
+  for (const c of src) {
+    if (!c || !CAT_ID.test(c.id) || seen.has(c.id) || !['expense', 'income'].includes(c.type)) continue;
+    const label = String(c.label || '').trim().slice(0, 40);
+    if (!label) continue;
+    const icon = typeof c.icon === 'string' && c.icon.length <= 16 && !/[<>&"']/.test(c.icon) && c.icon.trim() ? c.icon : '🏷️';
+    seen.add(c.id);
+    out.push({ id: c.id, type: c.type, label, icon, color: CAT_COLOR.test(c.color) ? c.color : '#8a8f99', parent: typeof c.parent === 'string' ? c.parent : undefined });
+  }
+  // A parent must be a top-level category of the same type.
+  const top = new Map(out.filter((c) => !c.parent).map((c) => [c.id, c]));
+  out.forEach((c) => { if (c.parent && (!top.has(c.parent) || top.get(c.parent).type !== c.type)) delete c.parent; if (!c.parent) delete c.parent; });
+  Object.values(CAT_FALLBACK).forEach((id) => { if (!seen.has(id)) out.push({ ...DEFAULT_CATS.find((c) => c.id === id) }); });
+  return out;
+}
+function catList() {
+  const src = money.prefs.cats;
+  if (catCache.src !== src) {
+    const list = Array.isArray(src) && src.length ? cleanCats(src) : DEFAULT_CATS;
+    catCache = { src, list, map: new Map(list.map((c) => [c.id, c])) };
+  }
+  return catCache.list;
+}
+function catMap() { catList(); return catCache.map; }
+// Follows deletions (catMoved) to the category a transaction now counts under.
+function catResolve(id) {
+  const moved = money.prefs.catMoved || {};
+  for (let i = 0; i < 10 && id && moved[id] && !catMap().has(id); i++) id = moved[id];
+  return id;
+}
+function catById(id) {
+  if (!id) return null;
+  return catMap().get(catResolve(id)) || null;
+}
+function catFallback(type) {
+  const id = CAT_FALLBACK[type === 'income' ? 'income' : 'expense'];
+  return catMap().get(id) || DEFAULT_CATS.find((c) => c.id === id);
+}
+// The top-level category a key rolls up into (itself when it has no parent).
+function catRootId(id, type = 'expense') {
+  const c = catById(id) || catFallback(type);
+  return c.parent && catMap().has(c.parent) ? c.parent : c.id;
+}
+// Expense categories for AI Slips to choose from (the server falls back to the built-in list).
+function slipCats() {
+  return catList().filter((c) => c.type === 'expense').map((c) => ({ id: c.id, name: c.label, parent: c.parent ? catById(c.parent).label : undefined }));
+}
+function catChildren(id) { return catList().filter((c) => c.parent === id); }
+// Top-level categories of one type, in order, as [id, cat] pairs.
+function catsOf(type) { return catList().filter((c) => c.type === type && !c.parent).map((c) => [c.id, c]); }
+// Whether a transaction's category counts toward `id` (the category itself or one of its subs).
+function catIn(txCatId, id) {
+  const c = catById(txCatId);
+  const own = c ? c.id : CAT_FALLBACK.expense;
+  return own === id || (!!c && c.parent === id);
+}
 
 function firstWalletId() { return (money.wallets.find((w) => !w.excluded) || money.wallets[0]).id; }
 function defaultWalletId() {
@@ -205,7 +276,8 @@ function cumDaily(ym, type, filter = () => true, value = (t) => t.amount) {
 // A personal budget counts my spending (my share of shared bills); a shared budget
 // counts whole approved shared bills, once, for the couple.
 function budgetFilter(bg) {
-  const cat = (t) => bg.category === 'all' || t.category === bg.category;
+  const target = catById(bg.category) ? catById(bg.category).id : bg.category;
+  const cat = (t) => bg.category === 'all' || catIn(t.category, target);
   if (bg.scope === 'shared') return (t) => t.type === 'expense' && t.scope === 'shared' && t.counted && cat(t);
   const S = walletSet(bg.walletId || 'total');
   return (t) => t.type === 'expense' && counts(t) && inSel(t, S) && cat(t);
@@ -347,6 +419,7 @@ const ICONS = {
   swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
   receipt: '<path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 20.5c1.4-3.6 4.4-5.5 8-5.5s6.6 1.9 8 5.5"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   tag: '<path d="M3 12.2V4.5A1.5 1.5 0 0 1 4.5 3h7.7l8.8 8.8a1.5 1.5 0 0 1 0 2.1l-7.1 7.1a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8" cy="8" r="1.6"/>',
 };
 function svgIcon(name, cls = 'svg-i') {
@@ -453,7 +526,7 @@ function txItem(t, S) {
   const c = txCat(t);
   const w = walletById(t.walletId);
   const to = t.type === 'transfer' ? walletById(t.toWalletId) : null;
-  let title = t.type === 'transfer' ? `${esc(w ? w.name : '?')} → ${esc(to ? to.name : '?')}` : c.label;
+  let title = t.type === 'transfer' ? `${esc(w ? w.name : '?')} → ${esc(to ? to.name : '?')}` : esc(c.label);
   if (t.type === 'settle') title = t.sign > 0 ? `รับเงินคืนจาก${esc(partnerName())}` : `คืนเงินให้${esc(partnerName())}`;
   const shared = t.scope === 'shared';
   const sub = [
@@ -614,13 +687,13 @@ function insightCard(ym, S) {
   const exp = txnsInMonth(ym).filter((t) => t.type === 'expense' && counts(t) && t.category && inSel(t, S));
   if (!exp.length) return '';
   const by = {};
-  exp.forEach((t) => { by[t.category] = (by[t.category] || 0) + t.amount; });
+  exp.forEach((t) => { const k = catRootId(t.category); by[k] = (by[k] || 0) + t.amount; });
   const [top, spent] = Object.entries(by).sort((a, b) => b[1] - a[1])[0];
-  const c = TX_CATS[top] || TX_CATS.other_exp;
+  const c = catById(top) || catFallback('expense');
   const day = new Date().getDate();
   const lastYm = addMonths(ym, -1);
   const lastSame = txnsInMonth(lastYm)
-    .filter((t) => t.type === 'expense' && counts(t) && t.category === top && inSel(t, S) && Number(t.date.slice(8, 10)) <= day)
+    .filter((t) => t.type === 'expense' && counts(t) && catIn(t.category, top) && inSel(t, S) && Number(t.date.slice(8, 10)) <= day)
     .reduce((s, t) => s + t.amount, 0);
   let cmp = '';
   if (lastSame > 0) {
@@ -631,7 +704,7 @@ function insightCard(ym, S) {
   return `
     <div class="section-row"><span>ข้อมูลเชิงลึก</span></div>
     <div class="card insight">
-      <div class="ins-top">${circleIco(c)}<div><b>${c.label}</b><div class="muted small">หมวดที่ใช้มากที่สุดเดือนนี้ · รวม <b class="exp">${baht(spent)}</b></div></div></div>
+      <div class="ins-top">${circleIco(c)}<div><b>${esc(c.label)}</b><div class="muted small">หมวดที่ใช้มากที่สุดเดือนนี้ · รวม <b class="exp">${baht(spent)}</b></div></div></div>
       <div class="ins-row">
         <div><div class="muted small">เฉลี่ยเดือนนี้</div><div class="ins-avg">${baht(Math.round((spent / day) * 100) / 100)}<span class="muted">/วัน</span></div></div>
         ${cmp}
@@ -808,16 +881,24 @@ function reportSheet(ym) {
   const list = txnsInMonth(ym).filter((t) => t.type !== 'transfer' && counts(t) && inSel(t, S) && (!lab || (t.labels || []).includes(lab.id)));
   const { income, expense } = totalsIn(list, S);
   const bars = (type) => {
-    const by = {};
-    list.filter((t) => t.type === type).forEach((t) => { const k = t.category || '_review'; by[k] = (by[k] || 0) + t.amount; });
+    // Sub-categories roll up into their parent; the split shows under the parent's bar.
+    const by = {}, subs = {};
+    list.filter((t) => t.type === type).forEach((t) => {
+      const k = t.category ? catRootId(t.category, type) : '_review';
+      by[k] = (by[k] || 0) + t.amount;
+      const own = t.category && catById(t.category);
+      if (own && own.id !== k) { subs[k] = subs[k] || {}; subs[k][own.id] = (subs[k][own.id] || 0) + t.amount; }
+    });
     const sum = Object.values(by).reduce((s, v) => s + v, 0);
     const rows = Object.entries(by).sort((a, b) => b[1] - a[1]);
     if (!rows.length) return '<div class="card muted" style="text-align:center">ไม่มีรายการ</div>';
     return `<div class="list">${rows.map(([k, v]) => {
-      const c = k === '_review' ? REVIEW_CAT : TX_CATS[k] || TX_CATS.other_exp;
+      const c = k === '_review' ? REVIEW_CAT : catById(k) || catFallback(type);
       const p = (v / sum) * 100;
-      return `<div class="item rep">${circleIco(c)}<div class="main"><div class="rep-top"><span class="name">${c.label}</span><b>${baht(v)}</b></div>
-        <div class="rep-bar"><div style="width:${p}%;background:${c.color}"></div></div><div class="sub">${p.toFixed(1)}%</div></div></div>`;
+      const split = Object.entries(subs[k] || {}).sort((a, b) => b[1] - a[1])
+        .map(([id, x]) => `<div class="rep-sub"><span>${esc(catById(id).label)}</span><span>${baht(x)}</span></div>`).join('');
+      return `<div class="item rep">${circleIco(c)}<div class="main"><div class="rep-top"><span class="name">${esc(c.label)}</span><b>${baht(v)}</b></div>
+        <div class="rep-bar"><div style="width:${p}%;background:${c.color}"></div></div><div class="sub">${p.toFixed(1)}%</div>${split}</div></div>`;
     }).join('')}</div>`;
   };
   openSheet(`
@@ -855,7 +936,7 @@ function budgetRow(bg, ym) {
   return `
     <button class="card budget" data-budget="${bg.id}">
       <div class="b-top">${circleIco(c)}
-        <div class="main"><div class="name">${c.label} ${bg.scope === 'shared' ? '<span class="badge share">ร่วม</span>' : ''} ${badge}</div>${w ? `<div class="sub">${esc(w.name)}</div>` : ''}</div>
+        <div class="main"><div class="name">${esc(c.label)} ${bg.scope === 'shared' ? '<span class="badge share">ร่วม</span>' : ''} ${badge}</div>${w ? `<div class="sub">${esc(w.name)}</div>` : ''}</div>
         <div class="right"><b>${baht(bg.amount)}</b><div class="sub ${left < 0 ? 'exp' : ''}">${left < 0 ? `เกินงบ ${baht(-left)}` : `เหลือ ${baht(left)}`}</div></div>
       </div>
       ${budgetBar(spent, bg.amount, ym)}
@@ -951,7 +1032,7 @@ function budgetDetail(id) {
       <button class="link-btn" data-action="edit-budget" data-id="${bg.id}">แก้ไข</button>
     </div>
     <div class="card bd">
-      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${c.label}</div></div></div>
+      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(c.label)}</div></div></div>
       <div class="bd-body">
         <div class="bd-amt">${baht(bg.amount)}</div>
         <div class="bd-sl"><div><span class="muted">ใช้ไป</span><b>${baht(spent)}</b></div>
@@ -977,7 +1058,7 @@ function budgetForm(bg, preset = {}) {
   const d = bg ? { ...bg } : { category: 'food', amount: '', walletId: ui.wallet === 'total' ? 'total' : ui.wallet, scope: 'personal', ...preset };
   const canShare = isCloud() && !!cloud.partner;
   const chips = [['all', ALL_CAT], ...catsOf('expense')].map(([k, c]) =>
-    `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-bcat="${k}">${circleIco(c, 'ico round')}<span>${c.label}</span></button>`).join('');
+    `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-bcat="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
   openSheet(`
     <div class="sheet-head">
       <button class="link-btn" data-action="close">ยกเลิก</button>
@@ -1076,7 +1157,7 @@ function txnForm(t, preset = {}) {
       <input type="file" id="rcPickIn" accept="image/jpeg,image/png,image/webp,image/*" hidden>
     </div><div id="rcStatus"></div>` : ''}
     <div class="amount-input" id="tAmtWrap"><span>฿</span><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
-    <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่ รายการจะถูกบันทึกเป็น "รอตรวจสอบ" จนกว่าจะเลือก</p></div>
+    <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><div class="chips sub-cats" id="tSubCats" hidden></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่ รายการจะถูกบันทึกเป็น "รอตรวจสอบ" จนกว่าจะเลือก</p></div>
     <div class="form">
       <div class="field" id="tMerchRow"><label for="tMerchant">ร้านค้า / ผู้รับ</label><input id="tMerchant" placeholder="เช่น 7-Eleven" value="${esc(d.merchant || '')}" autocomplete="off"></div>
       <div id="tShareRows">
@@ -1134,10 +1215,22 @@ function txnForm(t, preset = {}) {
       $('#tTo').innerHTML = wOpts(d.toWalletId, from);
       return;
     }
-    if (d.category && (!TX_CATS[d.category] || TX_CATS[d.category].type !== d.type)) d.category = catsOf(d.type)[0][0];
+    if (d.category) {
+      const c = catById(d.category);
+      d.category = c && c.type === d.type ? c.id : catsOf(d.type)[0][0];
+    }
     $('#tCatHint').hidden = !!d.category;
+    paintCats();
+  };
+  // Top-level grid; a parent with sub-categories opens a row of its subs under the grid.
+  const paintCats = () => {
+    const root = d.category ? catRootId(d.category, d.type) : '';
     $('#tCats').innerHTML = catsOf(d.type).map(([k, c]) =>
-      `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-tcat="${k}">${circleIco(c, 'ico round')}<span>${c.label}</span></button>`).join('');
+      `<button type="button" class="cat ${root === k ? 'on' : ''}" data-tcat="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
+    const kids = root ? catChildren(root) : [];
+    $('#tSubCats').hidden = !kids.length;
+    $('#tSubCats').innerHTML = kids.length ? [catById(root), ...kids].map((c, i) =>
+      `<button type="button" class="chip sub-pick ${d.category === c.id ? 'on' : ''}" data-tcat="${c.id}">${c.icon} ${i ? esc(c.label) : 'ทั่วไป'}</button>`).join('') : '';
   };
   renderType();
   const pickedLabels = new Set(d.labels || []);
@@ -1155,12 +1248,12 @@ function txnForm(t, preset = {}) {
     d.scope = b.dataset.scope;
     renderType();
   });
-  $('#tCats').addEventListener('click', (e) => {
+  $('#tCatWrap').addEventListener('click', (e) => {
     const c = e.target.closest('[data-tcat]');
     if (!c) return;
     d.category = c.dataset.tcat;
     $('#tCatHint').hidden = true;
-    document.querySelectorAll('#tCats .cat').forEach((x) => x.classList.toggle('on', x === c));
+    paintCats();
   });
   $('#tAmount').addEventListener('input', updateShares);
   $('#tMine').addEventListener('input', () => { shareEdited = true; updateShares(); });
@@ -1174,7 +1267,7 @@ function txnForm(t, preset = {}) {
       if (!file) return;
       status('⏳ กำลังอัปโหลดและอ่านสลิป…');
       try {
-        const r = await uploadReceipt(file, money.labels.map((l) => l.name));
+        const r = await uploadReceipt(file, money.labels.map((l) => l.name), slipCats());
         d.receiptKey = r.key;
         const x = r.result;
         if (x) {
@@ -1542,6 +1635,186 @@ function labelFilterSheet() {
     </div>`);
 }
 
+/* ---------- Categories (settings) ---------- */
+
+const CAT_ICONS = ['🍴', '🍜', '☕', '🧋', '🍺', '🍸', '🛒', '👕', '👟', '👜', '💄', '✂️', '🏠', '🛏️', '🧹', '💡', '💧', '🔥', '📞', '🌐', '📺',
+  '💳', '🚗', '⛽', '🚕', '🚇', '✈️', '🏨', '🩺', '💊', '🏋️', '⚽', '🎮', '🎬', '🎵', '📚', '🎓', '🐾', '🧸', '👶', '🎁', '🧡', '🙏',
+  '📱', '💻', '🏛️', '🛡️', '🏦', '📈', '💰', '💵', '🎉', '📦', '🤝', '🧾', '🏷️'];
+const CAT_COLORS = ['#a8844f', '#d98a2b', '#f0a92e', '#b8a12a', '#3fae8c', '#4fb3ad', '#3d8fe0', '#2f6bff', '#5b6a8f',
+  '#7d7aa8', '#9b59b6', '#d0507f', '#d9534f', '#c97a2b', '#7a7f88', '#1a9e5c'];
+
+function setCats(list) {
+  money.prefs.cats = list;
+  savePrefs();
+}
+function newCatId() { return `c_${Math.random().toString(36).slice(2, 10)}`; }
+// How many transactions sit in a category itself (not its subs).
+function catUseCount(id) { return money.txns.filter((t) => t.category && t.type !== 'transfer' && catResolve(t.category) === id).length; }
+
+function catsSheet() {
+  const type = ui.catType || 'expense';
+  const row = (c, kid) => {
+    const n = catUseCount(c.id);
+    return `<div class="item cat-row ${kid ? 'kid' : ''}" data-sort="${c.id}">
+      <button class="cat-open" data-cat-edit="${c.id}">${circleIco(c)}<div class="main"><div class="name">${esc(c.label)}</div>${n ? `<div class="sub">${n} รายการ</div>` : ''}</div></button>
+      <span class="drag-h" aria-label="ลากเพื่อเรียง">${svgIcon('menu')}</span></div>`;
+  };
+  const groups = catsOf(type).map(([id, c]) => {
+    const kids = catChildren(id);
+    return `<div class="list cat-group" data-sort="${id}">${row(c, false)}${kids.length ? `<div class="cat-kids">${kids.map((k) => row(k, true)).join('')}</div>` : ''}</div>`;
+  }).join('');
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>หมวดหมู่</h2><button class="link-btn strong" data-action="add-cat">เพิ่ม</button></div>
+    <div class="seg" id="catType"><button type="button" data-ctype="expense" class="${type === 'expense' ? 'on' : ''}">รายจ่าย</button><button type="button" data-ctype="income" class="${type === 'income' ? 'on' : ''}">รายรับ</button></div>
+    <div class="cat-tree" id="catTree">${groups}</div>
+    <div class="list" style="margin-top:14px">
+      <button class="item add-row" data-action="add-cat"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มหมวดหมู่</div></div></button>
+    </div>
+    <p class="hint">ลาก ☰ เพื่อเรียงลำดับ แตะหมวดเพื่อแก้ชื่อ ไอคอน สี หรือเพิ่มหมวดย่อย${isCloud() ? ' หมวดหมู่ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+  `);
+  $('#catType').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ctype]');
+    if (!b || b.dataset.ctype === type) return;
+    ui.catType = b.dataset.ctype;
+    catsSheet();
+  });
+  sortable($('#catTree'), () => {
+    // The page order is the new order for this type; the other type keeps its own.
+    const ids = [...$('#catTree').querySelectorAll('.cat-row[data-sort]')].map((x) => x.dataset.sort);
+    setCats([...catList().filter((c) => c.type !== type), ...ids.map((id) => catMap().get(id))]);
+    render();
+  });
+}
+
+// Drag rows by their .drag-h handle among their siblings (the [data-sort] children of one parent).
+function sortable(box, onDone) {
+  box.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('.drag-h');
+    if (!h) return;
+    // A handle belongs to its row; a top-level row drags its whole group.
+    let el = h.closest('[data-sort]');
+    if (el.parentElement.classList.contains('cat-group')) el = el.parentElement;
+    const list = el.parentElement;
+    e.preventDefault();
+    h.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    const base = el.getBoundingClientRect().top;
+    el.classList.add('dragging');
+    const move = (ev) => {
+      const y = ev.clientY;
+      const sibs = [...list.children].filter((x) => x !== el && x.matches('[data-sort]'));
+      for (const o of sibs) {
+        const r = o.getBoundingClientRect();
+        const mid = r.top + r.height / 2;
+        const before = o.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
+        if (before && y < mid) { list.insertBefore(el, o); break; }
+        if (!before && y > mid) { list.insertBefore(el, o.nextSibling); break; }
+      }
+      el.style.transform = '';
+      const now = el.getBoundingClientRect().top;
+      el.style.transform = `translateY(${y - startY - (now - base)}px)`;
+    };
+    const up = () => {
+      h.removeEventListener('pointermove', move);
+      h.removeEventListener('pointerup', up);
+      h.removeEventListener('pointercancel', up);
+      el.style.transform = '';
+      el.classList.remove('dragging');
+      onDone();
+    };
+    h.addEventListener('pointermove', move);
+    h.addEventListener('pointerup', up);
+    h.addEventListener('pointercancel', up);
+  });
+}
+
+function catForm(c, preset = {}) {
+  const isNew = !c;
+  const d = c ? { ...c } : { id: newCatId(), type: preset.type || ui.catType || 'expense', label: '', icon: '🏷️', color: CAT_COLORS[0], parent: preset.parent };
+  const fixed = Object.values(CAT_FALLBACK).includes(d.id);
+  const kids = isNew ? [] : catChildren(d.id);
+  const parents = catsOf(d.type).filter(([id]) => id !== d.id && !Object.values(CAT_FALLBACK).includes(id));
+  const back = d.parent && preset.parent ? `data-cat-edit="${d.parent}"` : 'data-action="categories"';
+  openSheet(`
+    <div class="sheet-head">
+      <button class="link-btn" ${back}>ยกเลิก</button>
+      <h2>${isNew ? (d.parent ? 'เพิ่มหมวดย่อย' : 'เพิ่มหมวดหมู่') : 'แก้ไขหมวดหมู่'}</h2>
+      <button class="link-btn strong" id="saveCat">บันทึก</button>
+    </div>
+    <div class="cat-preview" id="cfPreview"></div>
+    <form class="form" id="cfForm">
+      <div class="field"><label for="cfName">ชื่อ</label><input id="cfName" maxlength="40" placeholder="เช่น Water Bill" value="${esc(d.label)}" autocomplete="off"></div>
+      <div class="field"><label for="cfIcon">ไอคอน</label><input id="cfIcon" maxlength="16" value="${esc(d.icon)}" autocomplete="off" style="text-align:right"></div>
+      ${fixed || kids.length ? '' : `<div class="field"><label for="cfParent">อยู่ใต้หมวด</label><select id="cfParent">
+        <option value="">ไม่มี (เป็นหมวดหลัก)</option>
+        ${parents.map(([id, p]) => `<option value="${id}" ${d.parent === id ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
+      </select></div>`}
+    </form>
+    <div class="section-title">เลือกไอคอน</div>
+    <div class="emoji-grid" id="cfIcons">${CAT_ICONS.map((x) => `<button type="button" data-icon="${x}">${x}</button>`).join('')}</div>
+    <div class="section-title">สี</div>
+    <div class="swatches" id="cfColors">${CAT_COLORS.map((x) => `<button type="button" data-color="${x}" style="background:${x}" aria-label="${x}"></button>`).join('')}</div>
+    ${isNew || d.parent ? '' : `
+      <div class="section-title">หมวดย่อย</div>
+      <div class="list">
+        ${kids.map((k) => `<button class="item" data-cat-edit="${k.id}">${circleIco(k)}<div class="main"><div class="name">${esc(k.label)}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>`).join('')}
+        ${fixed ? '' : `<button class="item add-row" id="cfAddSub"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มหมวดย่อย</div></div></button>`}
+      </div>`}
+    ${isNew || fixed ? '' : '<button class="btn danger" id="cfDel" style="margin-top:18px">ลบหมวดหมู่</button>'}
+    ${fixed ? '<p class="hint">หมวดนี้ลบไม่ได้ เพราะเป็นที่รวมรายการจากหมวดที่ถูกลบ</p>' : ''}
+  `);
+  const paint = () => {
+    $('#cfPreview').innerHTML = `${circleIco(d, 'ico round big')}<b>${esc($('#cfName').value.trim() || 'ชื่อหมวดหมู่')}</b>`;
+    document.querySelectorAll('#cfColors button').forEach((x) => x.classList.toggle('on', x.dataset.color === d.color));
+    document.querySelectorAll('#cfIcons button').forEach((x) => x.classList.toggle('on', x.dataset.icon === d.icon));
+  };
+  paint();
+  $('#cfName').addEventListener('input', paint);
+  $('#cfIcon').addEventListener('input', (e) => { const v = e.target.value.trim(); if (v && !/[<>&"']/.test(v)) { d.icon = v; paint(); } });
+  $('#cfIcons').addEventListener('click', (e) => { const b = e.target.closest('[data-icon]'); if (b) { d.icon = b.dataset.icon; $('#cfIcon').value = d.icon; paint(); } });
+  $('#cfColors').addEventListener('click', (e) => { const b = e.target.closest('[data-color]'); if (b) { d.color = b.dataset.color; paint(); } });
+  const save = (e, then) => {
+    if (e) e.preventDefault();
+    const label = $('#cfName').value.trim();
+    if (!label) { toast('กรุณาใส่ชื่อหมวดหมู่'); $('#cfName').focus(); return false; }
+    const out = { id: d.id, type: d.type, label, icon: d.icon, color: d.color };
+    const parent = $('#cfParent') ? $('#cfParent').value : d.parent;
+    if (parent) out.parent = parent;
+    const list = catList();
+    setCats(isNew ? [...list, out] : list.map((x) => (x.id === out.id ? out : x)));
+    render();
+    if (then) then(); else if (out.parent && preset.parent) catForm(catById(out.parent)); else catsSheet();
+    toast(isNew ? 'เพิ่มหมวดหมู่แล้ว' : 'บันทึกแล้ว');
+    return true;
+  };
+  $('#saveCat').addEventListener('click', (e) => save(e));
+  $('#cfForm').addEventListener('submit', (e) => save(e));
+  if ($('#cfAddSub')) $('#cfAddSub').addEventListener('click', () => catForm(null, { type: d.type, parent: d.id }));
+  if ($('#cfDel')) $('#cfDel').addEventListener('click', () => catDelete(catById(d.id)));
+  if (isNew) setTimeout(() => $('#cfName') && $('#cfName').focus(), 300);
+}
+
+// Transactions keep their key; catMoved sends them to the parent (for a sub) or to Others.
+function catDelete(c) {
+  const target = c.parent || CAT_FALLBACK[c.type];
+  const gone = [c.id, ...catChildren(c.id).map((k) => k.id)];
+  const n = gone.reduce((s, id) => s + catUseCount(id), 0);
+  const budgets = money.budgets.filter((bg) => gone.includes(catResolve(bg.category)));
+  const kids = gone.length - 1;
+  const text = [
+    kids ? `หมวดย่อย ${kids} หมวดจะถูกลบด้วย` : '',
+    n ? `${n} รายการจะย้ายไปอยู่ "${catById(target).label}"` : '',
+    budgets.length ? `งบประมาณของหมวดนี้ ${budgets.length} รายการจะถูกลบ` : '',
+  ].filter(Boolean).join(' · ');
+  confirmDelete(`ลบหมวด "${c.label}"?`, text, () => {
+    money.prefs.catMoved = { ...(money.prefs.catMoved || {}) };
+    gone.forEach((id) => { money.prefs.catMoved[id] = target; });
+    budgets.forEach(deleteBudget);
+    setCats(catList().filter((x) => !gone.includes(x.id)));
+    render(); catsSheet(); toast('ลบแล้ว');
+  });
+}
+
 /* ---------- Account ---------- */
 
 function accountTop() {
@@ -1560,8 +1833,10 @@ function accountTop() {
       ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
       <button class="item add-row" data-action="add-wallet"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มกระเป๋าเงิน</div></div></button>
     </div>
-    <div class="section-title">ป้ายกำกับ</div>
+    <div class="section-title">หมวดหมู่และป้ายกำกับ</div>
     <div class="list">
+      <button class="item" data-action="categories">${circleIco({ icon: '🗂️', color: '#2f6bff' })}<div class="main"><div class="name">หมวดหมู่</div>
+        <div class="sub">แก้ไข เรียงลำดับ และหมวดย่อย</div></div><span class="muted">${catList().filter((c) => c.type === 'expense' && !c.parent).length}</span>${svgIcon('chev', 'svg-i sm muted')}</button>
       <button class="item" data-action="labels"><div class="ico round lab-ico">${svgIcon('tag')}</div><div class="main"><div class="name">ป้ายกำกับ</div>
         <div class="sub">${money.labels.length ? money.labels.slice(0, 4).map((l) => esc(l.name)).join(', ') + (money.labels.length > 4 ? ` และอีก ${money.labels.length - 4}` : '') : 'ติดป้ายให้รายการ เช่น Grabfood, Shopee'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
     </div>
@@ -1619,7 +1894,7 @@ function sampleMoney() {
     { id: uid(), category: 'apparel', amount: 3000, walletId: 'total' },
     { id: uid(), category: 'transport', amount: 1200, walletId: 'total' },
   ];
-  money = { wallets, txns, budgets, prefs: { ...money.prefs, billWallet: bank } };
+  money = { wallets, txns, budgets, labels: money.labels || [], prefs: { ...money.prefs, billWallet: bank } };
   // Bills already paid in the sample show up as expenses from the bank account.
   const ym = ymOf(t);
   occurrences(ym).filter((o) => o.paid).forEach((o) => recordBillTxn(o.bill, ym, o.amount, bank, dateStr(o.due)));
@@ -1639,6 +1914,8 @@ function moneyClick(t) {
   }
   const tl = t.closest('[data-txlabel]');
   if (tl) { ui.txLabel = tl.dataset.txlabel; closeSheet(); if (ui.tab !== 'txns') setTab('txns'); else render(); return true; }
+  const ce = t.closest('[data-cat-edit]');
+  if (ce) { const c = catById(ce.dataset.catEdit); if (c) catForm(c); return true; }
   const lm = t.closest('[data-label-menu]');
   if (lm) { labelMenu(lm.dataset.labelMenu); return true; }
   const lo = t.closest('[data-label-open]');
@@ -1678,6 +1955,8 @@ function moneyAction(action, el) {
     case 'search-close': ui.searchOpen = false; ui.search = ''; render(); break;
     case 'tx-menu': txMenu(); break;
     case 'labels': labelsSheet(); break;
+    case 'categories': catsSheet(); break;
+    case 'add-cat': catForm(null, { type: ui.catType }); break;
     case 'add-label': labelForm(); break;
     case 'label-filter': labelFilterSheet(); break;
     case 'csv': closeSheet(); exportCsv(); break;

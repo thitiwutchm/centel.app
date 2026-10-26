@@ -236,9 +236,10 @@ function shrinkImage(file, max = 1600) {
 }
 
 // labels: the person's label names, so AI Slips can suggest the ones that fit.
-async function uploadReceipt(file, labels = []) {
+// categories: the person's expense categories ({ id, name, parent }), so AI Slips picks from their own list.
+async function uploadReceipt(file, labels = [], categories = []) {
   const image = await shrinkImage(file);
-  return api('POST', '/receipts', { image, mediaType: 'image/jpeg', labels });
+  return api('POST', '/receipts', { image, mediaType: 'image/jpeg', labels, categories });
 }
 
 async function openReceipt(key) {
@@ -344,7 +345,7 @@ function sharedSheet(t) {
     </div>
     <div class="card bd">
       <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(t.merchant || c.label)}</div>
-        <div class="sub">${c.label} · ${thDate(t.date)}</div></div></div>
+        <div class="sub">${esc(c.label)} · ${thDate(t.date)}</div></div></div>
       <div class="bd-body">
         <div class="bd-amt">${baht(t.total)}</div>
         <div class="badges">${STATUS_BADGE[t.status] || '<span class="badge ok">อนุมัติแล้ว</span>'} ${t.reviewNeeded || !t.category ? '<span class="badge warn">รอตรวจสอบ</span>' : ''}</div>
