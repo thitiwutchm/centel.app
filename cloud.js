@@ -19,6 +19,17 @@ const cloud = {
 
 function isCloud() { return cloud.on; }
 function partnerName() { return (cloud.partner && cloud.partner.name) || 'คู่ของฉัน'; }
+// A person's picture: an uploaded photo, their Google photo or an emoji; otherwise the first letter of their name.
+const PHOTO_SRC = /^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*|https:\/\/[a-z0-9-]+\.googleusercontent\.com\/[^\s"'<>]+)$/;
+function userImg(u) { return u && PHOTO_SRC.test(u.avatar || '') ? u.avatar : ''; }
+function userFace(u) {
+  const img = userImg(u);
+  if (img) return `<img src="${esc(img)}" alt="" referrerpolicy="no-referrer">`;
+  if (u && u.avatar) return esc(u.avatar);
+  return esc(((u && u.name) || '?').slice(0, 1).toUpperCase());
+}
+function userAvatar(u, cls = 'avatar') { return `<div class="${cls}${userImg(u) ? ' has-img' : ''}">${userFace(u)}</div>`; }
+
 function nameOf(id) {
   if (cloud.user && id === cloud.user.id) return 'ฉัน';
   if (cloud.partner && id === cloud.partner.id) return partnerName();
@@ -47,6 +58,8 @@ const CLOUD_ERRORS = {
   google_unverified: 'อีเมล Google นี้ยังไม่ได้ยืนยัน',
   google_mismatch: 'อีเมลนี้เชื่อมกับบัญชี Google อื่นอยู่แล้ว',
   google_disabled: 'ยังไม่ได้ตั้งค่าการเข้าสู่ระบบด้วย Google',
+  no_google_photo: 'บัญชี Google นี้ไม่มีรูปโปรไฟล์',
+  google_other_account: 'บัญชี Google นี้ไม่ใช่บัญชีที่เข้าสู่ระบบอยู่',
 };
 function cloudErr(e) { return CLOUD_ERRORS[e.message] || (e.status ? 'ทำรายการไม่สำเร็จ' : 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'); }
 
@@ -454,10 +467,11 @@ function settleSheet(id) {
 function accountCard() {
   if (isCloud()) {
     return `
-    <div class="card acct">
-      <div class="avatar">${esc((cloud.user.name || '?').slice(0, 1).toUpperCase())}</div>
-      <div><b>${esc(cloud.user.name)}</b><div class="muted small">${esc(cloud.user.email)} · ซิงก์กับบัญชีออนไลน์</div></div>
-    </div>
+    <button class="card acct tap" data-action="profile" aria-label="แก้ไขโปรไฟล์">
+      ${userAvatar(cloud.user)}
+      <div class="acct-main"><b>${esc(cloud.user.name)}</b><div class="muted small">${esc(cloud.user.email)} · ซิงก์กับบัญชีออนไลน์</div></div>
+      ${svgIcon('chev', 'svg-i sm muted')}
+    </button>
     <div class="list" style="margin-bottom:14px">
       <button class="item" data-action="couple"><div class="ico round" style="background:#ff4d8d22">💞</div>
         <div class="main"><div class="name">${cloud.partner ? `เชื่อมกับ ${esc(partnerName())}` : 'เชื่อมบัญชีคู่'}</div>
@@ -611,7 +625,7 @@ function coupleSheet() {
   if (cloud.partner) {
     openSheet(`
       <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>บัญชีคู่</h2><span style="width:40px"></span></div>
-      <div class="card acct"><div class="avatar">💞</div><div><b>${esc(partnerName())}</b><div class="muted small">${esc(cloud.partner.email)}</div></div></div>
+      <div class="card acct">${cloud.partner.avatar ? userAvatar(cloud.partner) : '<div class="avatar">💞</div>'}<div><b>${esc(partnerName())}</b><div class="muted small">${esc(cloud.partner.email)}</div></div></div>
       <p class="hint">${esc(partnerName())} เห็นเฉพาะรายจ่ายร่วม งบร่วม และยอดค้างคืนของคุณทั้งสอง รายจ่ายส่วนตัวของแต่ละคนมองไม่เห็น</p>
     `);
     return;
@@ -653,6 +667,106 @@ function coupleSheet() {
   });
 }
 
+/* ---------- Profile: display name and picture ---------- */
+
+function profileSheet() {
+  if (!isCloud()) { loginSheet(); return; }
+  const d = { name: cloud.user.name || '', avatar: cloud.user.avatar || '', googlePicture: cloud.user.googlePicture || '' };
+  const emojis = WALLET_EMOJIS.concat(['😀', '😎', '🥰', '🐶', '🐱', '🐻', '🐼', '🦊', '🌸', '🍀'])
+    .map((e) => `<button type="button" class="chip emoji" data-pemoji="${e}">${e}</button>`).join('');
+  openSheet(`
+    <div class="sheet-head">
+      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <h2>แก้ไขโปรไฟล์</h2>
+      <button class="link-btn strong" id="saveProfile">บันทึก</button>
+    </div>
+    <div class="w-pic">
+      <button type="button" class="w-avatar" id="pAvatar" aria-label="เปลี่ยนรูป"></button>
+      <div class="w-pic-actions">
+        <button type="button" class="chip" id="pPhoto">📷 เลือกรูป</button>
+        <button type="button" class="chip" id="pEmojiBtn">😀 อีโมจิ</button>
+        <button type="button" class="chip" id="pGoogle" hidden>รูปจาก Google</button>
+        <button type="button" class="chip" id="pReset" hidden>ใช้ตัวอักษรย่อ</button>
+      </div>
+      <input type="file" id="pFile" accept="image/*" hidden>
+    </div>
+    <div class="gsignin gphoto" id="pGoogleBox" hidden><div class="gbtn"></div></div>
+    <div class="chips w-emojis" id="pEmojis" hidden>${emojis}<input id="pEmojiIn" class="chip" placeholder="พิมพ์เอง" maxlength="8" autocomplete="off"></div>
+    <div class="form">
+      <div class="field"><label for="pName">ชื่อที่แสดง</label><input id="pName" maxlength="60" autocomplete="nickname" value="${esc(d.name)}"></div>
+      <div class="field"><label>อีเมล</label><span class="muted" style="flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis">${esc(cloud.user.email)}</span></div>
+    </div>
+    <p class="hint">ชื่อและรูปนี้จะแสดงในทุกเครื่องที่เข้าสู่ระบบ${cloud.partner ? ` และ ${esc(partnerName())} จะเห็นด้วย` : ' และคู่ของคุณเมื่อเชื่อมบัญชีแล้ว'}</p>
+  `);
+  const paint = () => {
+    $('#pAvatar').innerHTML = userAvatar({ name: $('#pName').value.trim() || d.name, avatar: d.avatar }, 'w-avatar-in p-avatar-in') + '<span class="w-cam">✎</span>';
+    $('#pReset').hidden = !d.avatar;
+    $('#pGoogle').hidden = !d.googlePicture || d.avatar === d.googlePicture;
+    document.querySelectorAll('#pEmojis [data-pemoji]').forEach((x) => x.classList.toggle('on', x.dataset.pemoji === d.avatar));
+  };
+  paint();
+  $('#pName').addEventListener('input', paint);
+  $('#pAvatar').addEventListener('click', () => $('#pFile').click());
+  $('#pPhoto').addEventListener('click', () => $('#pFile').click());
+  $('#pEmojiBtn').addEventListener('click', () => { $('#pEmojis').hidden = !$('#pEmojis').hidden; });
+  $('#pReset').addEventListener('click', () => { d.avatar = ''; $('#pEmojiIn').value = ''; paint(); });
+  $('#pGoogle').addEventListener('click', () => { d.avatar = d.googlePicture; paint(); });
+  $('#pEmojis').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-pemoji]');
+    if (c) { d.avatar = c.dataset.pemoji; $('#pEmojiIn').value = ''; paint(); }
+  });
+  $('#pEmojiIn').addEventListener('input', (e) => {
+    const v = e.target.value.trim().replace(/[<>&"']/g, '');
+    if (v) { d.avatar = [...v].slice(0, 4).join(''); paint(); }
+  });
+  $('#pFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try { d.avatar = await squareImage(f, 240); paint(); } catch { toast('เปิดรูปนี้ไม่ได้'); }
+  });
+  // No Google photo kept yet (signed in before photos were saved, or with email):
+  // a Google button fetches it from the person's own Google account.
+  if (!d.googlePicture) googlePhotoButton($('#pGoogleBox'), (pic) => {
+    d.googlePicture = cloud.user.googlePicture = pic;
+    d.avatar = pic;
+    $('#pGoogleBox').hidden = true;
+    paint();
+  });
+  $('#saveProfile').addEventListener('click', async (e) => {
+    const name = $('#pName').value.trim();
+    if (!name) { toast('กรุณาใส่ชื่อ'); $('#pName').focus(); return; }
+    e.target.disabled = true;
+    try {
+      const r = await api('PUT', '/profile', { name, avatar: d.avatar || null });
+      cloud.user = { ...cloud.user, name, avatar: r.avatar || undefined };
+      closeSheet(); render(); toast('บันทึกโปรไฟล์แล้ว');
+      cloudRefresh();
+    } catch (err) {
+      toast(cloudErr(err));
+      e.target.disabled = false;
+    }
+  });
+}
+
+async function googlePhotoButton(box, done) {
+  let id = '';
+  try { id = await googleReady(); } catch (e) { /* offline: upload and emoji still work */ }
+  if (!id || !box.isConnected) return;
+  google.accounts.id.initialize({
+    client_id: id, ux_mode: 'popup', auto_select: false,
+    callback: async (r) => {
+      try { done((await api('POST', '/profile/google', { credential: r.credential })).googlePicture); } catch (err) { toast(cloudErr(err)); }
+    },
+  });
+  box.hidden = false;
+  google.accounts.id.renderButton(box.querySelector('.gbtn'), {
+    theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'filled_black' : 'outline',
+    size: 'medium', shape: 'pill', locale: 'th', text: 'continue_with',
+    width: Math.min(400, box.clientWidth || 320),
+  });
+}
+
 /* ---------- Events ---------- */
 
 function cloudClick(t) {
@@ -666,6 +780,7 @@ function cloudAction(action, el) {
     case 'login': loginSheet(); break;
     case 'logout': logout(); break;
     case 'couple': coupleSheet(); break;
+    case 'profile': profileSheet(); break;
     case 'settlements': settlementsSheet(); break;
     case 'shared-list': sharedListSheet(el.dataset.kind); break;
     case 'add-shared': txnForm(null, { scope: 'shared' }); break;

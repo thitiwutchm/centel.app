@@ -501,7 +501,7 @@ function renderHome() {
   view.innerHTML = `
     <div class="hero">
       <div class="hero-top">
-        <button class="avatar-btn" data-goto="account" aria-label="บัญชี">${cloud.user ? esc((cloud.user.name || '?').slice(0, 1).toUpperCase()) : svgIcon('user')}</button>
+        <button class="avatar-btn${userImg(cloud.user) ? ' has-img' : ''}" data-goto="account" aria-label="บัญชี">${cloud.user ? userFace(cloud.user) : svgIcon('user')}</button>
         <button class="search-cap" data-action="search">${svgIcon('search')}<span>ค้นหารายการ</span></button>
         <button class="round-btn" data-action="alerts" aria-label="การแจ้งเตือน">${svgIcon('bell')}${alerts ? `<span class="nbadge">${alerts}</span>` : ''}</button>
       </div>
