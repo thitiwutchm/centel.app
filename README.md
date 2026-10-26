@@ -45,6 +45,19 @@
 
 ทดสอบในเครื่อง: `npx http-server .` แล้วเปิด http://localhost:8080
 
+## ดึงบิลค่าโทรศัพท์จาก Gmail
+
+แท็บ บิล หรือ บัญชี → "📧 ดึงบิลค่าโทรศัพท์จาก Gmail" ค้นหาใบแจ้งค่าบริการจาก AIS, True, dtac, 3BB, NT ย้อนหลัง 4 เดือน
+แล้วเติมยอดและวันครบกำหนดเข้าบิลค่าโทรศัพท์ (สร้างบิลใหม่ให้ถ้ายังไม่มี แยกตามผู้ให้บริการ + หมายเลข)
+เบราว์เซอร์อ่าน Gmail โดยตรงด้วยสิทธิ์ `gmail.readonly` แบบ access token อายุ 1 ชั่วโมง (Google Identity Services) ไม่มีอีเมลผ่านเซิร์ฟเวอร์ของเรา
+ยอดที่อยู่เฉพาะใน PDF แนบที่ใส่รหัสผ่านจะอ่านไม่ได้ แอปจะสร้างบิลไว้ให้กรอกยอดเอง
+
+ตั้งค่าครั้งเดียว:
+1. Google Cloud Console → สร้างโปรเจกต์ → APIs & Services → Library → เปิด **Gmail API**
+2. OAuth consent screen (Google Auth Platform) → External → ใส่ชื่อแอปและอีเมล → Data access เพิ่ม scope `.../auth/gmail.readonly` → Audience เพิ่มอีเมลตัวเองเป็น Test user
+3. Clients → Create client → **Web application** → Authorized JavaScript origins: `https://centel.app` และ `https://www.centel.app` (ไม่ต้องใส่ redirect URI)
+4. นำ Client ID (`….apps.googleusercontent.com`) ไปตั้งเป็นตัวแปร `GOOGLE_CLIENT_ID` ของ service `web` บน Railway (Caddyfile ส่งให้หน้าเว็บผ่าน `/api/config`)
+
 ## ThemeA (ดีไซน์สไตล์ Apple)
 
 `themea/` คือหน้าตาแบบ Apple ของแอปเดียวกัน เปิดที่ `/themea/` ใช้ข้อมูลชุดเดียวกับหน้าหลัก (localStorage `billplanner.v1`)

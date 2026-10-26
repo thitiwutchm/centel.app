@@ -255,6 +255,8 @@ function renderMonth() {
   if (missing.length) alerts += `<div class="alert warn">✏️<div>ยังไม่ได้ระบุยอดเดือนนี้: ${missing.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
   if (peaDue.length) alerts += `<div class="alert warn">⚡<div>ถึงรอบบิลค่าไฟ กดที่บิลเพื่อดึงยอดเดือนนี้จาก PEA: ${peaDue.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
 
+  alerts += `<button class="btn ghost gmail-btn" data-action="gmail">📧 ดึงบิลค่าโทรศัพท์จาก Gmail</button>`;
+
   const unpaid = occ.filter((o) => !o.paid);
   const done = occ.filter((o) => o.paid);
 
@@ -404,6 +406,10 @@ function renderSettings() {
     <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม)</p>
     <button class="btn" data-action="ics">📆 เพิ่มการเตือนลงปฏิทิน iPhone</button>
     <p class="hint">สร้างไฟล์ปฏิทิน (.ics) ของบิลทั้งหมด พร้อมเสียงเตือนก่อนวันครบกำหนดตามที่ตั้งไว้ เปิดไฟล์แล้วเลือก "เพิ่มทั้งหมด" ในแอปปฏิทิน · หากแก้ไขบิล ให้ลบปฏิทินเดิมแล้วสร้างใหม่</p>
+
+    <div class="section-title">เชื่อมบัญชี</div>
+    <button class="btn ghost" data-action="gmail">📧 ดึงบิลค่าโทรศัพท์จาก Gmail</button>
+    <p class="hint">ค้นหาใบแจ้งค่าบริการจาก AIS, True, dtac, 3BB, NT ใน Gmail แล้วเพิ่มยอดและวันครบกำหนดเข้าบิลให้อัตโนมัติ</p>
 
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
@@ -1039,6 +1045,7 @@ document.addEventListener('click', (e) => {
     case 'export': exportData(); break;
     case 'import': $('#importFile').click(); break;
     case 'ics': exportIcs(); break;
+    case 'gmail': gmailSheet(); break;
     case 'reset':
       if (confirm('ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) {
         state = defaultState(); money = defaultMoney(); ui.wallet = 'total';
