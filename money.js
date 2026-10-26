@@ -1001,7 +1001,9 @@ function txnForm(t, preset = {}) {
       <button type="button" data-scope="personal">ส่วนตัว</button>
       <button type="button" data-scope="shared">ร่วมกับ ${esc(partnerName())}</button>
     </div>` : ''}
-    ${receipts ? `<div class="receipt-row">
+    ${receipts ? `<div class="section-title">✨ AI Slips</div>
+    <p class="hint">อัปโหลดสลิป แล้ว AI จะกรอกหมวด ยอดเงิน และวันที่โอนให้ ตรวจแก้ได้ก่อนบันทึก</p>
+    <div class="receipt-row">
       <button type="button" class="chip" id="rcCam">📷 ถ่ายสลิป</button>
       <button type="button" class="chip" id="rcPick">🖼️ เลือกรูปสลิป</button>
       ${d.receiptKey ? '<button type="button" class="chip" id="rcView">🧾 ดูสลิป</button>' : ''}
