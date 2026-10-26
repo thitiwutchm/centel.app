@@ -839,18 +839,24 @@ body::before {
 /* ---------- Categories ---------- */
 .cat-tree { display: flex; flex-direction: column; gap: 12px; }
 .cat-group { position: relative; }
-.cat-row { padding: 0 6px 0 0; background: var(--card); }
+.cat-row { padding: 0 6px 0 0; }
 .cat-open { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; padding: 11px 6px 11px 14px; border: 0; background: none; color: inherit; text-align: left; font: inherit; }
 .cat-row .ico { width: 40px; height: 40px; flex: 0 0 40px; font-size: 20px; }
-/* Sub-categories hang off a tree line like the parent → child list in the screenshots. */
-.cat-kids { position: relative; margin-left: 22px; border-left: 1.5px solid var(--line); }
-.cat-row.kid { position: relative; }
-.cat-row.kid::before { content: ''; position: absolute; left: 0; top: 50%; width: 12px; border-top: 1.5px solid var(--line); }
-.cat-row.kid .cat-open { padding-left: 16px; }
+/* Sub-categories hang off a rounded tree line from the parent's icon (x = 34px, its centre),
+   and their separators start at the name, like the reference app. */
+.cat-group:has(.cat-kids) > .cat-row { border-bottom: 0; }
+.cat-kids { --tree: color-mix(in srgb, var(--muted) 45%, transparent); }
+.cat-row.kid { position: relative; border-bottom: 0;
+  background: linear-gradient(var(--line), var(--line)) 100px 0 / calc(100% - 100px) 0.5px no-repeat; }
+.cat-row.kid::before { content: ''; position: absolute; left: 33px; top: 0; bottom: 0; border-left: 1.5px solid var(--tree); }
+.cat-row.kid:last-child::before { bottom: 50%; }
+.cat-row.kid::after { content: ''; position: absolute; left: 33px; top: calc(50% - 12px); width: 13px; height: 12px;
+  border: 1.5px solid var(--tree); border-top: 0; border-right: 0; border-bottom-left-radius: 10px; }
+.cat-row.kid .cat-open { padding-left: 52px; }
 .cat-row.kid .ico { width: 34px; height: 34px; flex-basis: 34px; font-size: 17px; }
 .drag-h { display: grid; place-items: center; width: 44px; height: 44px; color: var(--muted); touch-action: none; cursor: grab; flex: 0 0 auto; }
 .dragging { position: relative; z-index: 5; box-shadow: 0 10px 30px rgba(0, 0, 0, .25); opacity: .96; }
-.cat-row.dragging { border-radius: 14px; }
+.cat-row.dragging { border-radius: 14px; background: var(--card); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 .cat-preview { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 4px 0 16px; }
 .cat-preview .ico.big { width: 64px; height: 64px; font-size: 32px; display: grid; place-items: center; }
 .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; background: var(--card); border-radius: var(--radius); padding: 8px; margin-bottom: 14px; }
