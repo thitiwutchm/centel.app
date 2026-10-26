@@ -17,23 +17,25 @@ const WALLET_TYPES = {
 };
 
 const TX_CATS = {
-  food:          { type: 'expense', label: 'อาหารและเครื่องดื่ม', icon: '🍜', color: '#f5a623' },
-  personal:      { type: 'expense', label: 'ของใช้ส่วนตัว',       icon: '🧴', color: '#4f6bed' },
-  shopping:      { type: 'expense', label: 'ช้อปปิ้ง',           icon: '🛍️', color: '#e83e8c' },
-  transport:     { type: 'expense', label: 'การเดินทาง',         icon: '🚗', color: '#4f6bed' },
-  utility:       { type: 'expense', label: 'ค่าน้ำ ค่าไฟ ค่าเน็ต', icon: '💡', color: '#00b3a4' },
-  creditpay:     { type: 'expense', label: 'ชำระบัตรเครดิต',      icon: '💳', color: '#7c5cff' },
-  loan:          { type: 'expense', label: 'ผ่อนชำระ',           icon: '🏦', color: '#e0552b' },
-  home:          { type: 'expense', label: 'บ้านและที่พัก',       icon: '🏠', color: '#b26a3c' },
-  health:        { type: 'expense', label: 'สุขภาพและฟิตเนส',     icon: '💊', color: '#e0352b' },
-  entertainment: { type: 'expense', label: 'บันเทิง',             icon: '🎬', color: '#9b59b6' },
-  family:        { type: 'expense', label: 'ครอบครัว',           icon: '👨‍👩‍👧', color: '#1a9e5c' },
-  education:     { type: 'expense', label: 'การศึกษา',           icon: '📚', color: '#2fa8ff' },
-  beauty:        { type: 'expense', label: 'ความงาม',            icon: '💄', color: '#ff6f91' },
-  insurance:     { type: 'expense', label: 'ประกัน',             icon: '🛡️', color: '#2e8b57' },
-  gift:          { type: 'expense', label: 'ของขวัญและบริจาค',    icon: '🎁', color: '#c0392b' },
-  travel:        { type: 'expense', label: 'ท่องเที่ยว',          icon: '✈️', color: '#16a085' },
-  other_exp:     { type: 'expense', label: 'รายจ่ายอื่นๆ',        icon: '🧾', color: '#8a8f99' },
+  // Order here is the order of the category pickers.
+  apparel:       { type: 'expense', label: 'Apparel & Accessories',   icon: '👕', color: '#6b7a99' },
+  food:          { type: 'expense', label: 'Food & Groceries',        icon: '🍴', color: '#a8844f' },
+  coffee:        { type: 'expense', label: 'Coffee & Beverage',       icon: '☕', color: '#d98a2b' },
+  hangout:       { type: 'expense', label: 'Hang Out',                icon: '🍸', color: '#d9534f' },
+  utility:       { type: 'expense', label: 'Utility Bills',           icon: '🏠', color: '#f0a92e' },
+  subscription:  { type: 'expense', label: 'Monthly Subscriptions',   icon: '💳', color: '#4fb3ad' },
+  transport:     { type: 'expense', label: 'Transportation',          icon: '🚗', color: '#7a7f88' },
+  home:          { type: 'expense', label: 'Home & Living',           icon: '🛏️', color: '#7d7aa8' },
+  health:        { type: 'expense', label: 'Health & Medical',        icon: '🩺', color: '#3d8fe0' },
+  beauty:        { type: 'expense', label: 'Beauty & Personal Care',  icon: '✂️', color: '#d0507f' },
+  travel:        { type: 'expense', label: 'Travel & Trips',          icon: '✈️', color: '#3fae8c' },
+  fitness:       { type: 'expense', label: 'Fitness & Sports',        icon: '🏋️', color: '#5b6a8f' },
+  pets:          { type: 'expense', label: 'Pets',                    icon: '🐾', color: '#e8a22e' },
+  gift:          { type: 'expense', label: 'Gifts & Donations',       icon: '🧡', color: '#d97a3a' },
+  gadget:        { type: 'expense', label: 'Gadgets & Electronics',   icon: '📱', color: '#5d6b85' },
+  rent:          { type: 'expense', label: 'Rent & Insurance',        icon: '🏛️', color: '#c97a2b' },
+  baby:          { type: 'expense', label: 'Babe👼',                  icon: '🧸', color: '#b8a12a' },
+  other_exp:     { type: 'expense', label: 'Others',                  icon: '🧾', color: '#8a8f99' },
   salary:        { type: 'income', label: 'เงินเดือน',          icon: '💰', color: '#2f6bff' },
   bonus:         { type: 'income', label: 'โบนัส',              icon: '🎉', color: '#f5a623' },
   sale:          { type: 'income', label: 'ขายของ',             icon: '📦', color: '#b26a3c' },
@@ -49,9 +51,17 @@ const TOTAL_WALLET = { name: 'ทั้งหมด', icon: '🌐', color: '#2f6
 
 // Paying a bill is recorded as an expense in the matching category.
 const BILL_TX_CAT = {
-  credit: 'creditpay', electric: 'utility', water: 'utility', internet: 'utility', phone: 'utility',
-  loan: 'loan', insurance: 'insurance', rent: 'home', subscription: 'entertainment', other: 'other_exp',
+  credit: 'other_exp', electric: 'utility', water: 'utility', internet: 'utility', phone: 'utility',
+  loan: 'rent', insurance: 'rent', rent: 'rent', subscription: 'subscription', other: 'other_exp',
 };
+
+// Expense categories from before the current list, and where their records now live.
+// server/migrations/004_categories.sql moves synced data the same way.
+const OLD_CATS = {
+  personal: 'beauty', shopping: 'apparel', creditpay: 'other_exp', loan: 'rent', insurance: 'rent',
+  entertainment: 'hangout', family: 'baby', education: 'other_exp',
+};
+const newCat = (k) => OLD_CATS[k] || k;
 
 const TH_DOW_FULL = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
@@ -74,8 +84,8 @@ function loadMoney() {
     const d = defaultMoney();
     return {
       wallets: Array.isArray(s.wallets) && s.wallets.length ? s.wallets : d.wallets,
-      txns: Array.isArray(s.txns) ? s.txns : [],
-      budgets: Array.isArray(s.budgets) ? s.budgets : [],
+      txns: Array.isArray(s.txns) ? s.txns.map((t) => (t.category ? { ...t, category: newCat(t.category) } : t)) : [],
+      budgets: Array.isArray(s.budgets) ? s.budgets.map((bg) => ({ ...bg, category: newCat(bg.category) })) : [],
       prefs: { ...d.prefs, ...(s.prefs || {}) },
     };
   } catch (e) {
@@ -1389,17 +1399,17 @@ function sampleMoney() {
     txns.push({ id: uid(), date, type, amount, category, walletId, note, ...extra });
   const t = today();
   const start = new Date(t.getFullYear(), t.getMonth() - 3, 1);
-  const foods = [['ข้าวมันไก่', 50], ['กาแฟ', 65], ['ก๋วยเตี๋ยว', 60], ['ข้าวกล่องเซเว่น', 45], ['ชานมไข่มุก', 55], ['ส้มตำ', 80]];
+  const foods = [['ข้าวมันไก่', 50], ['กาแฟ', 65, 'coffee'], ['ก๋วยเตี๋ยว', 60], ['ข้าวกล่องเซเว่น', 45], ['ชานมไข่มุก', 55, 'coffee'], ['ส้มตำ', 80]];
   for (let d = new Date(start); d <= t; d.setDate(d.getDate() + 1)) {
     const ds = dateStr(d);
     const n = 1 + Math.floor(rnd() * 3);
     for (let i = 0; i < n; i++) {
-      const [note, base] = pick(foods);
-      add(ds, 'expense', base + Math.round(rnd() * 4) * 10, 'food', pick([cash, cash, ew]), note);
+      const [note, base, cat = 'food'] = pick(foods);
+      add(ds, 'expense', base + Math.round(rnd() * 4) * 10, cat, pick([cash, cash, ew]), note);
     }
     if (rnd() < 0.3) add(ds, 'expense', 30 + Math.round(rnd() * 8) * 5, 'transport', pick([ew, cash]), pick(['BTS', 'MRT', 'Grab', 'วินมอไซค์']));
-    if (rnd() < 0.12) add(ds, 'expense', 300 + Math.round(rnd() * 30) * 50, 'shopping', bank, pick(['Shopee', 'Lazada', 'เสื้อผ้า', 'ของใช้ในบ้าน']));
-    if (rnd() < 0.05) add(ds, 'expense', 200 + Math.round(rnd() * 10) * 50, 'entertainment', bank, pick(['ดูหนัง', 'คอนเสิร์ต', 'เกม']));
+    if (rnd() < 0.12) add(ds, 'expense', 300 + Math.round(rnd() * 30) * 50, 'apparel', bank, pick(['Shopee', 'Lazada', 'เสื้อผ้า', 'รองเท้า']));
+    if (rnd() < 0.05) add(ds, 'expense', 200 + Math.round(rnd() * 10) * 50, 'hangout', bank, pick(['ดูหนัง', 'คอนเสิร์ต', 'เกม']));
     if (rnd() < 0.04) add(ds, 'expense', 150 + Math.round(rnd() * 10) * 30, 'health', cash, pick(['ร้านยา', 'คลินิก']));
     if (d.getDate() === 25) add(ds, 'income', 38000, 'salary', bank, 'เงินเดือน');
     if (d.getDay() === 1) add(ds, 'transfer', 1500, undefined, bank, 'กดเงินสด', { toWalletId: cash });
@@ -1408,12 +1418,12 @@ function sampleMoney() {
   }
   const f1 = new Date(t); f1.setDate(f1.getDate() + 3);
   const f2 = new Date(t); f2.setDate(f2.getDate() + 9);
-  add(dateStr(f1), 'expense', 1500, 'family', bank, 'ค่าเทอมพิเศษลูก');
+  add(dateStr(f1), 'expense', 1500, 'baby', bank, 'ของใช้ลูก');
   add(dateStr(f2), 'expense', 890, 'gift', bank, 'ของขวัญวันเกิดเพื่อน');
   const budgets = [
     { id: uid(), category: 'all', amount: 30000, walletId: 'total' },
     { id: uid(), category: 'food', amount: 5000, walletId: 'total' },
-    { id: uid(), category: 'shopping', amount: 3000, walletId: 'total' },
+    { id: uid(), category: 'apparel', amount: 3000, walletId: 'total' },
     { id: uid(), category: 'transport', amount: 1200, walletId: 'total' },
   ];
   money = { wallets, txns, budgets, prefs: { ...money.prefs, billWallet: bank } };
