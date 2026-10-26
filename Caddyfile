@@ -22,6 +22,15 @@
 		}
 	}
 
+	# Public runtime config for the PWA. The Google OAuth client id is not a secret;
+	# set GOOGLE_CLIENT_ID in Railway → web → Variables. Named so it stays ahead of @api.
+	@config path /api/config
+	handle @config {
+		header Content-Type application/json
+		header Cache-Control no-store
+		respond `{"googleClientId":"{$GOOGLE_CLIENT_ID}"}` 200
+	}
+
 	# Everything else under /api is the centel API, its own Railway service on the private network.
 	# Named matchers keep their written order, so the PEA route above still wins for /api/pea-bill.
 	@api path /api/*

@@ -217,7 +217,7 @@ function setTab(tab) {
 function occItem(o) {
   const b = o.bill;
   const dueTxt = `ครบกำหนด ${thShortDate(o.due)}`;
-  const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
+  const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', record(o.ym, b.id).file ? '📎' : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
   const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : 'ระบุยอด'}</span>` : baht(o.amount);
   return `
     <div class="item ${o.paid ? 'paid' : ''}" data-occ="${b.id}" data-ym="${o.ym}" role="button" tabindex="0">
@@ -255,6 +255,8 @@ function renderMonth() {
   if (soon.length) alerts += `<div class="alert warn">⏰<div>ใกล้ครบกำหนดภายใน ${state.settings.remindDays} วัน: ${soon.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
   if (missing.length) alerts += `<div class="alert warn">✏️<div>ยังไม่ได้ระบุยอดเดือนนี้: ${missing.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
   if (peaDue.length) alerts += `<div class="alert warn">⚡<div>ถึงรอบบิลค่าไฟ กดที่บิลเพื่อดึงยอดเดือนนี้จาก PEA: ${peaDue.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
+
+  alerts += `<button class="btn ghost gmail-btn" data-action="gmail">📧 ดึงบิลค่าโทรศัพท์จาก Gmail</button>`;
 
   const unpaid = occ.filter((o) => !o.paid);
   const done = occ.filter((o) => o.paid);
@@ -405,6 +407,10 @@ function renderSettings() {
     <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม)</p>
     <button class="btn" data-action="ics">📆 เพิ่มการเตือนลงปฏิทิน iPhone</button>
     <p class="hint">สร้างไฟล์ปฏิทิน (.ics) ของบิลทั้งหมด พร้อมเสียงเตือนก่อนวันครบกำหนดตามที่ตั้งไว้ เปิดไฟล์แล้วเลือก "เพิ่มทั้งหมด" ในแอปปฏิทิน · หากแก้ไขบิล ให้ลบปฏิทินเดิมแล้วสร้างใหม่</p>
+
+    <div class="section-title">เชื่อมบัญชี</div>
+    <button class="btn ghost" data-action="gmail">📧 ดึงบิลค่าโทรศัพท์จาก Gmail</button>
+    <p class="hint">ค้นหาใบแจ้งค่าบริการจาก AIS, True, dtac, 3BB, NT ใน Gmail แล้วเพิ่มยอดและวันครบกำหนดเข้าบิลให้อัตโนมัติ</p>
 
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
@@ -704,7 +710,11 @@ function billForm(b) {
     del.addEventListener('click', () => {
       if (!confirm(`ลบ "${b.name}" และประวัติการจ่ายทั้งหมดของบิลนี้?`)) return;
       state.bills = state.bills.filter((x) => x.id !== b.id);
-      Object.keys(state.records).forEach((ym) => setRecord(ym, b.id, { amount: undefined, paid: undefined, paidAt: undefined }));
+      Object.keys(state.records).forEach((ym) => {
+        if (record(ym, b.id).file) billFileDel(b.id, ym);
+        delete state.records[ym][b.id];
+        if (!Object.keys(state.records[ym]).length) delete state.records[ym];
+      });
       // Payments already made stay in the wallets as ordinary expenses.
       money.txns.filter((t) => t.billId === b.id).forEach((t) => { delete t.billId; delete t.billYm; saveTxn(t); });
       save();
@@ -762,6 +772,14 @@ function occurrenceSheet(id, ym) {
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
       : `${peaNeeded ? '' : '<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button>'}<button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
+    <div class="section-title">ใบแจ้งหนี้</div>
+    <div class="list">
+      ${rec.file
+        ? `<button class="item" id="oFile"><div class="ico" style="background:var(--accent-soft)">📄</div><div class="main"><div class="name">${esc(rec.file)}</div><div class="sub">แตะเพื่อเปิดดู</div></div></button>
+           <button class="item add-row" id="oFileDel"><div class="main"><div class="name" style="color:var(--bad)">ลบไฟล์แนบ</div></div></button>`
+        : `<button class="item add-row" id="oFileAdd"><span class="plus">📎</span><div class="main"><div class="name">แนบ PDF หรือรูปใบแจ้งหนี้</div></div></button>`}
+    </div>
+    <input type="file" id="oFileInput" accept="application/pdf,image/*" hidden>
     ${history.length ? `<div class="section-title">ย้อนหลัง</div><div class="form history">${history.join('')}</div>` : ''}
   `);
 
@@ -791,6 +809,27 @@ function occurrenceSheet(id, ym) {
     const tx = billTxn(id, ym);
     if (tx) { tx.amount = amount != null ? amount : (b.amount || 0); saveTxn(tx); }
     save(); closeSheet(); render(); toast('บันทึกยอดแล้ว');
+  });
+  const oFile = $('#oFile');
+  if (oFile) oFile.addEventListener('click', () => billFileViewer(id, ym));
+  const oFileDel = $('#oFileDel');
+  if (oFileDel) oFileDel.addEventListener('click', async () => {
+    if (!confirm('ลบไฟล์ใบแจ้งหนี้ของเดือนนี้?')) return;
+    await billFileDel(id, ym);
+    setRecord(ym, id, { file: undefined });
+    save(); occurrenceSheet(id, ym);
+  });
+  const oFileAdd = $('#oFileAdd');
+  if (oFileAdd) oFileAdd.addEventListener('click', () => $('#oFileInput').click());
+  $('#oFileInput').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    try {
+      await billFilePut(id, ym, f, f.name);
+      save(); render(); occurrenceSheet(id, ym); toast('แนบไฟล์แล้ว');
+    } catch (err) {
+      toast(err.message || 'แนบไฟล์ไม่สำเร็จ');
+    }
   });
   const oPea = $('#oPea');
   if (oPea) oPea.addEventListener('click', async () => {
@@ -1043,6 +1082,7 @@ document.addEventListener('click', (e) => {
     case 'export': exportData(); break;
     case 'import': $('#importFile').click(); break;
     case 'ics': exportIcs(); break;
+    case 'gmail': gmailSheet(); break;
     case 'reset':
       if (isCloud()) {
         if (confirm('ลบข้อมูลบิลในเครื่องนี้? (รายการรับจ่ายในบัญชีออนไลน์จะไม่ถูกลบ)')) {
@@ -1050,6 +1090,7 @@ document.addEventListener('click', (e) => {
         }
       } else if (confirm('ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) {
         state = defaultState(); money = defaultMoney(); ui.wallet = 'total';
+        billFilesClear();
         save(); saveMoney(); render(); toast('ลบข้อมูลแล้ว');
       }
       break;
