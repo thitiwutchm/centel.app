@@ -306,6 +306,10 @@ const ICONS = {
   chev: '<path d="M9 6l6 6-6 6"/>',
   updown: '<path d="M8 9l4-4 4 4M8 15l4 4 4-4"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
+  receipt: '<path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 20.5c1.4-3.6 4.4-5.5 8-5.5s6.6 1.9 8 5.5"/>',
 };
 function svgIcon(name, cls = 'svg-i') {
   return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -477,15 +481,23 @@ function renderHome() {
     .sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 4);
 
   view.innerHTML = `
-    <div class="home-head">
+    <div class="hero">
+      <div class="hero-top">
+        <button class="avatar-btn" data-goto="account" aria-label="บัญชี">${cloud.user ? esc((cloud.user.name || '?').slice(0, 1).toUpperCase()) : svgIcon('user')}</button>
+        <button class="search-cap" data-action="search">${svgIcon('search')}<span>ค้นหารายการ</span></button>
+        <button class="round-btn" data-action="alerts" aria-label="การแจ้งเตือน">${svgIcon('bell')}${alerts ? `<span class="nbadge">${alerts}</span>` : ''}</button>
+      </div>
       <div class="hb">
+        <div class="label">ยอดเงินรวม</div>
         <div class="hb-amt">${masked(sbaht(total))}
           <button class="eye" data-action="toggle-hide" aria-label="${hide ? 'แสดงยอดเงิน' : 'ซ่อนยอดเงิน'}">${svgIcon(hide ? 'eyeOff' : 'eye')}</button></div>
-        <div class="label">ยอดเงินรวม</div>
+        <button class="glass-pill" data-action="wallets">กระเป๋าเงิน ${money.wallets.length} ใบ</button>
       </div>
-      <div class="head-actions">
-        <button class="round-btn" data-action="search" aria-label="ค้นหารายการ">${svgIcon('search')}</button>
-        <button class="round-btn" data-action="alerts" aria-label="การแจ้งเตือน">${svgIcon('bell')}${alerts ? `<span class="nbadge">${alerts}</span>` : ''}</button>
+      <div class="qa-row">
+        <button data-action="add-tx"><i>${svgIcon('plus')}</i><span>เพิ่มรายการ</span></button>
+        <button data-action="add-transfer"><i>${svgIcon('swap')}</i><span>โอนเงิน</span></button>
+        <button data-goto="bills"><i>${svgIcon('receipt')}</i><span>จ่ายบิล</span></button>
+        <button data-action="report" data-ym="${ym}"><i>${svgIcon('chart')}</i><span>รายงาน</span></button>
       </div>
     </div>
 
@@ -955,14 +967,15 @@ function budgetForm(bg, preset = {}) {
     const out = { id: d.id || newId(), scope, category: d.category, amount, walletId: scope === 'shared' ? 'total' : $('#bWallet').value };
     const dup = money.budgets.find((x) => x.id !== out.id && (x.scope || 'personal') === scope && x.category === out.category && (x.walletId || 'total') === out.walletId);
     if (dup) { toast('มีงบของหมวดนี้อยู่แล้ว'); return; }
-    saveBudget(out); closeSheet(); render();
+    saveBudget(out); closeSheet(); render(); if (isNew) popIn();
     toast(isNew ? 'สร้างงบประมาณแล้ว' : 'บันทึกแล้ว');
   });
   const del = $('#delBudget');
   if (del) del.addEventListener('click', () => {
-    if (!confirm('ลบงบประมาณนี้?')) return;
-    deleteBudget(d);
-    closeSheet(); render(); toast('ลบแล้ว');
+    confirmDelete('ลบงบประมาณนี้?', '', () => {
+      deleteBudget(d);
+      closeSheet(); render(); toast('ลบแล้ว');
+    });
   });
   if (isNew) setTimeout(() => $('#bAmount') && $('#bAmount').focus(), 300);
 }
@@ -1171,16 +1184,17 @@ function txnForm(t, preset = {}) {
     }
     saveTxn(out, { submit: !!submit });
     if (out.walletId && money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
-    closeSheet(); render();
+    closeSheet(); render(); if (isNew) popIn();
     toast(out.scope === 'shared' ? (submit ? `ส่งให้ ${partnerName()} อนุมัติแล้ว` : 'บันทึกร่างแล้ว') : isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว');
   };
   $('#saveTx').addEventListener('click', () => save(true));
   $('#draftTx').addEventListener('click', () => save(false));
   const del = $('#delTx');
   if (del) del.addEventListener('click', () => {
-    if (!confirm('ลบรายการนี้?')) return;
-    deleteTxn(d);
-    closeSheet(); render(); toast('ลบแล้ว');
+    confirmDelete('ลบรายการนี้?', '', () => {
+      deleteTxn(d);
+      closeSheet(); render(); toast('ลบแล้ว');
+    });
   });
   if (isNew && !preset.amount) setTimeout(() => $('#tAmount') && $('#tAmount').focus(), 300);
 }
@@ -1252,11 +1266,12 @@ function walletForm(w) {
   const del = $('#delWallet');
   if (del) del.addEventListener('click', () => {
     if (money.wallets.length <= 1) { toast('ต้องมีกระเป๋าเงินอย่างน้อย 1 ใบ'); return; }
-    if (!confirm(`ลบ "${w.name}"${used ? ' และรายการทั้งหมดของกระเป๋านี้' : ''}?`)) return;
-    deleteWallet(w);
-    if (ui.wallet === w.id) ui.wallet = 'total';
-    if (money.prefs.billWallet === w.id) { delete money.prefs.billWallet; savePrefs(); }
-    render(); walletSheet('edit'); toast('ลบแล้ว');
+    confirmDelete(`ลบ "${w.name}"?`, used ? 'รายการทั้งหมดของกระเป๋านี้จะถูกลบด้วย' : '', () => {
+      deleteWallet(w);
+      if (ui.wallet === w.id) ui.wallet = 'total';
+      if (money.prefs.billWallet === w.id) { delete money.prefs.billWallet; savePrefs(); }
+      render(); walletSheet('edit'); toast('ลบแล้ว');
+    });
   });
   if (isNew) setTimeout(() => $('#wName') && $('#wName').focus(), 300);
 }
@@ -1373,6 +1388,7 @@ function moneyClick(t) {
 function moneyAction(action, el) {
   switch (action) {
     case 'add-tx': txnForm(); break;
+    case 'add-transfer': txnForm(null, { type: 'transfer' }); break;
     case 'wallet-pick': walletSheet('pick'); break;
     case 'wallets': walletSheet('edit'); break;
     case 'add-wallet': walletForm(); break;

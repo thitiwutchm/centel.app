@@ -190,7 +190,8 @@ function render() {
   $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : 'บิลทั้งหมด';
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
   const fab = $('#addBtn');
-  fab.hidden = ui.tab === 'account';
+  // Home has its own add button in the quick-action row.
+  fab.hidden = ui.tab === 'account' || ui.tab === 'home';
   fab.classList.toggle('ext', ui.tab === 'home' && !ui.fabMini);
   fab.setAttribute('aria-label', bills ? 'เพิ่มบิล' : 'เพิ่มรายการ');
   $('#addLabel').textContent = bills ? 'เพิ่มบิล' : 'เพิ่มรายการ';
@@ -759,25 +760,27 @@ function billForm(b) {
     saveMoney();
     closeSheet();
     render();
+    if (isNew) popIn();
     toast(filled ? `บันทึกและเติมยอดค่าไฟ ${filled} เดือน` : (isNew ? 'เพิ่มบิลแล้ว' : 'บันทึกแล้ว'));
   });
   const del = $('#delBill');
   if (del) {
     del.addEventListener('click', () => {
-      if (!confirm(`ลบ "${b.name}" และประวัติการจ่ายทั้งหมดของบิลนี้?`)) return;
-      state.bills = state.bills.filter((x) => x.id !== b.id);
-      Object.keys(state.records).forEach((ym) => {
-        if (record(ym, b.id).file) billFileDel(b.id, ym);
-        delete state.records[ym][b.id];
-        if (!Object.keys(state.records[ym]).length) delete state.records[ym];
+      confirmDelete(`ลบ "${b.name}"?`, 'ประวัติการจ่ายทั้งหมดของบิลนี้จะถูกลบด้วย', () => {
+        state.bills = state.bills.filter((x) => x.id !== b.id);
+        Object.keys(state.records).forEach((ym) => {
+          if (record(ym, b.id).file) billFileDel(b.id, ym);
+          delete state.records[ym][b.id];
+          if (!Object.keys(state.records[ym]).length) delete state.records[ym];
+        });
+        // Payments already made stay in the wallets as ordinary expenses.
+        money.txns.filter((t) => t.billId === b.id).forEach((t) => { delete t.billId; delete t.billYm; saveTxn(t); });
+        save();
+        saveMoney();
+        closeSheet();
+        render();
+        toast('ลบแล้ว');
       });
-      // Payments already made stay in the wallets as ordinary expenses.
-      money.txns.filter((t) => t.billId === b.id).forEach((t) => { delete t.billId; delete t.billYm; saveTxn(t); });
-      save();
-      saveMoney();
-      closeSheet();
-      render();
-      toast('ลบแล้ว');
     });
   }
   if (isNew) setTimeout(() => $('#fName') && $('#fName').focus(), 300);
