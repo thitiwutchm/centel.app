@@ -241,10 +241,27 @@ async function uploadReceipt(file, labels = []) {
   return api('POST', '/receipts', { image, mediaType: 'image/jpeg', labels });
 }
 
+async function receiptLink(key) {
+  const { url } = await api('GET', `/receipts/url?key=${encodeURIComponent(key)}`);
+  return url;
+}
+
+function receiptThumbHtml(key) {
+  return `<button type="button" class="rc-thumb" data-rc-thumb ${key ? '' : 'hidden'}><img alt="สลิป"><span>🧾 แตะเพื่อดูสลิปเต็ม</span></button>`;
+}
+
+// Fills a slip thumbnail; links are short-lived, so one is fetched each time a sheet opens.
+async function showReceiptThumb(btn, key, src) {
+  if (!btn || !key) return;
+  btn.onclick = () => openReceipt(key);
+  btn.hidden = false;
+  try { btn.querySelector('img').src = src || await receiptLink(key); } catch (e) { /* tapping still opens it */ }
+}
+
 async function openReceipt(key) {
   const win = window.open('', '_blank');
   try {
-    const { url } = await api('GET', `/receipts/url?key=${encodeURIComponent(key)}`);
+    const url = await receiptLink(key);
     if (win) win.location = url; else location.href = url;
   } catch (e) {
     if (win) win.close();
@@ -354,7 +371,7 @@ function sharedSheet(t) {
         <div class="kv"><span>สร้างโดย</span><b>${esc(nameOf(t.ownerId))}</b></div>
         ${t.note ? `<div class="kv"><span>บันทึก</span><span>${esc(t.note)}</span></div>` : ''}
         ${t.status === 'rejected' && t.rejectReason ? `<div class="kv"><span>เหตุผลที่ปฏิเสธ</span><span class="exp">${esc(t.rejectReason)}</span></div>` : ''}
-        ${t.receiptKey ? '<button class="btn ghost" id="shReceipt">🧾 ดูสลิป</button>' : ''}
+        ${t.receiptKey ? receiptThumbHtml(t.receiptKey) : ''}
       </div>
     </div>
     <div class="section-title">ป้ายกำกับของฉัน</div>
@@ -378,7 +395,7 @@ function sharedSheet(t) {
   labelPicker($('#shLabels'), picked, () => setTxnLabels(t, money.labels.filter((l) => picked.has(l.id)).map((l) => l.id)));
   on('#shEdit', () => txnForm(t));
   on('#shResubmit', () => txnForm(t));
-  on('#shReceipt', () => openReceipt(t.receiptKey));
+  showReceiptThumb(document.querySelector('[data-rc-thumb]'), t.receiptKey);
   on('#shApprove', () => {
     const walletId = $('#shWallet') ? $('#shWallet').value || null : null;
     Object.assign(t, { status: 'approved', counted: true });
