@@ -413,6 +413,10 @@ function renderSettings() {
   const s = state.settings;
   view.innerHTML = `
     ${accountTop()}
+    <div class="section-title">ธีม</div>
+    <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
+      <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
+    <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>
     <div class="section-title">การแจ้งเตือน</div>
     <div class="form">
       <div class="field"><label for="remindDays">เตือนล่วงหน้า</label>
@@ -446,6 +450,13 @@ function renderSettings() {
     toast('บันทึกแล้ว');
   });
   $('#importFile').addEventListener('change', importData);
+  view.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.themePick === themeId()) return;
+    setTheme(b.dataset.themePick);
+    const y = window.scrollY;
+    renderSettings();
+    window.scrollTo(0, y);
+  }));
 }
 
 /* ---------- Sheets ---------- */
