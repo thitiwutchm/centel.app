@@ -72,6 +72,8 @@ const defaultMoney = () => ({
   txns: [],
   // budgets: { id, category ('all' or TX_CATS key), amount, walletId ('total' or wallet id) } — repeats every month
   budgets: [],
+  // labels: { id, name } — tags a transaction can carry several of (t.labels = [label ids])
+  labels: [],
   prefs: { hideBalance: false },
 });
 
@@ -86,6 +88,7 @@ function loadMoney() {
       wallets: Array.isArray(s.wallets) && s.wallets.length ? s.wallets : d.wallets,
       txns: Array.isArray(s.txns) ? s.txns.map((t) => (t.category ? { ...t, category: newCat(t.category) } : t)) : [],
       budgets: Array.isArray(s.budgets) ? s.budgets.map((bg) => ({ ...bg, category: newCat(bg.category) })) : [],
+      labels: Array.isArray(s.labels) ? s.labels : [],
       prefs: { ...d.prefs, ...(s.prefs || {}) },
     };
   } catch (e) {
@@ -118,6 +121,9 @@ function txCat(t) {
   if (!t.category) return REVIEW_CAT;
   return TX_CATS[t.category] || TX_CATS.other_exp;
 }
+function labelById(id) { return money.labels.find((l) => l.id === id); }
+// The labels on a transaction that still exist (a deleted label just disappears).
+function txLabels(t) { return (t.labels || []).map(labelById).filter(Boolean); }
 function budgetCat(bg) { return bg.category === 'all' ? ALL_CAT : (TX_CATS[bg.category] || TX_CATS.other_exp); }
 function catsOf(type) { return Object.entries(TX_CATS).filter(([, c]) => c.type === type); }
 
@@ -282,6 +288,22 @@ function deleteBudget(bg) {
   money.budgets = money.budgets.filter((x) => x.id !== bg.id);
   if (isCloud()) cloudCall('DELETE', `/budgets/${bg.id}`); else saveMoney();
 }
+function saveLabel(l) {
+  upsert(money.labels, l);
+  if (isCloud()) cloudCall('PUT', `/labels/${encodeURIComponent(l.id)}`, { ...l, sort: money.labels.indexOf(l) });
+  else saveMoney();
+}
+function deleteLabel(l) {
+  money.labels = money.labels.filter((x) => x.id !== l.id);
+  money.txns.forEach((t) => { if (t.labels && t.labels.includes(l.id)) t.labels = t.labels.filter((x) => x !== l.id); });
+  if (ui.txLabel === l.id) ui.txLabel = '';
+  if (isCloud()) cloudCall('DELETE', `/labels/${encodeURIComponent(l.id)}`); else saveMoney();
+}
+// Labels only (no other change): also works on a partner's or an approved shared expense.
+function setTxnLabels(t, ids) {
+  t.labels = ids;
+  if (isCloud()) cloudCall('PUT', `/expenses/${t.id}/labels`, { labels: ids }); else saveMoney();
+}
 function savePrefs() {
   if (isCloud()) cloudSavePrefs(); else saveMoney();
 }
@@ -325,6 +347,7 @@ const ICONS = {
   swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
   receipt: '<path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 20.5c1.4-3.6 4.4-5.5 8-5.5s6.6 1.9 8 5.5"/>',
+  tag: '<path d="M3 12.2V4.5A1.5 1.5 0 0 1 4.5 3h7.7l8.8 8.8a1.5 1.5 0 0 1 0 2.1l-7.1 7.1a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8" cy="8" r="1.6"/>',
 };
 function svgIcon(name, cls = 'svg-i') {
   return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -445,6 +468,7 @@ function txItem(t, S) {
     t.reviewNeeded || (!t.category && t.type === 'expense') ? '<span class="badge warn">รอตรวจสอบ</span>' : '',
     t.billId ? '<span class="badge muted">บิล</span>' : '',
     t.receiptKey ? '<span class="badge muted">🧾</span>' : '',
+    ...txLabels(t).map((l) => `<span class="badge label">${svgIcon('tag', 'svg-i xs')}${esc(l.name)}</span>`),
   ].join(' ');
   const amt = shared ? t.total : t.amount;
   const cls = t.type === 'settle' ? (t.sign > 0 ? 'inc' : 'exp') : shared && !t.counted ? 'xfer' : txAmtCls(t, S);
@@ -693,7 +717,7 @@ function txListHtml(sel) {
   const S = walletSet(sel);
   const q = ui.searchOpen ? ui.search.trim().toLowerCase() : '';
   if (q) {
-    const hits = money.txns.filter((t) => touches(t, S) && txFilterOk(t) && [t.note, t.merchant, txCat(t).label, (walletById(t.walletId) || {}).name, String(t.amount)]
+    const hits = money.txns.filter((t) => touches(t, S) && txFilterOk(t) && [t.note, t.merchant, txCat(t).label, (walletById(t.walletId) || {}).name, String(t.amount), ...txLabels(t).map((l) => l.name)]
       .some((s) => String(s || '').toLowerCase().includes(q)));
     return hits.length ? `<div class="muted small pad">พบ ${hits.length} รายการ</div>${dayGroups(hits, S)}` : '<div class="empty">ไม่พบรายการ</div>';
   }
@@ -728,12 +752,18 @@ const TX_FILTERS = [['all', 'ทั้งหมด'], ['personal', 'ส่วน
 
 function txFilters() {
   const list = cloud.partner ? TX_FILTERS : TX_FILTERS.filter(([k]) => k === 'all' || k === 'review');
-  if (!money.txns.some((t) => t.reviewNeeded || t.scope === 'shared') && ui.txFilter === 'all') return '';
-  return `<div class="chips filters">${list.map(([k, l]) =>
-    `<button class="chip ${ui.txFilter === k ? 'on' : ''}" data-txfilter="${k}">${l}</button>`).join('')}</div>`;
+  const lab = labelById(ui.txLabel);
+  const basic = money.txns.some((t) => t.reviewNeeded || t.scope === 'shared') || ui.txFilter !== 'all';
+  if (!basic && !money.labels.length && !lab) return '';
+  const labChip = lab
+    ? `<button class="chip on lab" data-txlabel="">${svgIcon('tag', 'svg-i xs')}${esc(lab.name)} ✕</button>`
+    : money.labels.length ? `<button class="chip lab" data-action="label-filter">${svgIcon('tag', 'svg-i xs')}ป้ายกำกับ</button>` : '';
+  return `<div class="chips filters">${labChip}${basic ? list.map(([k, l]) =>
+    `<button class="chip ${ui.txFilter === k ? 'on' : ''}" data-txfilter="${k}">${l}</button>`).join('') : ''}</div>`;
 }
 
 function txFilterOk(t) {
+  if (ui.txLabel && !(t.labels || []).includes(ui.txLabel)) return false;
   switch (ui.txFilter) {
     case 'personal': return t.scope !== 'shared' && t.type !== 'settle';
     case 'shared': return t.scope === 'shared' || t.type === 'settle';
@@ -749,6 +779,7 @@ function txMenu() {
     <div class="list">
       <button class="item" data-action="report" data-ym="${periodRange(ui.period).ym || ymOf(new Date())}">${circleIco({ icon: '📊', color: '#2f6bff' })}<div class="main"><div class="name">ดูรายงานช่วงนี้</div></div></button>
       <button class="item" data-action="wallets">${circleIco({ icon: '👛', color: '#1a9e5c' })}<div class="main"><div class="name">จัดการกระเป๋าเงิน</div></div></button>
+      <button class="item" data-action="labels">${circleIco({ icon: '🏷️', color: '#7a5af8' })}<div class="main"><div class="name">ป้ายกำกับ</div></div></button>
       <button class="item" data-action="csv">${circleIco({ icon: '⬇️', color: '#8a8f99' })}<div class="main"><div class="name">ส่งออกรายการ (CSV)</div></div></button>
     </div>`);
 }
@@ -756,14 +787,14 @@ function txMenu() {
 function exportCsv() {
   if (!money.txns.length) { toast('ยังไม่มีรายการ'); return; }
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const rows = [['วันที่', 'ประเภท', 'หมวดหมู่', 'กระเป๋าเงิน', 'ไปยัง', 'จำนวนเงิน', 'ร้านค้า', 'บันทึก', 'ขอบเขต', 'ยอดรวมทั้งบิล', 'สถานะ']];
+  const rows = [['วันที่', 'ประเภท', 'หมวดหมู่', 'กระเป๋าเงิน', 'ไปยัง', 'จำนวนเงิน', 'ร้านค้า', 'บันทึก', 'ขอบเขต', 'ยอดรวมทั้งบิล', 'สถานะ', 'ป้ายกำกับ']];
   const typeTh = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'โอนเงิน', settle: 'คืนเงินระหว่างคู่' };
   const statusTh = { draft: 'ร่าง', pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ถูกปฏิเสธ' };
   money.txns.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((t) => rows.push([
     t.date, typeTh[t.type], txCat(t).label, (walletById(t.walletId) || {}).name,
     t.type === 'transfer' ? (walletById(t.toWalletId) || {}).name : '', t.type === 'settle' ? t.sign * t.amount : t.amount,
     t.merchant, t.note, t.scope === 'shared' ? 'ร่วมกัน' : 'ส่วนตัว', t.scope === 'shared' ? t.total : '',
-    t.scope === 'shared' ? statusTh[t.status] : '',
+    t.scope === 'shared' ? statusTh[t.status] : '', txLabels(t).map((l) => l.name).join(', '),
   ]));
   deliverFile(`transactions-${dateStr(new Date())}.csv`, 'text/csv', '﻿' + rows.map((r) => r.map(q).join(',')).join('\r\n'));
 }
@@ -773,7 +804,8 @@ function exportCsv() {
 function reportSheet(ym) {
   ym = ym || ymOf(new Date());
   const S = walletSet(ui.tab === 'txns' ? ui.wallet : 'total');
-  const list = txnsInMonth(ym).filter((t) => t.type !== 'transfer' && counts(t) && inSel(t, S));
+  const lab = ui.tab === 'txns' ? labelById(ui.txLabel) : null;
+  const list = txnsInMonth(ym).filter((t) => t.type !== 'transfer' && counts(t) && inSel(t, S) && (!lab || (t.labels || []).includes(lab.id)));
   const { income, expense } = totalsIn(list, S);
   const bars = (type) => {
     const by = {};
@@ -790,6 +822,7 @@ function reportSheet(ym) {
   };
   openSheet(`
     <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>รายงาน ${thMonthYear(ym)}</h2><span style="width:40px"></span></div>
+    ${lab ? `<div class="chips"><span class="chip on lab">${svgIcon('tag', 'svg-i xs')}${esc(lab.name)}</span></div>` : ''}
     <div class="card summary">
       <div class="row" style="margin-top:0">
         <div class="stat inc-soft"><span>รายรับ</span><b class="inc">${baht(income)}</b></div>
@@ -1058,6 +1091,7 @@ function txnForm(t, preset = {}) {
       <div class="field" id="tToRow"><label for="tTo">ไปยัง</label><select id="tTo"></select></div>
       <div class="field"><label for="tDate">วันที่</label><input type="date" id="tDate" value="${d.date}"></div>
       <div class="field"><label for="tNote">บันทึก</label><input id="tNote" placeholder="เช่น ข้าวกลางวัน" value="${esc(d.note || '')}" autocomplete="off"></div>
+      <div class="field col labels-field"><label>ป้ายกำกับ</label><div class="chips lab-pick" id="tLabels"></div></div>
       <div class="field" id="tReviewRow"><label for="tReview">รอตรวจสอบ</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="tReview" ${d.reviewNeeded ? 'checked' : ''}><span></span></label></div>
     </div>
     <p class="hint" id="tShareHint">ใส่ยอดรวมทั้งบิล ค่าเริ่มต้นแบ่งครึ่ง แก้ส่วนของแต่ละคนได้ รายการจะนับเป็นรายจ่ายเมื่อ ${esc(partnerName())} อนุมัติแล้วเท่านั้น</p>
@@ -1106,6 +1140,8 @@ function txnForm(t, preset = {}) {
       `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-tcat="${k}">${circleIco(c, 'ico round')}<span>${c.label}</span></button>`).join('');
   };
   renderType();
+  const pickedLabels = new Set(d.labels || []);
+  const repaintLabels = labelPicker($('#tLabels'), pickedLabels);
 
   $('#txType').addEventListener('click', (e) => {
     const b = e.target.closest('[data-ttype]');
@@ -1138,7 +1174,7 @@ function txnForm(t, preset = {}) {
       if (!file) return;
       status('⏳ กำลังอัปโหลดและอ่านสลิป…');
       try {
-        const r = await uploadReceipt(file);
+        const r = await uploadReceipt(file, money.labels.map((l) => l.name));
         d.receiptKey = r.key;
         const x = r.result;
         if (x) {
@@ -1147,6 +1183,9 @@ function txnForm(t, preset = {}) {
           if (x.merchant) $('#tMerchant').value = x.merchant;
           if (x.note && !$('#tNote').value) $('#tNote').value = x.note;
           if (x.reference) d.slipRef = x.reference;
+          // AI Slips suggests existing labels by name; they are added, never removed.
+          (x.labels || []).forEach((n) => { const l = money.labels.find((y) => y.name === n); if (l) pickedLabels.add(l.id); });
+          repaintLabels();
           d.type = 'expense';
           d.category = x.category || null;
           renderType();
@@ -1176,7 +1215,7 @@ function txnForm(t, preset = {}) {
     if (!date) { toast('กรุณาเลือกวันที่'); return; }
     const out = {
       id: d.id || newId(), type: d.type, amount: total, walletId: $('#tWallet').value, date, note: $('#tNote').value.trim(),
-      scope: 'personal',
+      scope: 'personal', labels: money.labels.filter((l) => pickedLabels.has(l.id)).map((l) => l.id),
     };
     if (d.type === 'transfer') {
       out.toWalletId = $('#tTo').value;
@@ -1354,6 +1393,155 @@ function walletForm(w) {
   if (isNew) setTimeout(() => $('#wName') && $('#wName').focus(), 300);
 }
 
+/* ---------- Labels ---------- */
+
+// Toggleable label chips plus a "new label" box, drawn into `box`. `picked` is a Set
+// of label ids that the chips change in place; onChange runs after each change.
+// Returns a function that redraws.
+function labelPicker(box, picked, onChange = () => {}) {
+  const paint = () => {
+    box.innerHTML = money.labels.map((l) =>
+      `<button type="button" class="chip lab ${picked.has(l.id) ? 'on' : ''}" data-lpick="${esc(l.id)}">${svgIcon('tag', 'svg-i xs')}${esc(l.name)}</button>`).join('')
+      + '<input class="chip lab-new" placeholder="＋ ป้ายใหม่" maxlength="60" autocomplete="off" enterkeyhint="done">';
+    const input = box.querySelector('.lab-new');
+    const add = () => {
+      const name = input.value.trim();
+      input.value = '';
+      if (!name) return;
+      let l = money.labels.find((x) => x.name.toLowerCase() === name.toLowerCase());
+      if (!l) { l = { id: newId(), name }; saveLabel(l); }
+      picked.add(l.id);
+      paint();
+      onChange();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    input.addEventListener('blur', add);
+  };
+  box.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-lpick]');
+    if (!c) return;
+    const id = c.dataset.lpick;
+    if (picked.has(id)) picked.delete(id); else picked.add(id);
+    c.classList.toggle('on', picked.has(id));
+    onChange();
+  });
+  paint();
+  return paint;
+}
+
+// How a label is used: like "15 รายการ ใน 2 กระเป๋า".
+function labelUse(l) {
+  const list = money.txns.filter((t) => (t.labels || []).includes(l.id));
+  const wallets = new Set(list.map((t) => t.walletId).filter(Boolean));
+  return { list, n: list.length, wallets: wallets.size };
+}
+
+function labelsSheet() {
+  const rows = money.labels.map((l) => {
+    const u = labelUse(l);
+    return `
+      <div class="item lab-row">
+        <button class="lab-open" data-label-open="${esc(l.id)}">
+          <span class="lab-tag">${svgIcon('tag')}</span>
+          <div class="main"><div class="name">${esc(l.name)}</div>${u.n ? `<div class="sub">${u.n} รายการ ใน ${u.wallets || 1} กระเป๋า</div>` : ''}</div>
+        </button>
+        <button class="round-btn sm" data-label-menu="${esc(l.id)}" aria-label="ตัวเลือก">${svgIcon('more')}</button>
+      </div>`;
+  }).join('');
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>ป้ายกำกับ</h2><button class="link-btn strong" data-action="add-label">เพิ่ม</button></div>
+    ${money.labels.length ? `<div class="list">${rows}</div>` : `<div class="empty"><div class="e-ico">🏷️</div>ยังไม่มีป้ายกำกับ<br><span class="muted small">ใช้จัดกลุ่มรายการข้ามหมวดหมู่ เช่น Grabfood, Shopee, ทริปเชียงใหม่</span></div>`}
+    <div class="list" style="margin-top:18px">
+      <button class="item add-row" data-action="add-label"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มป้ายกำกับ</div></div></button>
+    </div>
+    <p class="hint">ติดป้ายได้หลายป้ายต่อรายการ ในหน้าเพิ่ม/แก้ไขรายการ${isCloud() ? ' ป้ายกำกับซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+  `);
+}
+
+function labelMenu(id) {
+  const l = labelById(id);
+  if (!l) return;
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="labels">กลับ</button><h2>${esc(l.name)}</h2><span style="width:40px"></span></div>
+    <div class="list">
+      <button class="item" data-label-open="${esc(l.id)}">${circleIco({ icon: '📋', color: '#2f6bff' })}<div class="main"><div class="name">ดูรายการ</div></div></button>
+      <button class="item" data-txlabel="${esc(l.id)}">${circleIco({ icon: '🔎', color: '#1a9e5c' })}<div class="main"><div class="name">กรองในหน้ารายการ</div></div></button>
+      <button class="item" id="lbRename">${circleIco({ icon: '✏️', color: '#8a8f99' })}<div class="main"><div class="name">เปลี่ยนชื่อ</div></div></button>
+      <button class="item" id="lbDelete">${circleIco({ icon: '🗑️', color: '#e5484d' })}<div class="main"><div class="name exp">ลบป้ายกำกับ</div></div></button>
+    </div>`);
+  $('#lbRename').addEventListener('click', () => labelForm(l));
+  $('#lbDelete').addEventListener('click', () => labelDelete(l));
+}
+
+function labelDelete(l) {
+  const n = labelUse(l).n;
+  confirmDelete(`ลบป้าย "${l.name}"?`, n ? `ป้ายนี้จะถูกนำออกจาก ${n} รายการ (รายการยังอยู่)` : '', () => {
+    deleteLabel(l);
+    render(); labelsSheet(); toast('ลบแล้ว');
+  });
+}
+
+function labelForm(l) {
+  const isNew = !l;
+  openSheet(`
+    <div class="sheet-head">
+      <button class="link-btn" data-action="labels">ยกเลิก</button>
+      <h2>${isNew ? 'เพิ่มป้ายกำกับ' : 'เปลี่ยนชื่อป้าย'}</h2>
+      <button class="link-btn strong" id="saveLabel">บันทึก</button>
+    </div>
+    <form class="form" id="lbForm"><div class="field"><label for="lbName">ชื่อ</label><input id="lbName" maxlength="60" placeholder="เช่น Grabfood" value="${esc(l ? l.name : '')}" autocomplete="off"></div></form>
+    ${isNew ? '' : '<button class="btn danger" id="lbDel">ลบป้ายกำกับ</button>'}
+  `);
+  const save = (e) => {
+    if (e) e.preventDefault();
+    const name = $('#lbName').value.trim();
+    if (!name) { toast('กรุณาใส่ชื่อป้าย'); $('#lbName').focus(); return; }
+    if (money.labels.some((x) => x.name.toLowerCase() === name.toLowerCase() && (!l || x.id !== l.id))) { toast('มีป้ายชื่อนี้แล้ว'); return; }
+    saveLabel({ ...(l || { id: newId() }), name });
+    render(); labelsSheet(); if (isNew) popIn();
+    toast(isNew ? 'เพิ่มป้ายกำกับแล้ว' : 'บันทึกแล้ว');
+  };
+  $('#saveLabel').addEventListener('click', save);
+  $('#lbForm').addEventListener('submit', save);
+  if ($('#lbDel')) $('#lbDel').addEventListener('click', () => labelDelete(l));
+  setTimeout(() => $('#lbName') && $('#lbName').focus(), 300);
+}
+
+// All transactions with one label, with totals and a per-month summary.
+function labelDetail(id) {
+  const l = labelById(id);
+  if (!l) return;
+  const S = walletSet('total');
+  const { list } = labelUse(l);
+  const counted = list.filter((t) => t.type !== 'transfer' && counts(t));
+  const { income, expense } = totalsIn(counted, S);
+  const ym = ymOf(new Date());
+  const month = totalsIn(counted.filter((t) => t.date.slice(0, 7) === ym), S);
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="labels">กลับ</button><h2>${esc(l.name)}</h2><button class="round-btn sm" data-label-menu="${esc(l.id)}" aria-label="ตัวเลือก">${svgIcon('more')}</button></div>
+    <div class="card summary">
+      <div class="row" style="margin-top:0">
+        <div class="stat exp-soft"><span>รายจ่ายทั้งหมด</span><b class="exp">${baht(expense)}</b></div>
+        <div class="stat inc-soft"><span>รายรับทั้งหมด</span><b class="inc">${baht(income)}</b></div>
+      </div>
+      <div class="kv" style="padding:12px 2px 0"><span>เดือนนี้</span><b>${month.expense ? `จ่าย ${baht(month.expense)}` : ''}${month.expense && month.income ? ' · ' : ''}${month.income ? `รับ ${baht(month.income)}` : ''}${month.expense || month.income ? '' : '-'}</b></div>
+      <div class="kv" style="padding:6px 2px 0"><span>จำนวน</span><span>${list.length} รายการ</span></div>
+    </div>
+    ${list.length ? `<button class="btn ghost" data-txlabel="${esc(l.id)}" style="margin-bottom:12px">กรองในหน้ารายการ</button>${dayGroups(list, S)}`
+    : '<div class="empty"><div class="e-ico">🏷️</div>ยังไม่มีรายการที่ติดป้ายนี้</div>'}
+  `);
+}
+
+function labelFilterSheet() {
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>กรองตามป้ายกำกับ</h2><button class="link-btn" data-action="labels">แก้ไข</button></div>
+    <div class="list">
+      <button class="item" data-txlabel=""><span class="lab-tag">${svgIcon('tag')}</span><div class="main"><div class="name">ทุกรายการ</div></div>${ui.txLabel ? '' : '<span class="tick">✓</span>'}</button>
+      ${money.labels.map((l) => `<button class="item" data-txlabel="${esc(l.id)}"><span class="lab-tag">${svgIcon('tag')}</span>
+        <div class="main"><div class="name">${esc(l.name)}</div><div class="sub">${labelUse(l).n} รายการ</div></div>${ui.txLabel === l.id ? '<span class="tick">✓</span>' : ''}</button>`).join('')}
+    </div>`);
+}
+
 /* ---------- Account ---------- */
 
 function accountTop() {
@@ -1371,6 +1559,11 @@ function accountTop() {
     <div class="list">
       ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
       <button class="item add-row" data-action="add-wallet"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มกระเป๋าเงิน</div></div></button>
+    </div>
+    <div class="section-title">ป้ายกำกับ</div>
+    <div class="list">
+      <button class="item" data-action="labels"><div class="ico round lab-ico">${svgIcon('tag')}</div><div class="main"><div class="name">ป้ายกำกับ</div>
+        <div class="sub">${money.labels.length ? money.labels.slice(0, 4).map((l) => esc(l.name)).join(', ') + (money.labels.length > 4 ? ` และอีก ${money.labels.length - 4}` : '') : 'ติดป้ายให้รายการ เช่น Grabfood, Shopee'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
     </div>
     <div class="section-title">การจ่ายบิล</div>
     <div class="form">
@@ -1444,6 +1637,12 @@ function moneyClick(t) {
     else txnForm(x);
     return true;
   }
+  const tl = t.closest('[data-txlabel]');
+  if (tl) { ui.txLabel = tl.dataset.txlabel; closeSheet(); if (ui.tab !== 'txns') setTab('txns'); else render(); return true; }
+  const lm = t.closest('[data-label-menu]');
+  if (lm) { labelMenu(lm.dataset.labelMenu); return true; }
+  const lo = t.closest('[data-label-open]');
+  if (lo) { labelDetail(lo.dataset.labelOpen); return true; }
   const tf = t.closest('[data-txfilter]');
   if (tf) { ui.txFilter = tf.dataset.txfilter; render(); return true; }
   const bud = t.closest('[data-budget]');
@@ -1478,6 +1677,9 @@ function moneyAction(action, el) {
       break;
     case 'search-close': ui.searchOpen = false; ui.search = ''; render(); break;
     case 'tx-menu': txMenu(); break;
+    case 'labels': labelsSheet(); break;
+    case 'add-label': labelForm(); break;
+    case 'label-filter': labelFilterSheet(); break;
     case 'csv': closeSheet(); exportCsv(); break;
     case 'report': reportSheet(el.dataset.ym); break;
     case 'add-budget': budgetForm(); break;

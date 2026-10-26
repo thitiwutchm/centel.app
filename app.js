@@ -44,6 +44,7 @@ const ui = {
   searchOpen: false,
   reportType: 'expense',
   txFilter: 'all',
+  txLabel: '',          // label id filter on the transactions tab ('' = all)
   budgetOff: 0,
 };
 
