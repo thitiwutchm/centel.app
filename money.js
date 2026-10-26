@@ -117,6 +117,12 @@ function defaultWalletId() {
   return walletById(money.prefs.lastWallet) ? money.prefs.lastWallet : firstWalletId();
 }
 
+// A credit card's balance is a credit line (future money), so it never counts toward the
+// money I have, though spending on the card still counts as spending in reports and budgets.
+function isCredit(w) { return w.type === 'credit'; }
+// Wallets whose balance adds to the "ยอดเงินรวม" total.
+function inTotal(w) { return !w.excluded && !isCredit(w); }
+
 // Wallet ids that a selection covers: one wallet, or every wallet counted in the total.
 function walletSet(sel) {
   if (sel && sel !== 'total') return new Set([sel]);
@@ -151,6 +157,7 @@ function touches(t, S) {
 // Balance at the end of day `upto` (YYYY-MM-DD, inclusive).
 function balanceOf(sel, upto = dateStr(new Date())) {
   const S = walletSet(sel);
+  if (S.total) money.wallets.forEach((w) => { if (isCredit(w)) S.delete(w.id); });
   let b = money.wallets.filter((w) => S.has(w.id)).reduce((s, w) => s + (w.initial || 0), 0);
   money.txns.forEach((t) => { if (t.date <= upto) b += deltaFor(t, S); });
   return b;
@@ -479,7 +486,7 @@ function renderHome() {
   const wallets = money.wallets.slice(0, 4).map((w) => `
     <button class="item" data-wallet-edit="${w.id}">
       ${walletIco(w)}
-      <div class="main"><div class="name">${esc(w.name)}</div>${w.excluded ? '<div class="sub">ไม่รวมในยอดรวม</div>' : ''}</div>
+      <div class="main"><div class="name">${esc(w.name)}</div>${inTotal(w) ? '' : `<div class="sub">${isCredit(w) ? 'บัตรเครดิต · ไม่นับในยอดเงิน' : 'ไม่รวมในยอดรวม'}</div>`}</div>
       <div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div>
     </button>`).join('');
 
@@ -1240,7 +1247,8 @@ function walletSheet(mode = 'pick') {
       ${mode === 'pick' && ui.wallet === (w ? w.id : 'total') ? '<span class="tick">✓</span>' : ''}
       ${mode === 'edit' && w ? svgIcon('chev', 'svg-i sm muted') : ''}
     </button>`;
-  const inc = money.wallets.filter((w) => !w.excluded);
+  const inc = money.wallets.filter(inTotal);
+  const cards = money.wallets.filter((w) => !w.excluded && isCredit(w));
   const exc = money.wallets.filter((w) => w.excluded);
   openSheet(`
     <div class="sheet-head">
@@ -1251,6 +1259,7 @@ function walletSheet(mode = 'pick') {
     ${mode === 'pick' ? `<div class="list" style="margin-bottom:14px">${row(null)}</div>` : ''}
     <div class="section-title">รวมในยอดรวม</div>
     <div class="list">${inc.map(row).join('') || '<div class="muted pad">-</div>'}</div>
+    ${cards.length ? `<div class="section-title">บัตรเครดิต · วงเงิน ไม่นับในยอดเงินรวม</div><div class="list">${cards.map(row).join('')}</div>` : ''}
     ${exc.length ? `<div class="section-title">ไม่รวมในยอดรวม</div><div class="list">${exc.map(row).join('')}</div>` : ''}
     <div class="list" style="margin-top:18px">
       <button class="item add-row" data-action="add-wallet"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มกระเป๋าเงิน</div></div></button>
@@ -1285,9 +1294,9 @@ function walletForm(w) {
     <div class="form">
       <div class="field"><label for="wName">ชื่อ</label><input id="wName" placeholder="เช่น KBank ออมทรัพย์" value="${esc(d.name)}" autocomplete="off"></div>
       <div class="field"><label for="wInit">ยอดเริ่มต้น (฿)</label><input id="wInit" inputmode="decimal" placeholder="0" value="${d.initial === '' ? '' : d.initial}"></div>
-      <div class="field"><label for="wExcl">ไม่รวมในยอดรวม</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="wExcl" ${d.excluded ? 'checked' : ''}><span></span></label></div>
+      <div class="field" id="wExclRow"><label for="wExcl">ไม่รวมในยอดรวม</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="wExcl" ${d.excluded ? 'checked' : ''}><span></span></label></div>
     </div>
-    <p class="hint">บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000</p>
+    <p class="hint" id="wHint"></p>
     ${isNew ? '' : `<button class="btn danger" id="delWallet">ลบกระเป๋าเงิน${used ? 'และรายการทั้งหมด' : ''}</button>`}
   `);
   $('#wTypes').addEventListener('click', (e) => {
@@ -1295,8 +1304,16 @@ function walletForm(w) {
     if (!c) return;
     d.type = c.dataset.wtype;
     document.querySelectorAll('#wTypes .chip').forEach((x) => x.classList.toggle('on', x === c));
-    paintPic();
+    paintPic(); paintType();
   });
+  // A credit card is always left out of the money total, so its toggle is moot.
+  const paintType = () => {
+    $('#wExclRow').hidden = isCredit(d);
+    $('#wHint').textContent = isCredit(d)
+      ? 'ใส่ยอดเริ่มต้นเป็นวงเงินคงเหลือ รูดบัตรแล้ววงเงินจะลดลง จ่ายบัตรแล้วเพิ่มขึ้น บัตรเครดิตไม่นับในยอดเงินรวม เพราะวงเงินเป็นเงินในอนาคต แต่รายจ่ายที่รูดบัตรยังนับในรายงานและงบประมาณ'
+      : 'บัตรเครดิตหรือ Pay Later ให้เลือกประเภทบัตรเครดิต เพื่อไม่ให้วงเงินถูกนับเป็นเงินที่มีอยู่';
+  };
+  paintType();
   const paintPic = () => {
     $('#wAvatar').innerHTML = walletIco(d, 'w-avatar-in') + '<span class="w-cam">✎</span>';
     $('#wReset').hidden = !d.icon;
@@ -1326,7 +1343,7 @@ function walletForm(w) {
     if (!name) { toast('กรุณาใส่ชื่อกระเป๋าเงิน'); $('#wName').focus(); return; }
     const raw = $('#wInit').value.trim();
     const initial = raw.startsWith('-') ? -num(raw.slice(1)) : num(raw);
-    const out = { id: d.id || uid(), name, type: d.type, initial, excluded: $('#wExcl').checked };
+    const out = { id: d.id || uid(), name, type: d.type, initial, excluded: !isCredit(d) && $('#wExcl').checked };
     if (d.icon) out.icon = d.icon;
     saveWallet(out); render(); walletSheet('edit');
     toast(isNew ? 'เพิ่มกระเป๋าเงินแล้ว' : 'บันทึกแล้ว');
@@ -1359,7 +1376,7 @@ function accountTop() {
     </div>
     <div class="section-title">กระเป๋าเงิน</div>
     <div class="list">
-      ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
+      ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : isCredit(w) ? ' · ไม่นับในยอดเงิน' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
       <button class="item add-row" data-action="add-wallet"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มกระเป๋าเงิน</div></div></button>
     </div>
     <div class="section-title">การจ่ายบิล</div>
