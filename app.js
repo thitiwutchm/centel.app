@@ -70,6 +70,7 @@ function save() {
     toast('บันทึกข้อมูลไม่สำเร็จ');
   }
   updateBadge();
+  calFeedChanged(); // signed in with a calendar subscription: send the new calendar (calfeed.js)
 }
 
 /* ---------- Date helpers ---------- */
@@ -407,8 +408,7 @@ function renderSettings() {
       </div>
     </div>
     <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม)</p>
-    <button class="btn" data-action="ics">📆 เพิ่มการเตือนลงปฏิทิน iPhone</button>
-    <p class="hint">สร้างไฟล์ปฏิทิน (.ics) ของบิลทั้งหมด พร้อมเสียงเตือนก่อนวันครบกำหนดตามที่ตั้งไว้ เปิดไฟล์แล้วเลือก "เพิ่มทั้งหมด" ในแอปปฏิทิน · หากแก้ไขบิล ให้ลบปฏิทินเดิมแล้วสร้างใหม่</p>
+    ${calFeedSettings()}
 
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
@@ -1036,37 +1036,55 @@ function icsFold(line) {
   return out.join('\r\n ');
 }
 
-function buildIcs() {
+// One VEVENT per bill (recurring bills use RRULE). Months already paid, or with this
+// month's own amount, get an override of that occurrence: ✅ and no alarm once paid.
+// `feed` is the subscribed calendar (calfeed.js), which iPhone re-fetches by itself.
+function buildIcs({ feed = false } = {}) {
   const remind = state.settings.remindDays;
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//centel.app//Bill Planner//TH', 'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH', 'X-WR-CALNAME:วางแผนจ่ายบิล'];
+    'METHOD:PUBLISH', `X-WR-CALNAME:${feed ? 'บิลที่ต้องจ่าย · centel' : 'วางแผนจ่ายบิล'}`];
+  if (feed) lines.push('X-WR-TIMEZONE:Asia/Bangkok', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H');
   const alarm = (trigger, desc) => ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEscape(desc)}`, `TRIGGER:${trigger}`, 'END:VALARM'];
+  const event = (b, start, { rrule, recurrenceId, amount, paid }) => {
+    const c = cat(b);
+    const summary = `${paid ? '✅' : c.icon} จ่าย${b.name}${amount ? ` ${baht(amount)}` : ''}`;
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    const ev = ['BEGIN:VEVENT', `UID:${b.id}@centel.app`, `DTSTAMP:${stamp}`];
+    if (recurrenceId) ev.push(`RECURRENCE-ID;VALUE=DATE:${icsDate(recurrenceId)}`);
+    if (rrule) ev.push(`RRULE:${rrule}`);
+    ev.push(`DTSTART;VALUE=DATE:${icsDate(start)}`, `DTEND;VALUE=DATE:${icsDate(end)}`,
+      `SUMMARY:${icsEscape(summary)}`, `DESCRIPTION:${icsEscape([paid ? 'จ่ายแล้ว' : '', c.label, b.note].filter(Boolean).join('\n'))}`,
+      'TRANSP:TRANSPARENT');
+    if (!paid) {
+      // All-day events start at midnight; fire reminders at 09:00.
+      if (remind > 0) ev.push(...alarm(`-P${remind - 1}DT15H`, `อีก ${remind} วันครบกำหนด ${b.name}`));
+      ev.push(...alarm('PT9H', `วันนี้ครบกำหนด ${b.name}`));
+    }
+    ev.push('END:VEVENT');
+    return ev;
+  };
   let count = 0;
   state.bills.forEach((b) => {
     if (b.autopay) return;
-    const c = cat(b);
-    const summary = `${c.icon} จ่าย${b.name}${b.amount ? ` ${baht(b.amount)}` : ''}`;
-    let start;
-    const ev = ['BEGIN:VEVENT', `UID:${b.id}@centel.app`, `DTSTAMP:${stamp}`];
     if (b.type === 'once') {
-      start = dueDateFor(b, b.onceDate.slice(0, 7));
+      const ym = b.onceDate.slice(0, 7);
+      const rec = record(ym, b.id);
+      lines.push(...event(b, dueDateFor(b, ym), { amount: rec.amount != null ? rec.amount : b.amount, paid: !!rec.paid }));
     } else {
-      start = dueDateFor(b, b.startMonth);
       const rule = b.dueDay > 28
         ? `FREQ=MONTHLY;BYMONTHDAY=${Array.from({ length: b.dueDay - 27 }, (_, i) => 28 + i).join(',')};BYSETPOS=-1`
         : `FREQ=MONTHLY;BYMONTHDAY=${b.dueDay}`;
-      ev.push(`RRULE:${rule}${b.type === 'installment' ? `;COUNT=${b.months}` : ''}`);
+      lines.push(...event(b, dueDateFor(b, b.startMonth), {
+        rrule: `${rule}${b.type === 'installment' ? `;COUNT=${b.months}` : ''}`, amount: b.amount,
+      }));
+      Object.keys(state.records).sort().forEach((ym) => {
+        const rec = record(ym, b.id);
+        if (!billAppliesTo(b, ym) || (!rec.paid && rec.amount == null)) return;
+        const due = dueDateFor(b, ym);
+        lines.push(...event(b, due, { recurrenceId: due, amount: rec.amount != null ? rec.amount : b.amount, paid: !!rec.paid }));
+      });
     }
-    const end = new Date(start); end.setDate(end.getDate() + 1);
-    ev.push(`DTSTART;VALUE=DATE:${icsDate(start)}`, `DTEND;VALUE=DATE:${icsDate(end)}`,
-      `SUMMARY:${icsEscape(summary)}`, `DESCRIPTION:${icsEscape([c.label, b.note].filter(Boolean).join('\n'))}`,
-      'TRANSP:TRANSPARENT');
-    // All-day events start at midnight; fire reminders at 09:00.
-    if (remind > 0) ev.push(...alarm(`-P${remind - 1}DT15H`, `อีก ${remind} วันครบกำหนด ${b.name}`));
-    ev.push(...alarm('PT9H', `วันนี้ครบกำหนด ${b.name}`));
-    ev.push('END:VEVENT');
-    lines.push(...ev);
     count++;
   });
   lines.push('END:VCALENDAR');
@@ -1168,6 +1186,7 @@ document.addEventListener('click', (e) => {
     case 'export': exportData(); break;
     case 'import': $('#importFile').click(); break;
     case 'ics': exportIcs(); break;
+    case 'calfeed': calFeedSheet(); break;
     case 'gmail': gmailSheet(); break;
     case 'gmail-rule': billForm(null, { source: 'gmail' }); break;
     case 'gmail-auto': gmailAutoRun(false); break;
@@ -1195,7 +1214,7 @@ document.addEventListener('keydown', (e) => {
 
 // Re-render when returning to the app so "today" and statuses stay current.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) scheduleRefresh(); }
+  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); } }
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -1205,3 +1224,4 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 render();
 updateBadge();
 cloudStart();
+calFeedChanged();
