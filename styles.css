@@ -835,3 +835,76 @@ body::before {
 @media (prefers-color-scheme: dark) {
   .badge.label, .lab-tag, .lab-ico { color: #b9a8ff; background: #7a5af833; }
 }
+
+/* ---------- Schedule (repeating bills) ---------- */
+.sched-months { margin-bottom: 10px; }
+.sched-cal { padding: 10px 6px 12px; }
+.sc-day {
+  aspect-ratio: 1; border: 0; background: none; padding: 0; margin: 1px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-radius: 50%; font: inherit; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; position: relative;
+}
+.sc-day.blank { visibility: hidden; }
+.sc-day.today .n { color: var(--accent); font-weight: 800; }
+.sc-day .n { line-height: 1.1; }
+.sc-day.has { border: 1.5px dashed color-mix(in srgb, var(--muted) 70%, transparent); background: var(--c-fill); }
+.sc-day .amt { font-size: 10.5px; font-weight: 700; color: var(--bad); line-height: 1.15; }
+.sc-day i { width: 4px; height: 4px; border-radius: 2px; background: var(--accent); margin-top: 1px; }
+.sc-day.soon i { background: var(--warn); }
+.sc-day.over i { background: var(--bad); }
+.sc-day.paid .amt { color: var(--ok); }
+.sc-day.paid i { background: var(--ok); }
+.sc-day.sel { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.sched-head b { color: var(--on-bg); font-size: 16px; font-variant-numeric: tabular-nums; }
+.sched-item .sub.note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sched-item .amt { color: var(--c-text); }
+.sched-spacer { height: 64px; }
+.sched-fab {
+  position: fixed; z-index: 11; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--safe-bottom) + var(--tabbar-h) + var(--tabbar-gap) + 14px);
+  display: flex; align-items: center; gap: 8px; height: 50px; padding: 0 22px; border-radius: 25px;
+  font: inherit; font-size: 16px; font-weight: 700; white-space: nowrap;
+  background: var(--ink); color: var(--ink-text); border: 0.5px solid var(--glass-edge);
+  box-shadow: 0 10px 28px rgba(4, 22, 48, .35);
+}
+.sched-fab .svg-i { width: 20px; height: 20px; }
+.sched-fab:active { transform: translateX(-50%) scale(.95); }
+.hero-sum { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 12px; color: var(--c-muted); font-size: 14px; }
+.hero-sum b { color: var(--c-text); font-size: 18px; font-variant-numeric: tabular-nums; }
+
+/* Bill detail: big icon + amount, then grouped value pickers (native control laid over each row) */
+.detail-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.detail-bar .round-btn.sm { display: grid; place-items: center; font-size: 16px; }
+.detail-bar .round-btn.sm .svg-i { width: 19px; height: 19px; }
+.pill-btn { height: 36px; padding: 0 16px; border-radius: 18px; border: 0; background: var(--c-fill); color: var(--c-text); font: inherit; font-weight: 600; }
+.hero-ico { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-size: 38px; margin: 0 auto 8px; }
+.bd-hero { text-align: center; margin: 0 0 18px; }
+.bd-name { font-size: 17px; font-weight: 700; color: var(--c-text); }
+.bd-cat { font-size: 13px; color: var(--c-muted); opacity: .8; }
+.bd-amt { font-size: 38px; font-weight: 800; letter-spacing: -.5px; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 4px; }
+.bd-next { margin-top: 8px; border: 0; background: var(--c-accent-soft); color: var(--c-accent); font: inherit; font-size: 14px; font-weight: 600; padding: 6px 14px; border-radius: 16px; }
+.prow { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 0 16px; border-bottom: 0.5px solid var(--line); }
+.prow:last-child { border-bottom: 0; }
+.prow .pl { color: var(--c-muted); flex: 0 0 auto; }
+.prow .pv { display: flex; align-items: center; gap: 6px; font-weight: 600; text-align: right; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.prow .pv .svg-i.xs { width: 15px; height: 15px; }
+.prow .ud { width: 14px; height: 14px; color: var(--c-muted); flex: 0 0 auto; }
+.prow .wico { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-size: 13px; overflow: hidden; flex: 0 0 auto; }
+.prow .wico img { width: 100%; height: 100%; object-fit: cover; }
+.prow select, .prow input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; -webkit-appearance: none; appearance: none; }
+.note-card textarea { display: block; width: 100%; min-height: 84px; border: 0; background: none; resize: none; padding: 14px 16px; font: inherit; color: var(--c-text); outline: none; }
+
+/* Bill form: hero with icon, name and amount; settings as one grouped list */
+.bf-hero { text-align: center; margin: 2px 0 14px; }
+.bf-name { display: block; width: 100%; border: 0; background: none; text-align: center; font: inherit; font-size: 20px; font-weight: 700; color: var(--c-text); outline: none; padding: 4px; }
+.bf-amt { display: flex; justify-content: center; align-items: baseline; gap: 2px; font-size: 34px; font-weight: 800; color: var(--c-text); }
+.bf-amt input { width: 2ch; min-width: 1.4ch; border: 0; background: none; font: inherit; color: inherit; text-align: left; outline: none; padding: 0; font-variant-numeric: tabular-nums; }
+.bf-amt input::placeholder, .bf-name::placeholder { color: var(--c-muted); opacity: .6; }
+.form.rows .field > label:first-child { color: var(--c-muted); }
+.form.rows .field > label small { display: block; font-size: 12px; color: var(--c-muted); opacity: .8; }
+.form.rows .field select, .form.rows .field input:not([type="checkbox"]) { color: var(--c-text); font-weight: 600; }
+.form.rows .field select {
+  padding-right: 20px; background: no-repeat right center / 14px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a96a6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 9l4-4 4 4M8 15l4 4 4-4'/%3E%3C/svg%3E");
+}
+.form.rows #schedFields .field { border-bottom: 0.5px solid var(--line); }
+.field.ro .val { flex: 1; text-align: right; font-weight: 600; color: var(--c-muted); }
