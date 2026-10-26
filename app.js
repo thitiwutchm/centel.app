@@ -523,7 +523,7 @@ function applyPeaRows(billId, rows) {
   return n;
 }
 
-function billForm(b) {
+function billForm(b, opts = {}) {
   const isNew = !b;
   b = b || {
     category: 'credit', type: 'monthly', dueDay: 25, amount: '', variable: true,
@@ -532,8 +532,13 @@ function billForm(b) {
   const draft = { ...b };
   // Auto Sync bills (PEA electricity, Gmail AutoSync e-bills) are monthly bills whose
   // amounts are pulled in automatically; the sheet shows their source settings instead.
-  draft.auto = !!(b.pea || b.gmail);
-  draft.source = b.gmail ? 'gmail' : 'pea';
+  draft.auto = !!(b.pea || b.gmail || opts.source);
+  draft.source = b.gmail || opts.source === 'gmail' ? 'gmail' : 'pea';
+  if (draft.source === 'gmail') {
+    draft.gmail = { sender: '', account: '', day: 1, ...(b.gmail || {}) };
+    if (isNew) draft.category = 'other';
+    gmailPrepare().catch(() => {});
+  }
 
   const chips = Object.entries(CATEGORIES).map(([k, c]) =>
     `<button type="button" class="chip ${draft.category === k ? 'on' : ''}" data-cat="${k}">${c.icon} ${c.label}</button>`).join('');
@@ -607,6 +612,14 @@ function billForm(b) {
     if ($('#fMonths')) draft.months = parseInt($('#fMonths').value, 10) || 1;
     if ($('#fOnce')) draft.onceDate = $('#fOnce').value;
     if ($('#fPeaCa')) draft.pea = { ca: $('#fPeaCa').value.trim(), peano: $('#fPeaNo') ? $('#fPeaNo').value.trim() : '' };
+    if ($('#fGSender')) {
+      draft.gmail = {
+        ...draft.gmail,
+        sender: $('#fGSender').value.trim().toLowerCase().replace(/^from:/, ''),
+        account: $('#fGAcc').value.replace(/[\s-]/g, ''),
+        day: Number($('#fGDay').value),
+      };
+    }
   };
 
   // Rows last fetched from PEA, written into records when the bill is saved.
@@ -667,28 +680,30 @@ function billForm(b) {
   // Auto Sync: pick the source, then show only that source's settings.
   const renderAuto = () => {
     const box = $('#autoFields');
-    const gmailOnly = draft.auto && draft.source === 'gmail' && isNew;
-    $('#manualTop').hidden = draft.auto;
+    const gm = draft.auto && draft.source === 'gmail';
+    $('#manualTop').hidden = draft.auto && !gm;
     $('#amountRow').hidden = draft.auto;
     $('#variableRow').hidden = draft.auto;
     $('#variableHint').hidden = draft.auto;
-    $('#nameForm').hidden = gmailOnly;
-    $('#schedFields').hidden = gmailOnly;
-    $('#extraForm').hidden = gmailOnly;
-    $('#saveBill').style.visibility = gmailOnly ? 'hidden' : '';
-    $('#fName').placeholder = draft.auto && draft.source === 'pea' ? 'ชื่อบ้าน เช่น บ้านหลังใหญ่' : 'เช่น KBank, กฟน.';
+    $('#fName').placeholder = !draft.auto ? 'เช่น KBank, กฟน.' : gm ? 'เช่น ค่าโทรศัพท์ True, บัตร KTC' : 'ชื่อบ้าน เช่น บ้านหลังใหญ่';
     if (!draft.auto) { box.innerHTML = ''; renderPea(); return; }
     const src = (k, label) => `<button type="button" class="chip ${draft.source === k ? 'on' : ''}" data-source="${k}">${label}</button>`;
     // An existing bill keeps its source; switching would drop its link.
     const sources = isNew ? `<div class="chips" id="srcChips">${src('pea', '⚡ ค่าไฟ (PEA)')}${src('gmail', '📧 Gmail AutoSync')}</div>` : '';
-    let html = `${sources}<p class="hint">Auto Sync ดึงยอดบิลแต่ละเดือนให้อัตโนมัติจากผู้ให้บริการ บิลที่ได้จะแสดงในรายการบิลเหมือนบิลปกติ</p>`;
-    if (draft.source === 'gmail') {
-      const g = b && b.gmail;
+    let html = `${sources}<p class="hint">Auto Sync ดึงยอดบิลแต่ละเดือนให้อัตโนมัติ บิลที่ได้จะแสดงในรายการบิลเหมือนบิลปกติ</p>`;
+    if (gm) {
+      const g = draft.gmail || {};
+      const days = Array.from({ length: 28 }, (_, i) => i + 1)
+        .map((d) => `<option value="${d}" ${Number(g.day) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
       html += `
-        <div class="section-title">เชื่อมกับ Gmail</div>
-        ${g ? `<div class="form"><div class="kv"><span>ผู้ให้บริการ</span><span>${esc((gmailProviderList().find((p) => p.key === g.provider) || { name: g.provider }).name)}${g.account ? ' ' + esc(gmailShortAccount(g.account)) : ''}</span></div></div>` : ''}
-        <button class="btn" id="autoGmail" type="button">📧 Gmail AutoSync</button>
-        <p class="hint">ค้นหาอีเมลบิลจาก AIS, True, dtac, 3BB, NT และผู้ส่งที่เพิ่มเอง แล้วสร้างบิลและเติมยอดกับวันครบกำหนดให้อัตโนมัติ เพิ่มผู้ส่ง เลือกหมวดหมู่ และตัดการเชื่อมได้ในหน้าถัดไป</p>`;
+        <div class="section-title">กฎดึงบิลจาก Gmail</div>
+        ${isNew ? `<div class="chips" id="gPresets">${GMAIL_PROVIDERS.map((p) => `<button type="button" class="chip" data-preset="${p.key}">${esc(p.name)}</button>`).join('')}</div>` : ''}
+        <div class="form">
+          <div class="field"><label for="fGSender">อีเมลผู้ส่ง</label><input id="fGSender" type="email" placeholder="เช่น ebill@ktc.co.th" value="${esc(g.sender || '')}" autocomplete="off" autocapitalize="off"></div>
+          <div class="field"><label for="fGAcc">เบอร์/เลขบัญชี</label><input id="fGAcc" inputmode="numeric" placeholder="ไม่บังคับ" value="${esc(g.account || '')}" autocomplete="off"></div>
+          <div class="field"><label for="fGDay">ดึงทุกเดือน</label><select id="fGDay"><option value="0" ${!Number(g.day) ? 'selected' : ''}>ไม่ดึงเอง</option>${days}</select></div>
+        </div>
+        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · เลือกหมวดหมู่ด้านล่าง</p>`;
     }
     box.innerHTML = html;
     const chipsEl = $('#srcChips');
@@ -697,11 +712,20 @@ function billForm(b) {
       if (!c) return;
       sync();
       draft.source = c.dataset.source;
+      if (draft.source === 'gmail' && !draft.gmail) { draft.gmail = { sender: '', account: '', day: 1 }; gmailPrepare().catch(() => {}); }
       renderAuto();
       renderSched();
     });
-    const gBtn = $('#autoGmail');
-    if (gBtn) gBtn.addEventListener('click', () => gmailSheet());
+    const presets = $('#gPresets');
+    if (presets) presets.addEventListener('click', (e) => {
+      const c = e.target.closest('[data-preset]');
+      if (!c) return;
+      const p = GMAIL_PROVIDERS.find((x) => x.key === c.dataset.preset);
+      $('#fGSender').value = p.domains.join(' ');
+      if (!$('#fName').value.trim()) $('#fName').value = `${CATEGORIES[p.category].label} ${p.name}`;
+      draft.category = p.category;
+      document.querySelectorAll('#catChips .chip').forEach((x) => x.classList.toggle('on', x.dataset.cat === p.category));
+    });
     renderPea();
   };
   renderAuto();
@@ -730,7 +754,7 @@ function billForm(b) {
     if (!draft.name) { toast('กรุณาใส่ชื่อบิล'); $('#fName').focus(); return; }
     if (draft.auto) {
       if (draft.source === 'pea' && !(draft.pea && draft.pea.ca && draft.pea.peano)) { toast('กรอกหมายเลขผู้ใช้ไฟฟ้าและรหัสเครื่องวัดก่อน'); return; }
-      if (draft.source === 'gmail' && !(b && b.gmail)) { toast('กด Gmail AutoSync เพื่อดึงบิล'); return; }
+      if (draft.source === 'gmail' && !gmailSendersValid(draft.gmail.sender)) { toast('ใส่อีเมลหรือโดเมนผู้ส่งให้ถูกต้อง'); $('#fGSender').focus(); return; }
       draft.type = 'monthly';
       draft.variable = true;
       if (draft.source === 'pea') draft.category = 'electric';
@@ -752,7 +776,7 @@ function billForm(b) {
       if (draft.type === 'installment') out.months = Math.max(1, draft.months || 1);
     }
     if (draft.auto && draft.source === 'pea') out.pea = { ca: draft.pea.ca, peano: draft.pea.peano };
-    if (draft.auto && draft.source === 'gmail') out.gmail = { ...b.gmail };
+    if (draft.auto && draft.source === 'gmail') out.gmail = { ...draft.gmail };
     const i = state.bills.findIndex((x) => x.id === out.id);
     if (i >= 0) state.bills[i] = out; else state.bills.push(out);
     let filled = 0;
@@ -763,6 +787,8 @@ function billForm(b) {
     render();
     if (isNew) popIn();
     toast(filled ? `บันทึกและเติมยอดค่าไฟ ${filled} เดือน` : (isNew ? 'เพิ่มบิลแล้ว' : 'บันทึกแล้ว'));
+    // A new Gmail rule pulls its bills right away (this tap also lets Google's sign-in open).
+    if (isNew && out.gmail) gmailRunRules([out], false);
   });
   const del = $('#delBill');
   if (del) {
@@ -1143,6 +1169,7 @@ document.addEventListener('click', (e) => {
     case 'import': $('#importFile').click(); break;
     case 'ics': exportIcs(); break;
     case 'gmail': gmailSheet(); break;
+    case 'gmail-rule': billForm(null, { source: 'gmail' }); break;
     case 'gmail-auto': gmailAutoRun(false); break;
     case 'reset':
       if (isCloud()) {
