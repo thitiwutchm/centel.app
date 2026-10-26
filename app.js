@@ -216,7 +216,7 @@ function setTab(tab) {
 function occItem(o) {
   const b = o.bill;
   const dueTxt = `ครบกำหนด ${thShortDate(o.due)}`;
-  const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
+  const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', record(o.ym, b.id).file ? '📎' : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
   const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : 'ระบุยอด'}</span>` : baht(o.amount);
   return `
     <div class="item ${o.paid ? 'paid' : ''}" data-occ="${b.id}" data-ym="${o.ym}" role="button" tabindex="0">
@@ -709,7 +709,11 @@ function billForm(b) {
     del.addEventListener('click', () => {
       if (!confirm(`ลบ "${b.name}" และประวัติการจ่ายทั้งหมดของบิลนี้?`)) return;
       state.bills = state.bills.filter((x) => x.id !== b.id);
-      Object.keys(state.records).forEach((ym) => setRecord(ym, b.id, { amount: undefined, paid: undefined, paidAt: undefined }));
+      Object.keys(state.records).forEach((ym) => {
+        if (record(ym, b.id).file) billFileDel(b.id, ym);
+        delete state.records[ym][b.id];
+        if (!Object.keys(state.records[ym]).length) delete state.records[ym];
+      });
       // Payments already made stay in the wallets as ordinary expenses.
       money.txns.forEach((t) => { if (t.billId === b.id) { delete t.billId; delete t.billYm; } });
       save();
@@ -767,6 +771,14 @@ function occurrenceSheet(id, ym) {
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
       : `${peaNeeded ? '' : '<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button>'}<button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
+    <div class="section-title">ใบแจ้งหนี้</div>
+    <div class="list">
+      ${rec.file
+        ? `<button class="item" id="oFile"><div class="ico" style="background:var(--accent-soft)">📄</div><div class="main"><div class="name">${esc(rec.file)}</div><div class="sub">แตะเพื่อเปิดดู</div></div></button>
+           <button class="item add-row" id="oFileDel"><div class="main"><div class="name" style="color:var(--bad)">ลบไฟล์แนบ</div></div></button>`
+        : `<button class="item add-row" id="oFileAdd"><span class="plus">📎</span><div class="main"><div class="name">แนบ PDF หรือรูปใบแจ้งหนี้</div></div></button>`}
+    </div>
+    <input type="file" id="oFileInput" accept="application/pdf,image/*" hidden>
     ${history.length ? `<div class="section-title">ย้อนหลัง</div><div class="form history">${history.join('')}</div>` : ''}
   `);
 
@@ -795,6 +807,27 @@ function occurrenceSheet(id, ym) {
     const tx = billTxn(id, ym);
     if (tx) { tx.amount = amount != null ? amount : (b.amount || 0); saveMoney(); }
     save(); closeSheet(); render(); toast('บันทึกยอดแล้ว');
+  });
+  const oFile = $('#oFile');
+  if (oFile) oFile.addEventListener('click', () => billFileViewer(id, ym));
+  const oFileDel = $('#oFileDel');
+  if (oFileDel) oFileDel.addEventListener('click', async () => {
+    if (!confirm('ลบไฟล์ใบแจ้งหนี้ของเดือนนี้?')) return;
+    await billFileDel(id, ym);
+    setRecord(ym, id, { file: undefined });
+    save(); occurrenceSheet(id, ym);
+  });
+  const oFileAdd = $('#oFileAdd');
+  if (oFileAdd) oFileAdd.addEventListener('click', () => $('#oFileInput').click());
+  $('#oFileInput').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    try {
+      await billFilePut(id, ym, f, f.name);
+      save(); render(); occurrenceSheet(id, ym); toast('แนบไฟล์แล้ว');
+    } catch (err) {
+      toast(err.message || 'แนบไฟล์ไม่สำเร็จ');
+    }
   });
   const oPea = $('#oPea');
   if (oPea) oPea.addEventListener('click', async () => {
@@ -1049,6 +1082,7 @@ document.addEventListener('click', (e) => {
     case 'reset':
       if (confirm('ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) {
         state = defaultState(); money = defaultMoney(); ui.wallet = 'total';
+        billFilesClear();
         save(); saveMoney(); render(); toast('ลบข้อมูลแล้ว');
       }
       break;
