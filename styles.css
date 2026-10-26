@@ -548,3 +548,5 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .card.couple .item .badge { margin: 0 6px 0 0; }
 .invite-code { font-size: 34px; font-weight: 700; letter-spacing: 6px; font-variant-numeric: tabular-nums; margin: 6px 0; }
 .halves > .btn { flex: 1; margin: 0; }
+
+.hint.pea-err { color: var(--bad); }

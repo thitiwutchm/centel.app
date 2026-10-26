@@ -4,28 +4,47 @@
 }
 
 :{$PORT:8080} {
-	root * /srv
 	encode gzip zstd
 
-	# Always revalidate the shell and service worker so installed apps pick up updates.
-	@nocache path */ */index.html */sw.js */manifest.webmanifest
-	header @nocache Cache-Control "no-cache"
-	@manifest path */manifest.webmanifest
-	header @manifest Content-Type application/manifest+json
-	@static path /icons/* /themeb/fonts/*
-	header @static Cache-Control "public, max-age=604800"
-
-	header {
-		X-Content-Type-Options nosniff
-		Referrer-Policy strict-origin-when-cross-origin
+	# Proxy the PEA bill-history lookup so the browser can call it same-origin
+	# (www.pea.co.th sends no CORS headers). The page POSTs {ca, peano, lang}.
+	@peabill path /api/pea-bill
+	handle @peabill {
+		rewrite * /api/bill-history
+		reverse_proxy https://www.pea.co.th {
+			header_up Host www.pea.co.th
+			# CloudFront returns 500 when it sees a bogus X-Forwarded-Host.
+			header_up -X-Forwarded-Host
+			# PEA only returns bill data when the request looks like it came from
+			# their own page; the browser's centel.app Origin/Referer gets "not found".
+			header_up Origin https://www.pea.co.th
+			header_up Referer https://www.pea.co.th/our-services/bill-history
+		}
 	}
 
-	# The API runs as its own Railway service; reach it over private networking.
-	handle /api/* {
+	# Everything else under /api is the centel API, its own Railway service on the private network.
+	# Named matchers keep their written order, so the PEA route above still wins for /api/pea-bill.
+	@api path /api/*
+	handle @api {
 		reverse_proxy {$API_UPSTREAM:api.railway.internal:8080}
 	}
 
 	handle {
+		root * /srv
+
+		# Always revalidate the shell and service worker so installed apps pick up updates.
+		@nocache path */ */index.html */sw.js */manifest.webmanifest
+		header @nocache Cache-Control "no-cache"
+		@manifest path */manifest.webmanifest
+		header @manifest Content-Type application/manifest+json
+		@static path /icons/* /themeb/fonts/*
+		header @static Cache-Control "public, max-age=604800"
+
+		header {
+			X-Content-Type-Options nosniff
+			Referrer-Policy strict-origin-when-cross-origin
+		}
+
 		file_server {
 			hide Caddyfile Dockerfile railway.json .dockerignore server
 		}
