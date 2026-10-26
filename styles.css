@@ -608,7 +608,13 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 
 /* ---------- Account ---------- */
 .acct { display: flex; align-items: center; gap: 14px; }
-.avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 26px; }
+.avatar { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 26px; }
+.card.acct.tap { width: 100%; border: 0; text-align: left; color: inherit; font: inherit; }
+.card.acct.tap:active { background: var(--accent-soft); }
+.acct .acct-main { flex: 1; min-width: 0; }
+.acct .acct-main .small { overflow: hidden; text-overflow: ellipsis; }
+.p-avatar-in { background: var(--accent-soft); font-weight: 600; }
+.gphoto { margin: -4px 2px 14px; }
 .halves + .section-title { margin-top: 22px; }
 .field[hidden] { display: none; }
 
