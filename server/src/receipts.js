@@ -7,8 +7,8 @@ export const aiEnabled = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROP
 
 // Keys match the expense categories in money.js.
 export const EXPENSE_CATEGORIES = [
-  'food', 'personal', 'shopping', 'transport', 'utility', 'creditpay', 'loan', 'home', 'health',
-  'entertainment', 'family', 'education', 'beauty', 'insurance', 'gift', 'travel', 'other_exp',
+  'apparel', 'food', 'coffee', 'hangout', 'utility', 'subscription', 'transport', 'home', 'health',
+  'beauty', 'travel', 'fitness', 'pets', 'gift', 'gadget', 'rent', 'baby', 'other_exp',
 ];
 
 const nullable = (schema) => ({ anyOf: [schema, { type: 'null' }] });
@@ -35,7 +35,7 @@ Extract the fields in the schema from the image only; do not invent values.
 - Thai dates often use the Buddhist Era (e.g. 2569 = 2026) and short Thai month names; convert to a Gregorian YYYY-MM-DD.
 - amount is the final total actually paid (after discounts, including VAT and service charge).
 - merchant is the shop name, or for a transfer slip the receiving person or company.
-- category: pick the closest key only when the purchase is clear. For a bank transfer slip that does not say what the money was for, set category to null and purpose_known to false.
+- category: pick the closest key only when the purchase is clear. Keys: apparel (clothes, shoes, bags, accessories), food (meals, restaurants, groceries, convenience stores), coffee (coffee shops, bubble tea, drinks), hangout (bars, nightlife, movies, going out), utility (electricity, water, phone, internet), subscription (Netflix, Spotify, apps, memberships), transport (fuel, taxi, Grab, BTS/MRT, parking, tolls), home (furniture, household goods, repairs), health (hospital, clinic, pharmacy), beauty (salon, cosmetics, toiletries), travel (hotels, flights, tours), fitness (gym, sports gear), pets, gift (gifts, donations, merit-making), gadget (phones, computers, electronics), rent (rent, insurance, loan installments), baby (baby and child items), other_exp. For a bank transfer slip that does not say what the money was for, set category to null and purpose_known to false.
 - Use confidence "low" when the image is blurry, cropped, or a field is unreadable, and set unreadable fields to null.`;
 
 const client = aiEnabled ? new Anthropic() : null;

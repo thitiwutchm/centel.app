@@ -67,7 +67,7 @@ async function api(method, path, body) {
 
 function mapExpense(e, me) {
   const base = {
-    id: e.id, ownerId: e.ownerId, type: e.type, date: e.date, amount: e.amount, category: e.category,
+    id: e.id, ownerId: e.ownerId, type: e.type, date: e.date, amount: e.amount, category: e.category && newCat(e.category),
     note: e.note || '', merchant: e.merchant || '', walletId: e.walletId, toWalletId: e.toWalletId,
     reviewNeeded: e.reviewNeeded, receiptKey: e.receiptKey, slipRef: e.slipRef, billId: e.billId, billYm: e.billYm,
     scope: e.scope, status: e.status,
@@ -116,7 +116,7 @@ function applyBootstrap(b) {
   money = {
     wallets: b.wallets.length ? b.wallets : [{ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0 }],
     txns,
-    budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: x.category, amount: x.amount, walletId: x.walletId })),
+    budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId })),
     prefs,
   };
   if (ui.wallet !== 'total' && !walletById(ui.wallet)) ui.wallet = 'total';
