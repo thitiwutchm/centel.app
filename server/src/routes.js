@@ -400,7 +400,7 @@ router.put('/prefs', wrap(async (req, res) => {
   const data = req.body && typeof req.body.data === 'object' ? req.body.data : {};
   await asUser(uid(req), (db) => db.query(
     'insert into prefs (user_id, data) values (app_uid(), $1) on conflict (user_id) do update set data = excluded.data',
-    [JSON.stringify(data).length < 10000 ? data : {}]));
+    [JSON.stringify(data).length < 100000 ? data : {}]));
   res.json({ ok: true });
 }));
 
@@ -459,9 +459,14 @@ router.post('/receipts', rateLimit(60, 60 * 60000), wrap(async (req, res) => {
   // The person's label names, so the AI can suggest ones that fit this slip.
   const labelNames = Array.isArray(req.body.labels)
     ? [...new Set(req.body.labels.map((x) => str(String(x).trim(), 60)).filter(Boolean))].slice(0, 50) : [];
+  // The person's own expense categories ({ id, name, parent }), so the AI picks from their list.
+  const categories = Array.isArray(req.body.categories)
+    ? req.body.categories.slice(0, 300).map((c) => c && {
+      id: str(c.id, 40), name: str(String(c.name || '').trim(), 40), parent: str(String(c.parent || '').trim(), 40) || undefined,
+    }).filter((c, i, all) => c && /^[A-Za-z0-9_-]+$/.test(c.id || '') && c.name && all.findIndex((x) => x && x.id === c.id) === i) : [];
   let analysis;
   try {
-    analysis = await analyzeReceipt(data, mediaType, labelNames);
+    analysis = await analyzeReceipt(data, mediaType, labelNames, categories);
   } catch (e) {
     console.error('receipt analysis failed', e.status || '', e.message);
     analysis = { status: 'failed', result: null };
