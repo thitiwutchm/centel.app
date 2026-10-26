@@ -4,6 +4,7 @@ import { pool, asUser } from './db.js';
 import { hashPassword, verifyPassword, createSession, destroySession, requireUser, rateLimit } from './auth.js';
 import { analyzeReceipt, aiEnabled, RECEIPT_MODEL } from './receipts.js';
 import { putReceipt, receiptUrl, storageEnabled } from './storage.js';
+import { verifyGoogleIdToken, googleClientId } from './google.js';
 
 const router = express.Router();
 // Compared against when an email is unknown, so login takes the same time either way.
@@ -39,9 +40,33 @@ router.post('/auth/login', rateLimit(20, 15 * 60000), wrap(async (req, res) => {
   const r = await pool.query('select id, password_hash from users where email = $1', [email]);
   const u = r.rows[0];
   // Hash even when the user is missing so timing does not reveal which emails exist.
-  const ok = await verifyPassword(String(req.body.password || ''), u ? u.password_hash : await DUMMY_HASH);
-  if (!u || !ok) throw bad('bad_credentials', 401);
+  // Google-only accounts have no password and also get the dummy comparison.
+  const ok = await verifyPassword(String(req.body.password || ''), u?.password_hash || await DUMMY_HASH);
+  if (!u?.password_hash || !ok) throw bad('bad_credentials', 401);
   await createSession(res, u.id);
+  res.json({ ok: true });
+}));
+
+// Sign in with Google: the browser gets an ID token from Google Identity Services
+// and we verify it here. A first sign-in creates the account, or links it to an
+// existing email/password account with the same (Google-verified) email.
+router.post('/auth/google', rateLimit(20, 15 * 60000), wrap(async (req, res) => {
+  if (!googleClientId()) throw bad('google_disabled', 503);
+  const g = await verifyGoogleIdToken(req.body.credential);
+  if (!g) throw bad('bad_google_token', 401);
+  let r = await pool.query('select id from users where google_sub = $1', [g.sub]);
+  if (!r.rows[0]) {
+    const email = String(g.email || '').trim().toLowerCase();
+    if (!email || !(g.email_verified === true || g.email_verified === 'true')) throw bad('google_unverified', 403);
+    const name = String(g.name || g.given_name || email.split('@')[0]).trim().slice(0, 60);
+    r = await pool.query(
+      `insert into users (email, display_name, google_sub) values ($1, $2, $3)
+       on conflict (email) do update set google_sub = coalesce(users.google_sub, excluded.google_sub)
+       returning id, google_sub`, [email, name, g.sub]);
+    // The email already belongs to an account linked to a different Google account.
+    if (r.rows[0].google_sub !== g.sub) throw bad('google_mismatch', 409);
+  }
+  await createSession(res, r.rows[0].id);
   res.json({ ok: true });
 }));
 
@@ -49,6 +74,11 @@ router.post('/auth/logout', wrap(async (req, res) => {
   await destroySession(req, res);
   res.json({ ok: true });
 }));
+
+// Public runtime config for the app. The Google client id is not a secret.
+router.get('/config', (_req, res) => {
+  res.set('Cache-Control', 'no-store').json({ googleClientId: googleClientId() });
+});
 
 /* ---------- Everything below needs a session ---------- */
 
