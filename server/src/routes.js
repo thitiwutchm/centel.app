@@ -3,7 +3,7 @@ import express from 'express';
 import { pool, asUser } from './db.js';
 import { hashPassword, verifyPassword, createSession, destroySession, requireUser, rateLimit } from './auth.js';
 import { analyzeReceipt, aiEnabled, RECEIPT_MODEL } from './receipts.js';
-import { putReceipt, receiptUrl, storageEnabled } from './storage.js';
+import { putReceipt, receiptUrl, getObject, deleteObject, storageEnabled } from './storage.js';
 import { verifyGoogleIdToken, googleClientId } from './google.js';
 
 const router = express.Router();
@@ -111,6 +111,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const settlements = (await db.query('select * from settlements order by created_at')).rows;
     const budgets = (await db.query('select * from budgets order by created_at')).rows;
     const prefs = (await db.query('select data from prefs where user_id = app_uid()')).rows[0];
+    const planner = (await db.query('select data, rev from planner where user_id = app_uid()')).rows[0];
     let invite = null;
     if (couple && !partner) {
       // The pending invite code is read with the owner role: invites are not exposed to app_user.
@@ -138,6 +139,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
         id: b.id, ownerId: b.owner_id, scope: b.scope, category: b.category, amount: b.amount, walletId: b.wallet_id,
       })),
       prefs: prefs ? prefs.data : {},
+      planner: planner ? { data: planner.data, rev: planner.rev } : { data: null, rev: 0 },
       features: { ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
     };
   });
@@ -345,35 +347,115 @@ router.put('/prefs', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-/* ---------- Import local data on first sign-in ---------- */
+/* ---------- Bill planner (bills, monthly records, settings) ---------- */
+
+const PLANNER_MAX = 2 * 1024 * 1024;
+
+router.get('/planner', wrap(async (req, res) => {
+  const row = await asUser(uid(req), async (db) =>
+    (await db.query('select data, rev from planner where user_id = app_uid()')).rows[0]);
+  res.json(row ? { data: row.data, rev: row.rev } : { data: null, rev: 0 });
+}));
+
+// The device sends the rev it last saw. If another device saved since, nothing is
+// written and the current copy comes back so the device can merge and try again.
+router.put('/planner', wrap(async (req, res) => {
+  const d = req.body && req.body.data;
+  const baseRev = Number(req.body && req.body.baseRev) || 0;
+  if (!d || typeof d !== 'object' || !Array.isArray(d.bills) || typeof d.records !== 'object' || !d.records) throw bad('bad_planner');
+  const data = { bills: d.bills, records: d.records, settings: d.settings && typeof d.settings === 'object' ? d.settings : {} };
+  if (JSON.stringify(data).length > PLANNER_MAX) throw bad('too_large', 413);
+  const out = await asUser(uid(req), async (db) => {
+    const cur = (await db.query('select data, rev from planner where user_id = app_uid() for update')).rows[0];
+    const rev = cur ? cur.rev : 0;
+    if (rev !== baseRev) return { conflict: true, data: cur ? cur.data : null, rev };
+    await db.query(
+      `insert into planner (user_id, data, rev) values (app_uid(), $1, $2)
+       on conflict (user_id) do update set data = excluded.data, rev = excluded.rev, updated_at = now()`,
+      [data, rev + 1]);
+    return { rev: rev + 1 };
+  });
+  if (out.conflict) return res.status(409).json({ error: 'stale', data: out.data, rev: out.rev });
+  res.json(out);
+}));
+
+/* ---------- Bill files (invoice PDF/image per bill per month) ---------- */
+
+const BILL_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/gif'];
+const billFileKey = (req) => {
+  const { billId, ym } = req.params;
+  if (!/^[\w-]{1,60}$/.test(billId) || !/^\d{4}-\d{2}$/.test(ym)) throw bad('bad_request');
+  return `${uid(req)}/bills/${billId}/${ym}`;
+};
+
+router.put('/bill-files/:billId/:ym', rateLimit(120, 60 * 60000),
+  express.raw({ type: () => true, limit: '11mb' }), wrap(async (req, res) => {
+    const key = billFileKey(req);
+    const type = String(req.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!BILL_FILE_TYPES.includes(type) || !Buffer.isBuffer(req.body) || !req.body.length) throw bad('bad_file');
+    await putReceipt(key, req.body, type);
+    res.json({ ok: true });
+  }));
+
+router.get('/bill-files/:billId/:ym', wrap(async (req, res) => {
+  const obj = await getObject(billFileKey(req));
+  if (!obj) throw bad('not_found', 404);
+  res.set({ 'Content-Type': obj.ContentType || 'application/octet-stream', 'Cache-Control': 'private, no-store' });
+  if (obj.ContentLength) res.set('Content-Length', String(obj.ContentLength));
+  obj.Body.pipe(res);
+}));
+
+router.delete('/bill-files/:billId/:ym', wrap(async (req, res) => {
+  await deleteObject(billFileKey(req));
+  res.json({ ok: true });
+}));
+
+/* ---------- Import a device's local data into the account ---------- */
+
+// Imported rows get an id derived from the account and the device's own id, so
+// importing the same device twice (or after a retry) never counts anything twice.
+const importId = (user, localId) => {
+  const h = crypto.createHash('sha256').update(`${user}:${localId}`).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+};
 
 router.post('/import', wrap(async (req, res) => {
   const { wallets = [], txns = [], budgets = [] } = req.body || {};
   if (wallets.length > 200 || txns.length > 20000 || budgets.length > 200) throw bad('too_large', 413);
-  const n = await asUser(uid(req), async (db) => {
+  const me = uid(req);
+  const n = await asUser(me, async (db) => {
+    const sort0 = (await db.query('select count(*)::int as n from wallets')).rows[0].n;
     for (const [i, w] of wallets.entries()) {
       if (!str(w.id, 60) || !str(w.name)) continue;
       await db.query(
         `insert into wallets (owner_id, id, name, type, initial, excluded, sort) values (app_uid(), $1, $2, $3, $4, $5, $6)
          on conflict (owner_id, id) do nothing`,
-        [str(w.id, 60), str(w.name, 60), str(w.type, 20) || 'cash', money(w.initial || 0), !!w.excluded, i]);
+        [str(w.id, 60), str(w.name, 60), str(w.type, 20) || 'cash', money(w.initial || 0), !!w.excluded, sort0 + i]);
     }
     let count = 0;
     for (const t of txns) {
       let x;
       try { x = readExpense({ ...t, scope: 'personal' }); } catch { continue; }
-      await db.query(
-        `insert into expenses (owner_id, scope, type, date, merchant, amount, category, note, wallet_id, to_wallet_id, status, bill_id, bill_ym)
-         values (app_uid(), 'personal', $1, $2, $3, $4, $5, $6, $7, $8, 'approved', $9, $10)`,
-        [x.type, x.date, x.merchant, x.amount, x.category, x.note, x.walletId, x.toWalletId, x.billId, x.billYm]);
-      count++;
+      const id = t.id ? importId(me, String(t.id)) : crypto.randomUUID();
+      const r = await db.query(
+        `insert into expenses (id, owner_id, scope, type, date, merchant, amount, category, note, wallet_id, to_wallet_id, status, bill_id, bill_ym)
+         values ($1, app_uid(), 'personal', $2, $3, $4, $5, $6, $7, $8, $9, 'approved', $10, $11)
+         on conflict (id) do nothing`,
+        [id, x.type, x.date, x.merchant, x.amount, x.category, x.note, x.walletId, x.toWalletId, x.billId, x.billYm]);
+      count += r.rowCount;
     }
     for (const b of budgets) {
       const amount = money(b.amount);
       if (!(amount > 0)) continue;
+      const category = str(b.category, 40) || 'all';
+      const walletId = str(b.walletId, 60) || 'total';
+      // One budget per category and wallet: an account that already has it keeps its own amount.
       await db.query(
-        `insert into budgets (owner_id, scope, category, amount, wallet_id) values (app_uid(), 'personal', $1, $2, $3)`,
-        [str(b.category, 40) || 'all', amount, str(b.walletId, 60) || 'total']);
+        `insert into budgets (id, owner_id, scope, category, amount, wallet_id)
+         select $1, app_uid(), 'personal', $2, $3, $4
+         where not exists (select 1 from budgets where owner_id = app_uid() and scope = 'personal' and category = $2 and wallet_id = $4)
+         on conflict (id) do nothing`,
+        [b.id ? importId(me, `budget:${b.id}`) : crypto.randomUUID(), category, amount, walletId]);
     }
     return count;
   });

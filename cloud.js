@@ -1,5 +1,7 @@
-/* Signed-in mode: the account, the couple link, shared expenses and approvals live in the
-   centel.app API (/api, see server/). Signed out, the app keeps working from localStorage.
+/* Signed-in mode: the account, the couple link, wallets, transactions, budgets, shared expenses
+   and the bill planner (bills, monthly records, settings, invoice files) live in the centel.app
+   API (/api, see server/), so every device signed in to the account shows the same data.
+   Signed out, the app keeps working from localStorage.
    Loaded before money.js; `money`, `render`, `toast` and friends are looked up at call time. */
 
 const CLOUD_KEY = 'centel.cloud.v1';
@@ -15,6 +17,8 @@ const cloud = {
   features: {},
   ids: new Set(),
   queue: Promise.resolve(),
+  fresh: false, // got the server copy at least once since signing in (not just the cached one)
+  loginPrompt: false,
 };
 
 function isCloud() { return cloud.on; }
@@ -47,6 +51,7 @@ const CLOUD_ERRORS = {
   google_unverified: 'อีเมล Google นี้ยังไม่ได้ยืนยัน',
   google_mismatch: 'อีเมลนี้เชื่อมกับบัญชี Google อื่นอยู่แล้ว',
   google_disabled: 'ยังไม่ได้ตั้งค่าการเข้าสู่ระบบด้วย Google',
+  bad_file: 'ไฟล์ไม่รองรับ',
 };
 function cloudErr(e) { return CLOUD_ERRORS[e.message] || (e.status ? 'ทำรายการไม่สำเร็จ' : 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'); }
 
@@ -128,8 +133,17 @@ async function cloudRefresh() {
     if (!b || !b.user) throw Object.assign(new Error('no_api'), { status: 404 });
     cloud.available = true;
     applyBootstrap(b);
-    try { localStorage.setItem(CLOUD_KEY, JSON.stringify(b)); } catch (e) { /* full */ }
+    const first = !cloud.fresh;
+    cloud.fresh = true;
+    plannerMergeIn(b.user.id, b.planner);
+    try { localStorage.setItem(CLOUD_KEY, JSON.stringify({ ...b, planner: undefined })); } catch (e) { /* full */ }
     render();
+    if (first) {
+      const ask = cloud.loginPrompt;
+      cloud.loginPrompt = false;
+      setTimeout(() => offerLocalMerge(b, !ask), 400);
+      setTimeout(billFilesSweep, 1500);
+    }
     return b;
   } catch (e) {
     if (e.status === 401) {
@@ -152,6 +166,8 @@ function scheduleRefresh() {
 
 function cloudSignedOut() {
   cloud.on = false;
+  cloud.fresh = false;
+  clearTimeout(planner.timer);
   cloud.user = cloud.partner = cloud.coupleId = cloud.invite = null;
   cloud.settlements = [];
   cloud.ids = new Set();
@@ -456,9 +472,14 @@ function accountCard() {
     return `
     <div class="card acct">
       <div class="avatar">${esc((cloud.user.name || '?').slice(0, 1).toUpperCase())}</div>
-      <div><b>${esc(cloud.user.name)}</b><div class="muted small">${esc(cloud.user.email)} · ซิงก์กับบัญชีออนไลน์</div></div>
+      <div><b>${esc(cloud.user.name)}</b><div class="muted small">${esc(cloud.user.email)} · ซิงก์ทุกเครื่องที่เข้าสู่ระบบบัญชีนี้</div></div>
     </div>
     <div class="list" style="margin-bottom:14px">
+      ${(() => {
+    const n = localPending().count;
+    return n ? `<button class="item" data-action="merge-local"><div class="ico round" style="background:#2fa8ff22">⤴️</div>
+        <div class="main"><div class="name">รวมข้อมูลในเครื่องนี้เข้าบัญชี</div><div class="sub">มี ${n} รายการที่ยังไม่อยู่ในบัญชีออนไลน์</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>` : '';
+  })()}
       <button class="item" data-action="couple"><div class="ico round" style="background:#ff4d8d22">💞</div>
         <div class="main"><div class="name">${cloud.partner ? `เชื่อมกับ ${esc(partnerName())}` : 'เชื่อมบัญชีคู่'}</div>
         <div class="sub">${cloud.partner ? esc(cloud.partner.email) : 'ส่งรหัสเชิญให้คู่ หรือใส่รหัสจากคู่'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
@@ -527,12 +548,12 @@ async function googleSignedIn(credential) {
 }
 
 async function signedIn() {
-  const local = loadMoney();
+  cloud.fresh = false;
+  cloud.loginPrompt = true;
   const b = await cloudRefresh();
   closeSheet();
   if (!b) { toast('เชื่อมต่อไม่สำเร็จ'); return; }
   toast(`สวัสดี ${b.user.name}`);
-  offerImport(local, b);
 }
 
 function loginSheet(mode = 'login') {
@@ -568,34 +589,279 @@ function loginSheet(mode = 'login') {
   setTimeout(() => $(mode === 'register' ? '#lgName' : '#lgEmail') && $(mode === 'register' ? '#lgName' : '#lgEmail').focus(), 300);
 }
 
-// The first sign-in can bring this device's records into the account.
-async function offerImport(local, b) {
-  const mine = b.expenses.filter((e) => e.ownerId === b.user.id).length;
-  const hasLocal = local.txns.length || local.budgets.length || local.wallets.some((w) => w.id !== 'cash' || w.initial);
-  if (!hasLocal || mine || b.wallets.length) {
-    if (!b.wallets.length) saveWallet({ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0, excluded: false });
-    return;
-  }
-  if (!confirm(`นำข้อมูลในเครื่องนี้ (${local.txns.length} รายการ) ขึ้นบัญชีออนไลน์ไหม?`)) {
-    saveWallet({ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0, excluded: false });
-    return;
-  }
-  await cloudImport(local);
+/* ---------- This device's own wallets/transactions/budgets → the account ----------
+   Signed out, money lives in this device's local profile (centel.money.v1). Signing in on a
+   device brings over whatever the account does not have yet, so a second device adds to the
+   account instead of being hidden by it. Rows the device already sent are remembered (and the
+   server derives their ids from the device's ids), so nothing is counted twice. */
+
+const IMPORTED_KEY = 'centel.imported.v1'; // { [userId]: { ids: [local ids sent], asked: bool } }
+
+function importedFor(userId) {
+  try { return (JSON.parse(localStorage.getItem(IMPORTED_KEY) || '{}') || {})[userId] || { ids: [] }; } catch (e) { return { ids: [] }; }
+}
+function setImported(userId, patch) {
+  try {
+    const all = JSON.parse(localStorage.getItem(IMPORTED_KEY) || '{}') || {};
+    const cur = all[userId] || { ids: [] };
+    all[userId] = { ...cur, ...patch, ids: [...new Set([...(cur.ids || []), ...(patch.ids || [])])] };
+    localStorage.setItem(IMPORTED_KEY, JSON.stringify(all));
+  } catch (e) { /* ignore */ }
+}
+
+const txSig = (t) => [t.type, t.date, Number(t.amount).toFixed(2), t.category || '', t.walletId || '', t.toWalletId || '', (t.note || '').trim()].join('|');
+
+// Local rows the account does not have: not sent before, and not already there under another id
+// (an older version of the app imported with new ids).
+function localPending() {
+  if (!isCloud()) return { count: 0 };
+  const local = loadMoney();
+  const done = new Set(importedFor(cloud.user.id).ids);
+  const have = new Map();
+  money.txns.filter((t) => t.scope !== 'shared' && t.type !== 'settle').forEach((t) => have.set(txSig(t), (have.get(txSig(t)) || 0) + 1));
+  const txns = local.txns.filter((t) => {
+    if (t.type === 'settle' || t.scope === 'shared' || done.has(t.id)) return false;
+    const n = have.get(txSig(t)) || 0;
+    if (n) { have.set(txSig(t), n - 1); return false; }
+    return true;
+  });
+  const budgets = local.budgets.filter((x) => x.scope !== 'shared' && !done.has(`budget:${x.id}`)
+    && !money.budgets.some((m) => m.scope !== 'shared' && m.category === x.category && m.walletId === x.walletId));
+  const wallets = local.wallets.filter((w) => !money.wallets.some((m) => m.id === w.id) && (w.id !== 'cash' || w.initial));
+  return { local, txns, budgets, wallets, count: txns.length + budgets.length + wallets.length };
+}
+
+async function offerLocalMerge(b, auto) {
+  if (!isCloud() || cloud.user.id !== b.user.id) return;
+  const p = localPending();
+  const saveCash = () => { if (!b.wallets.length) saveWallet({ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0, excluded: false }); };
+  if (!p.count || (auto && importedFor(b.user.id).asked)) { saveCash(); return; }
+  setImported(b.user.id, { asked: true });
+  const what = [p.txns.length && `${p.txns.length} รายการรับจ่าย`, p.wallets.length && `${p.wallets.length} กระเป๋าเงิน`, p.budgets.length && `${p.budgets.length} งบประมาณ`].filter(Boolean).join(', ');
+  if (!confirm(`เครื่องนี้มีข้อมูลที่ยังไม่อยู่ในบัญชีออนไลน์ (${what}) รวมเข้าบัญชีเลยไหม? ข้อมูลที่มีอยู่ในบัญชีจะไม่ถูกลบหรือแทนที่`)) { saveCash(); return; }
+  await cloudImport({ wallets: p.local.wallets, txns: p.txns, budgets: p.budgets, prefs: p.local.prefs });
 }
 
 async function cloudImport(data) {
   try {
-    const r = await api('POST', '/import', {
-      wallets: data.wallets || [],
-      txns: (data.txns || []).filter((t) => t.type !== 'settle' && t.scope !== 'shared'),
-      budgets: (data.budgets || []).filter((x) => x.scope !== 'shared'),
-    });
-    if (data.prefs) { money.prefs = { ...money.prefs, ...data.prefs }; cloudSavePrefs(); }
+    const txns = (data.txns || []).filter((t) => t.type !== 'settle' && t.scope !== 'shared');
+    const budgets = (data.budgets || []).filter((x) => x.scope !== 'shared');
+    const r = await api('POST', '/import', { wallets: data.wallets || [], txns, budgets });
+    setImported(cloud.user.id, { ids: [...txns.map((t) => t.id), ...budgets.map((x) => `budget:${x.id}`)].filter(Boolean) });
+    // The account's own settings win; the device only fills in what the account has not set.
+    if (data.prefs) { money.prefs = { ...data.prefs, ...money.prefs }; cloudSavePrefs(); }
     await cloudRefresh();
-    toast(`นำเข้า ${r.imported} รายการแล้ว`);
+    toast(`รวมข้อมูลแล้ว ${r.imported} รายการ`);
   } catch (e) {
     toast(cloudErr(e));
   }
+}
+
+/* ---------- Bill planner sync ----------
+   The planner (state: bills, records, settings) is one document per account with a revision
+   number. Each device keeps the last copy it agreed on with the server (the base) and merges
+   three ways: whatever changed on only one side since the base is kept, and when both sides
+   changed the same field this device's edit wins. A device seeing the account for the first
+   time adds its bills to the account's, matching bills that look the same (name + category). */
+
+const PLANNER_BASE_KEY = 'centel.planner.base.v1'; // { userId, rev, data }
+
+const planner = { timer: null, sending: null, again: false };
+
+function plannerBase(userId) {
+  try {
+    const b = JSON.parse(localStorage.getItem(PLANNER_BASE_KEY) || 'null');
+    return b && b.userId === userId ? b : null;
+  } catch (e) { return null; }
+}
+function setPlannerBase(userId, rev, data) {
+  try { localStorage.setItem(PLANNER_BASE_KEY, JSON.stringify({ userId, rev, data })); } catch (e) { /* full */ }
+}
+
+// The server stores JSON with its keys reordered, so compare by content, not by text.
+function stableJson(v) {
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+const sameJson = (a, b) => (a === undefined && b === undefined) || (a !== undefined && b !== undefined && stableJson(a) === stableJson(b));
+
+function pickMerged(base, local, remote) {
+  if (sameJson(local, base)) return remote;
+  if (sameJson(remote, base)) return local;
+  const obj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+  if (!obj(local) || !obj(remote)) return local;
+  const out = {};
+  new Set([...Object.keys(remote), ...Object.keys(local)]).forEach((k) => {
+    const v = pickMerged(obj(base) ? base[k] : undefined, local[k], remote[k]);
+    if (v !== undefined) out[k] = v;
+  });
+  return out;
+}
+
+function plannerDoc(s) { return { bills: s.bills, records: s.records, settings: s.settings }; }
+const emptyPlanner = () => ({ bills: [], records: {}, settings: {} });
+const flatRecords = (records) => {
+  const out = {};
+  Object.entries(records || {}).forEach(([ym, m]) => Object.entries(m || {}).forEach(([id, r]) => { out[`${ym}|${id}`] = r; }));
+  return out;
+};
+
+function mergePlanner(base, local, remote) {
+  const moved = {};
+  if (!base) {
+    // First sync on this device: the same bill typed on two devices becomes one.
+    const key = (b) => `${String(b.name || '').trim().toLowerCase()}|${b.category}|${b.type}`;
+    const remoteIds = new Set(remote.bills.map((b) => b.id));
+    const localIds = new Set(local.bills.map((b) => b.id));
+    const free = new Map();
+    remote.bills.filter((b) => !localIds.has(b.id)).forEach((b) => { if (!free.has(key(b))) free.set(key(b), b.id); });
+    local.bills.forEach((b) => {
+      if (remoteIds.has(b.id) || !free.has(key(b))) return;
+      moved[b.id] = free.get(key(b));
+      free.delete(key(b));
+    });
+    if (Object.keys(moved).length) {
+      const records = {};
+      Object.entries(local.records).forEach(([ym, m]) => {
+        records[ym] = {};
+        Object.entries(m).forEach(([id, r]) => { records[ym][moved[id] || id] = r; });
+      });
+      local = { ...local, bills: local.bills.map((b) => (moved[b.id] ? { ...b, id: moved[b.id] } : b)), records };
+    }
+    // Settings: the account's values win, this device fills in what the account has not set.
+    base = { bills: [], records: {}, settings: {} };
+    local = { ...local, settings: { ...local.settings, ...remote.settings } };
+  }
+  const B = Object.fromEntries((base.bills || []).map((b) => [b.id, b]));
+  const L = Object.fromEntries(local.bills.map((b) => [b.id, b]));
+  const R = Object.fromEntries(remote.bills.map((b) => [b.id, b]));
+  const order = [...remote.bills.map((b) => b.id), ...local.bills.map((b) => b.id).filter((id) => !(id in R))];
+  const bills = [...new Set(order)].map((id) => pickMerged(B[id], L[id], R[id])).filter(Boolean);
+  const fb = flatRecords(base.records), fl = flatRecords(local.records), fr = flatRecords(remote.records);
+  const records = {};
+  new Set([...Object.keys(fr), ...Object.keys(fl)]).forEach((k) => {
+    const r = pickMerged(fb[k], fl[k], fr[k]);
+    if (!r || !Object.keys(r).length) return;
+    const [ym, id] = k.split('|');
+    (records[ym] = records[ym] || {})[id] = r;
+  });
+  const settings = pickMerged(base.settings || {}, local.settings || {}, remote.settings || {}) || {};
+  return { doc: { bills, records, settings }, moved };
+}
+
+// Bring the account's planner into `state`; returns nothing, pushes if this device has more.
+function plannerMergeIn(userId, remote) {
+  if (!remote) return;
+  const base = plannerBase(userId);
+  const rdoc = remote.data ? { ...emptyPlanner(), ...remote.data } : emptyPlanner();
+  const { doc, moved } = mergePlanner(base && base.data, plannerDoc(state), rdoc);
+  if (Object.keys(moved).length) plannerMovedBills(moved);
+  setPlannerBase(userId, remote.rev, rdoc);
+  if (!sameJson(doc, plannerDoc(state))) {
+    state = { ...state, ...doc, settings: { ...defaultState().settings, ...doc.settings } };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* full */ }
+    updateBadge();
+  }
+  if (!sameJson(plannerDoc(state), rdoc)) plannerChanged(0);
+}
+
+// Bills matched to the account's copy got the account's id: follow it in this device's
+// own transactions and stored invoice files.
+function plannerMovedBills(moved) {
+  try {
+    const local = JSON.parse(localStorage.getItem(MONEY_KEY) || 'null');
+    if (local && Array.isArray(local.txns)) {
+      local.txns.forEach((t) => { if (t.billId && moved[t.billId]) t.billId = moved[t.billId]; });
+      localStorage.setItem(MONEY_KEY, JSON.stringify(local));
+    }
+  } catch (e) { /* ignore */ }
+  Object.entries(moved).forEach(([from, to]) => billFileMove(from, to));
+}
+
+// Called by save() in app.js whenever the planner changes on this device.
+function plannerChanged(delay = 800) {
+  if (!cloud.on || !cloud.fresh) return; // merged on the next refresh instead
+  clearTimeout(planner.timer);
+  planner.timer = setTimeout(plannerSend, delay);
+}
+
+async function plannerSend() {
+  if (planner.sending) { planner.again = true; return; }
+  const userId = cloud.user && cloud.user.id;
+  if (!userId) return;
+  planner.sending = (async () => {
+    for (let i = 0; i < 4; i++) {
+      const base = plannerBase(userId);
+      const data = plannerDoc(state);
+      if (base && sameJson(data, base.data)) return;
+      try {
+        const r = await api('PUT', '/planner', { data, baseRev: base ? base.rev : 0 });
+        setPlannerBase(userId, r.rev, JSON.parse(JSON.stringify(data)));
+        return;
+      } catch (e) {
+        // Another device saved first: merge its copy, then try again on top of it.
+        if (e.status === 409 && e.data && e.data.error === 'stale') { plannerMergeIn(userId, e.data); render(); continue; }
+        if (e.status === 401) { cloudSignedOut(); return; }
+        return; // offline: kept locally, merged on the next refresh
+      }
+    }
+  })();
+  await planner.sending;
+  planner.sending = null;
+  if (planner.again) { planner.again = false; plannerSend(); }
+}
+
+/* ---------- Bill invoice files in the account (receipts bucket) ---------- */
+
+function billFilesOn() { return isCloud() && cloud.features && cloud.features.storage; }
+const billFilePath = (billId, ym) => `/api/bill-files/${encodeURIComponent(billId)}/${ym}`;
+
+async function billFileUpload(billId, ym) {
+  if (!billFilesOn()) return false;
+  const f = await billFileGet(billId, ym).catch(() => null);
+  if (!f || !f.blob) return false;
+  const type = /pdf/i.test(f.type) ? 'application/pdf' : (f.type || 'image/jpeg');
+  try {
+    const res = await fetch(billFilePath(billId, ym), {
+      method: 'PUT', credentials: 'same-origin', headers: { 'content-type': type, 'x-centel': '1' }, body: f.blob,
+    });
+    if (!res.ok) return false;
+  } catch (e) { return false; }
+  if (record(ym, billId).file) { setRecord(ym, billId, { fileCloud: true }); save(); }
+  return true;
+}
+
+// A file attached on another device: fetch it from the account and keep a copy here.
+async function billFileDownload(billId, ym) {
+  if (!isCloud() || !record(ym, billId).fileCloud) return null;
+  const res = await fetch(billFilePath(billId, ym), { credentials: 'same-origin' });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  const f = { name: record(ym, billId).file || 'invoice', type: blob.type || 'application/pdf', blob, added: new Date().toISOString() };
+  await filesTx('readwrite', (s) => s.put(f, billFileKey(billId, ym))).catch(() => {});
+  return f;
+}
+
+function billFileRemoteDel(billId, ym) {
+  if (!billFilesOn()) return;
+  fetch(billFilePath(billId, ym), { method: 'DELETE', credentials: 'same-origin', headers: { 'x-centel': '1' } }).catch(() => {});
+}
+
+// Files attached before signing in (or while offline) go up once the account is reachable.
+let sweeping = false;
+async function billFilesSweep() {
+  if (sweeping || !billFilesOn()) return;
+  sweeping = true;
+  try {
+    for (const [ym, m] of Object.entries(state.records)) {
+      for (const [id, r] of Object.entries(m)) {
+        if (r.file && !r.fileCloud) await billFileUpload(id, ym);
+      }
+    }
+  } finally { sweeping = false; }
 }
 
 async function logout() {
@@ -665,6 +931,7 @@ function cloudAction(action, el) {
   switch (action) {
     case 'login': loginSheet(); break;
     case 'logout': logout(); break;
+    case 'merge-local': offerLocalMerge({ user: cloud.user, wallets: money.wallets }, false); break;
     case 'couple': coupleSheet(); break;
     case 'settlements': settlementsSheet(); break;
     case 'shared-list': sharedListSheet(el.dataset.kind); break;
