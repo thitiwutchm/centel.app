@@ -49,7 +49,12 @@
 ค่าของ bucket (`BUCKET`, `ENDPOINT`, `REGION`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`) และ `ANTHROPIC_API_KEY` สำหรับอ่านสลิป
 (ไม่ใส่ก็ได้ แอปจะแนบรูปโดยไม่อ่านอัตโนมัติ; เลือกโมเดลได้ด้วย `RECEIPT_MODEL`) คีย์อยู่ที่เซิร์ฟเวอร์เท่านั้น ไม่ถูกส่งไปที่หน้าเว็บ
 
-ทดสอบเซิร์ฟเวอร์: `cd server && npm ci && DATABASE_URL=... npm start` แล้วอีกหน้าต่าง `DATABASE_URL=... npm test`
+เข้าสู่ระบบด้วย Google: ใส่ `GOOGLE_CLIENT_ID` (OAuth Web client ตัวเดียวกับที่ใช้ดึงบิลจาก Gmail) ที่บริการ `api`
+เซิร์ฟเวอร์ตรวจ ID token กับกุญแจของ Google เอง ครั้งแรกจะสร้างบัญชีใหม่ หรือเชื่อมกับบัญชีอีเมล/รหัสผ่านเดิมที่อีเมลตรงกัน
+(Google ยืนยันอีเมลแล้ว) ถ้าไม่ได้ตั้งค่าไว้ ปุ่ม Google จะไม่แสดง และการเข้าสู่ระบบด้วยอีเมลยังใช้ได้ตามเดิม
+
+ทดสอบเซิร์ฟเวอร์: `cd server && npm ci && DATABASE_URL=... GOOGLE_CLIENT_ID=test-client GOOGLE_CERTS_URL=http://localhost:3998/ npm start`
+แล้วอีกหน้าต่าง `DATABASE_URL=... npm test`
 
 ## ใช้งานบน iPhone
 

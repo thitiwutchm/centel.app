@@ -43,6 +43,10 @@ const CLOUD_ERRORS = {
   too_large: 'ไฟล์ใหญ่เกินไป',
   storage_disabled: 'ยังไม่ได้ตั้งค่าที่เก็บสลิป',
   unauthorized: 'กรุณาเข้าสู่ระบบอีกครั้ง',
+  bad_google_token: 'เข้าสู่ระบบด้วย Google ไม่สำเร็จ ลองใหม่อีกครั้ง',
+  google_unverified: 'อีเมล Google นี้ยังไม่ได้ยืนยัน',
+  google_mismatch: 'อีเมลนี้เชื่อมกับบัญชี Google อื่นอยู่แล้ว',
+  google_disabled: 'ยังไม่ได้ตั้งค่าการเข้าสู่ระบบด้วย Google',
 };
 function cloudErr(e) { return CLOUD_ERRORS[e.message] || (e.status ? 'ทำรายการไม่สำเร็จ' : 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'); }
 
@@ -476,10 +480,66 @@ function accountCard() {
     </div>`}`;
 }
 
+/* ---------- Sign in with Google ---------- */
+
+const GSI_SRC = 'https://accounts.google.com/gsi/client';
+let googleP = null;
+
+// Resolves to the OAuth client id once Google Identity Services is loaded, or ''
+// when no client id is configured (the Google button is then left out).
+function googleReady() {
+  if (!googleP) {
+    googleP = api('GET', '/config').then((cfg) => {
+      const id = (cfg && cfg.googleClientId) || '';
+      if (!id || (window.google && google.accounts && google.accounts.id)) return id;
+      return new Promise((resolve, reject) => {
+        let s = document.querySelector(`script[src="${GSI_SRC}"]`);
+        if (!s) { s = document.createElement('script'); s.src = GSI_SRC; s.async = true; document.head.appendChild(s); }
+        s.addEventListener('load', () => resolve(id));
+        s.addEventListener('error', () => reject(new Error('gsi_load')));
+      });
+    }).catch((e) => { googleP = null; throw e; });
+  }
+  return googleP;
+}
+
+async function googleButton(box, mode) {
+  let id = '';
+  try { id = await googleReady(); } catch (e) { /* offline or blocked: email login still works */ }
+  if (!id || !box.isConnected) return;
+  google.accounts.id.initialize({ client_id: id, callback: (r) => googleSignedIn(r.credential), ux_mode: 'popup', auto_select: false });
+  box.hidden = false;
+  google.accounts.id.renderButton(box.querySelector('.gbtn'), {
+    theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'filled_black' : 'outline',
+    size: 'large', shape: 'pill', locale: 'th',
+    text: mode === 'login' ? 'signin_with' : 'signup_with',
+    width: Math.min(400, box.clientWidth || 320),
+  });
+}
+
+async function googleSignedIn(credential) {
+  try {
+    await api('POST', '/auth/google', { credential });
+    await signedIn();
+  } catch (err) {
+    toast(cloudErr(err));
+  }
+}
+
+async function signedIn() {
+  const local = loadMoney();
+  const b = await cloudRefresh();
+  closeSheet();
+  if (!b) { toast('เชื่อมต่อไม่สำเร็จ'); return; }
+  toast(`สวัสดี ${b.user.name}`);
+  offerImport(local, b);
+}
+
 function loginSheet(mode = 'login') {
   openSheet(`
     <div class="sheet-head"><button class="link-btn" data-action="close">ยกเลิก</button><h2>${mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</h2><span style="width:40px"></span></div>
     <div class="seg" id="lgMode"><button type="button" data-lg="login" class="${mode === 'login' ? 'on' : ''}">เข้าสู่ระบบ</button><button type="button" data-lg="register" class="${mode === 'register' ? 'on' : ''}">สมัครสมาชิก</button></div>
+    <div class="gsignin" id="lgGoogle" hidden><div class="gbtn"></div><div class="or"><span>หรือใช้อีเมล</span></div></div>
     <form class="form" id="lgForm">
       ${mode === 'register' ? '<div class="field"><label for="lgName">ชื่อที่แสดง</label><input id="lgName" autocomplete="nickname" placeholder="เช่น ต้น"></div>' : ''}
       <div class="field"><label for="lgEmail">อีเมล</label><input id="lgEmail" type="email" autocomplete="email" inputmode="email"></div>
@@ -488,6 +548,7 @@ function loginSheet(mode = 'login') {
     </form>
     <p class="hint">แต่ละคนมีบัญชีของตัวเอง รายจ่ายส่วนตัวเห็นได้เฉพาะเจ้าของ รายจ่ายร่วมเห็นทั้งสองคนหลังเชื่อมบัญชี</p>
   `);
+  googleButton($('#lgGoogle'), mode);
   $('#lgMode').addEventListener('click', (e) => { const b = e.target.closest('[data-lg]'); if (b && b.dataset.lg !== mode) loginSheet(b.dataset.lg); });
   $('#lgForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -497,12 +558,7 @@ function loginSheet(mode = 'login') {
       const body = { email: $('#lgEmail').value.trim(), password: $('#lgPass').value };
       if (mode === 'register') body.name = $('#lgName').value.trim();
       await api('POST', mode === 'login' ? '/auth/login' : '/auth/register', body);
-      const local = loadMoney();
-      const b = await cloudRefresh();
-      closeSheet();
-      if (!b) { toast('เชื่อมต่อไม่สำเร็จ'); return; }
-      toast(`สวัสดี ${b.user.name}`);
-      offerImport(local, b);
+      await signedIn();
     } catch (err) {
       toast(cloudErr(err));
     } finally {
