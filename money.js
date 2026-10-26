@@ -97,6 +97,11 @@ function saveMoney() {
 
 function walletById(id) { return money.wallets.find((w) => w.id === id); }
 function wType(w) { return WALLET_TYPES[w.type] || WALLET_TYPES.cash; }
+// A wallet's own picture (w.icon) is an emoji or a small data:image URL; without one it shows its type's icon.
+const WALLET_IMG = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+function wImg(w) { return w && WALLET_IMG.test(w.icon || '') ? w.icon : ''; }
+function wEmoji(w) { return w.icon && !w.icon.startsWith('data:') ? w.icon : wType(w).icon; }
+function wFace(w) { const img = wImg(w); return img ? `<img src="${img}" alt="">` : esc(wEmoji(w)); }
 function txCat(t) {
   if (t.type === 'transfer') return TRANSFER_CAT;
   if (t.type === 'settle') return SETTLE_CAT;
@@ -316,7 +321,10 @@ function svgIcon(name, cls = 'svg-i') {
 }
 
 function circleIco(c, cls = 'ico round') { return `<div class="${cls}" style="background:${c.color}22">${c.icon}</div>`; }
-function walletIco(w, cls = 'ico round') { return w ? circleIco(wType(w), cls) : circleIco(TOTAL_WALLET, cls); }
+function walletIco(w, cls = 'ico round') {
+  if (!w) return circleIco(TOTAL_WALLET, cls);
+  return `<div class="${cls}${wImg(w) ? ' has-img' : ''}" style="background:${wType(w).color}22">${wFace(w)}</div>`;
+}
 
 function walletPill() {
   const w = ui.wallet === 'total' ? null : walletById(ui.wallet);
@@ -432,7 +440,7 @@ function txItem(t, S) {
   const cls = t.type === 'settle' ? (t.sign > 0 ? 'inc' : 'exp') : shared && !t.counted ? 'xfer' : txAmtCls(t, S);
   return `
     <button class="item tx" data-tx="${t.id}">
-      <div class="ico-wrap">${circleIco(c)}${w ? `<span class="mini" style="background:${wType(w).color}">${wType(w).icon}</span>` : ''}</div>
+      <div class="ico-wrap">${circleIco(c)}${w ? `<span class="mini${wImg(w) ? ' has-img' : ''}" style="background:${wType(w).color}">${wFace(w)}</span>` : ''}</div>
       <div class="main"><div class="name">${title}</div><div class="sub">${sub}</div>${badges.trim() ? `<div class="badges">${badges}</div>` : ''}</div>
       <div class="right"><div class="amt ${cls}">${baht(amt)}</div></div>
     </button>`;
@@ -907,7 +915,7 @@ function budgetDetail(id) {
           <div style="text-align:right"><span class="muted">${left < 0 ? 'เกินงบ' : 'เหลือ'}</span><b class="${left < 0 ? 'exp' : ''}">${baht(Math.abs(left))}</b></div></div>
         ${budgetBar(spent, bg.amount, ym)}
         <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + 543}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
-        <div class="bd-meta"><span>${bg.scope === 'shared' ? '🤝' : w ? wType(w).icon : '🌐'}</span><div>${bg.scope === 'shared' ? `งบร่วมกับ ${esc(partnerName())}` : w ? esc(w.name) : 'ทุกกระเป๋าเงิน'}</div></div>
+        <div class="bd-meta"><span${wImg(w) ? ' class="has-img"' : ''}>${bg.scope === 'shared' ? '🤝' : w ? wFace(w) : '🌐'}</span><div>${bg.scope === 'shared' ? `งบร่วมกับ ${esc(partnerName())}` : w ? esc(w.name) : 'ทุกกระเป๋าเงิน'}</div></div>
       </div>
     </div>
     <div class="card chart-card">
@@ -998,7 +1006,7 @@ function txnForm(t, preset = {}) {
   if (d.scope === 'shared' && !canShare) d.scope = 'personal';
   const receipts = isCloud() && cloud.features.storage;
   const wOpts = (selId, skip) => money.wallets.filter((w) => w.id !== skip)
-    .map((w) => `<option value="${w.id}" ${selId === w.id ? 'selected' : ''}>${wType(w).icon} ${esc(w.name)}</option>`).join('');
+    .map((w) => `<option value="${w.id}" ${selId === w.id ? 'selected' : ''}>${esc(wEmoji(w))} ${esc(w.name)}</option>`).join('');
 
   openSheet(`
     <div class="sheet-head">
@@ -1202,6 +1210,28 @@ function txnForm(t, preset = {}) {
 
 /* ---------- Wallets ---------- */
 
+const WALLET_EMOJIS = ['💵', '🏦', '💳', '📱', '🐷', '📈', '👛', '💰', '🪙', '💎', '🛒', '🏠', '🚗', '✈️', '🎓', '❤️', '⭐', '🟢', '🔵', '🟣', '🟠', '🔴'];
+
+// Center-crops a picked photo or logo to a small square data URL that fits in the wallet record
+// (it syncs with the wallet, so it stays a few KB). PNG keeps logo transparency; photos use JPEG.
+async function squareImage(file, size = 160) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = url; });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    if (!side) throw new Error('empty');
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = size;
+    const g = cv.getContext('2d');
+    const draw = () => g.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+    draw();
+    const png = cv.toDataURL('image/png');
+    if (png.length <= 60000) return png;
+    g.fillStyle = '#fff'; g.fillRect(0, 0, size, size); draw();
+    return cv.toDataURL('image/jpeg', 0.85);
+  } finally { URL.revokeObjectURL(url); }
+}
+
 function walletSheet(mode = 'pick') {
   const row = (w) => `
     <button class="item" ${mode === 'pick' ? `data-wallet-sel="${w ? w.id : 'total'}"` : w ? `data-wallet-edit="${w.id}"` : ''}>
@@ -1230,7 +1260,8 @@ function walletSheet(mode = 'pick') {
 
 function walletForm(w) {
   const isNew = !w;
-  const d = w ? { ...w } : { name: '', type: 'bank', initial: '', excluded: false };
+  const d = w ? { ...w } : { name: '', type: 'bank', initial: '', excluded: false, icon: '' };
+  const emojis = WALLET_EMOJIS.map((e) => `<button type="button" class="chip emoji" data-wemoji="${e}">${e}</button>`).join('');
   const chips = Object.entries(WALLET_TYPES).map(([k, c]) =>
     `<button type="button" class="chip ${d.type === k ? 'on' : ''}" data-wtype="${k}">${c.icon} ${c.label}</button>`).join('');
   const used = w && money.txns.some((t) => t.walletId === w.id || t.toWalletId === w.id);
@@ -1240,6 +1271,16 @@ function walletForm(w) {
       <h2>${isNew ? 'เพิ่มกระเป๋าเงิน' : 'แก้ไขกระเป๋าเงิน'}</h2>
       <button class="link-btn strong" id="saveWallet">บันทึก</button>
     </div>
+    <div class="w-pic">
+      <button type="button" class="w-avatar" id="wAvatar" aria-label="เปลี่ยนรูป"></button>
+      <div class="w-pic-actions">
+        <button type="button" class="chip" id="wPhoto">📷 เลือกรูป</button>
+        <button type="button" class="chip" id="wEmojiBtn">😀 อีโมจิ</button>
+        <button type="button" class="chip" id="wReset" hidden>ใช้ไอคอนประเภท</button>
+      </div>
+      <input type="file" id="wFile" accept="image/*" hidden>
+    </div>
+    <div class="chips w-emojis" id="wEmojis" hidden>${emojis}<input id="wEmojiIn" class="chip" placeholder="พิมพ์เอง" maxlength="8" autocomplete="off"></div>
     <div class="chips" id="wTypes">${chips}</div>
     <div class="form">
       <div class="field"><label for="wName">ชื่อ</label><input id="wName" placeholder="เช่น KBank ออมทรัพย์" value="${esc(d.name)}" autocomplete="off"></div>
@@ -1254,6 +1295,31 @@ function walletForm(w) {
     if (!c) return;
     d.type = c.dataset.wtype;
     document.querySelectorAll('#wTypes .chip').forEach((x) => x.classList.toggle('on', x === c));
+    paintPic();
+  });
+  const paintPic = () => {
+    $('#wAvatar').innerHTML = walletIco(d, 'w-avatar-in') + '<span class="w-cam">✎</span>';
+    $('#wReset').hidden = !d.icon;
+    document.querySelectorAll('#wEmojis [data-wemoji]').forEach((x) => x.classList.toggle('on', x.dataset.wemoji === d.icon));
+  };
+  paintPic();
+  $('#wAvatar').addEventListener('click', () => $('#wFile').click());
+  $('#wPhoto').addEventListener('click', () => $('#wFile').click());
+  $('#wEmojiBtn').addEventListener('click', () => { $('#wEmojis').hidden = !$('#wEmojis').hidden; });
+  $('#wReset').addEventListener('click', () => { d.icon = ''; $('#wEmojiIn').value = ''; paintPic(); });
+  $('#wEmojis').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-wemoji]');
+    if (c) { d.icon = c.dataset.wemoji; $('#wEmojiIn').value = ''; paintPic(); }
+  });
+  $('#wEmojiIn').addEventListener('input', (e) => {
+    const v = e.target.value.trim().replace(/[<>&"']/g, '');
+    if (v) { d.icon = [...v].slice(0, 4).join(''); paintPic(); }
+  });
+  $('#wFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try { d.icon = await squareImage(f); paintPic(); } catch { toast('เปิดรูปนี้ไม่ได้'); }
   });
   $('#saveWallet').addEventListener('click', () => {
     const name = $('#wName').value.trim();
@@ -1261,6 +1327,7 @@ function walletForm(w) {
     const raw = $('#wInit').value.trim();
     const initial = raw.startsWith('-') ? -num(raw.slice(1)) : num(raw);
     const out = { id: d.id || uid(), name, type: d.type, initial, excluded: $('#wExcl').checked };
+    if (d.icon) out.icon = d.icon;
     saveWallet(out); render(); walletSheet('edit');
     toast(isNew ? 'เพิ่มกระเป๋าเงินแล้ว' : 'บันทึกแล้ว');
   });

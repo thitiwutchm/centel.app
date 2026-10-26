@@ -320,7 +320,7 @@ function thTime(iso) {
 function walletSelect(id, label) {
   return `<div class="field"><label for="${id}">${label}</label><select id="${id}">
     <option value="">ไม่ระบุ</option>
-    ${money.wallets.map((w) => `<option value="${w.id}" ${w.id === defaultWalletId() ? 'selected' : ''}>${wType(w).icon} ${esc(w.name)}</option>`).join('')}
+    ${money.wallets.map((w) => `<option value="${w.id}" ${w.id === defaultWalletId() ? 'selected' : ''}>${esc(wEmoji(w))} ${esc(w.name)}</option>`).join('')}
   </select></div>`;
 }
 
