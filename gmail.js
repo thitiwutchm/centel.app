@@ -1,6 +1,6 @@
 'use strict';
 
-/* ---------- Phone/internet e-bills from Gmail ----------
+/* ---------- Gmail AutoSync: e-bills from Gmail ----------
  * The browser talks to Gmail directly with a short-lived, read-only access token
  * from Google Identity Services. Nothing is sent to our server; the OAuth client
  * id comes from /api/config (Railway variable GOOGLE_CLIENT_ID via the Caddyfile).
@@ -63,10 +63,37 @@ function gmailDateStr(y, mo, d) {
 
 function gmailMoney(s) { return Number(s.replace(/,/g, '')); }
 
+// User-added senders: [{ id, name, sender (email or domain), category }].
+function gmailCustomSources() {
+  if (typeof state === 'undefined') return [];
+  const st = state.settings;
+  if (!Array.isArray(st.gmailSources)) {
+    // Older versions kept extra senders as one space-separated string.
+    st.gmailSources = (st.gmailSenders || '').split(/[\s,]+/).filter(Boolean)
+      .map((x) => ({ id: uid(), name: x.replace(/^.*@/, ''), sender: x, category: 'other' }));
+    delete st.gmailSenders;
+  }
+  return st.gmailSources;
+}
+
+// Built-in providers (with the user's category choice) followed by user-added senders.
+function gmailProviderList() {
+  const cats = (typeof state !== 'undefined' && state.settings.gmailCats) || {};
+  return [
+    ...GMAIL_PROVIDERS.map((p) => ({ ...p, category: cats[p.key] || p.category })),
+    ...gmailCustomSources().map((c) => ({ key: 'c:' + c.id, name: c.name, senders: [c.sender.toLowerCase()], category: c.category, custom: true })),
+  ];
+}
+
 function gmailProvider(from) {
   const f = String(from || '').toLowerCase();
-  const domain = (f.match(/@([a-z0-9.-]+)/) || [])[1] || '';
-  return GMAIL_PROVIDERS.find((p) => p.domains.some((d) => domain === d || domain.endsWith('.' + d))) || null;
+  const addr = (f.match(/[a-z0-9._%+-]+@[a-z0-9.-]+/) || [])[0] || '';
+  const domain = addr.split('@')[1] || '';
+  const list = gmailProviderList();
+  // A specific sender address wins over a whole domain.
+  return list.find((p) => p.senders && p.senders.some((x) => x.includes('@') && x === addr))
+    || list.find((p) => (p.domains || p.senders || []).some((d) => !d.includes('@') && (domain === d || domain.endsWith('.' + d))))
+    || null;
 }
 
 // Pull amount, due date and account number out of an e-bill's subject + text.
@@ -187,9 +214,8 @@ async function gmailFetch(path, token) {
 }
 
 function gmailQuery() {
-  const domains = GMAIL_PROVIDERS.flatMap((p) => p.domains);
-  const extra = (state.settings.gmailSenders || '').split(/[\s,]+/).filter(Boolean);
-  return `{${[...domains, ...extra].map((d) => `from:${d}`).join(' ')}} newer_than:120d -in:chats`;
+  const senders = gmailProviderList().flatMap((p) => p.domains || p.senders);
+  return `{${senders.map((d) => `from:${d}`).join(' ')}} newer_than:120d -in:chats`;
 }
 
 async function gmailSearch(token) {
@@ -292,7 +318,7 @@ function gmailImport(r) {
   let b = gmailBillFor(r);
   const ym = r.ym || ymOf(new Date());
   if (!b) {
-    const p = r.provider || { key: 'other', name: 'บิลอีเมล', category: 'phone' };
+    const p = r.provider || { key: 'other', name: 'บิลอีเมล', category: 'other' };
     b = {
       id: uid(),
       name: `${p.name}${r.account ? ' ' + gmailShortAccount(r.account) : ''}`,
@@ -335,7 +361,7 @@ async function gmailAttachPdf(r, billId, ym) {
 function gmailRow(r, i) {
   const b = gmailBillFor(r);
   const done = gmailImported(r);
-  const icon = (CATEGORIES[(r.provider && r.provider.category) || 'phone'] || CATEGORIES.phone).icon;
+  const icon = (CATEGORIES[(r.provider && r.provider.category) || 'other'] || CATEGORIES.other).icon;
   const dueTxt = r.due ? `ครบกำหนด ${thShortDate(new Date(r.due + 'T00:00'))} ${Number(r.due.slice(0, 4)) + 543}` : 'ไม่พบวันครบกำหนด';
   const meta = [r.provider ? r.provider.name : '', r.account ? gmailShortAccount(r.account) : '', r.ym ? thMonthYear(r.ym) : ''].filter(Boolean).join(' · ');
   const action = done ? '<span class="badge ok">นำเข้าแล้ว</span>'
@@ -360,7 +386,7 @@ function gmailRenderResults() {
   const rows = gmail.results;
   if (!rows) { box.innerHTML = ''; return; }
   if (!rows.length) {
-    box.innerHTML = '<p class="hint">ไม่พบอีเมลใบแจ้งค่าบริการจาก AIS, True, dtac, 3BB หรือ NT ใน 4 เดือนที่ผ่านมา ถ้าผู้ให้บริการส่งจากอีเมลอื่น เพิ่มโดเมนผู้ส่งด้านล่าง</p>';
+    box.innerHTML = '<p class="hint">ไม่พบอีเมลบิลจากผู้ส่งที่ตั้งไว้ใน 4 เดือนที่ผ่านมา ถ้าบิลส่งมาจากอีเมลอื่น เพิ่มผู้ส่งด้านล่าง</p>';
     return;
   }
   const pending = rows.filter((r) => !gmailImported(r));
@@ -394,22 +420,136 @@ async function gmailScan(btn) {
   }
 }
 
+function gmailCatSelect(attr, value) {
+  return `<select ${attr}>${Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}" ${value === k ? 'selected' : ''}>${c.icon} ${c.label}</option>`).join('')}</select>`;
+}
+
+function gmailSourcesHtml() {
+  const rows = gmailProviderList().map((p) => `
+    <div class="field gsrc">
+      <div class="gsrc-main"><b>${esc(p.name)}</b><span class="muted small">${esc((p.domains || p.senders).join(', '))}</span></div>
+      ${gmailCatSelect(`data-src-cat="${esc(p.key)}" aria-label="หมวดหมู่ของ ${esc(p.name)}"`, p.category)}
+      ${p.custom ? `<button class="link-btn gsrc-del" type="button" data-src-del="${esc(p.key.slice(2))}" aria-label="ลบ ${esc(p.name)}">✕</button>` : ''}
+    </div>`).join('');
+  return `
+    <div class="section-title">ผู้ส่งบิล</div>
+    <div class="form" id="gmailSources">${rows}</div>
+    <div class="section-title">เพิ่มผู้ส่ง</div>
+    <div class="form">
+      <div class="field"><label for="gsName">ชื่อบิล</label><input id="gsName" placeholder="เช่น ค่าบัตร KTC" autocomplete="off"></div>
+      <div class="field"><label for="gsSender">อีเมลผู้ส่ง</label><input id="gsSender" type="email" placeholder="เช่น ebill@ktc.co.th" autocomplete="off" autocapitalize="off"></div>
+      <div class="field"><label for="gsCat">หมวดหมู่</label>${gmailCatSelect('id="gsCat"', 'credit')}</div>
+    </div>
+    <button class="btn ghost" id="gsAdd" type="button">＋ เพิ่มผู้ส่ง</button>
+    <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือใส่แค่โดเมนเพื่อดึงทุกอีเมลจากบริษัทนั้น บิลที่สร้างใหม่จะใช้ชื่อและหมวดหมู่ที่ตั้งไว้</p>`;
+}
+
+function gmailBindSources() {
+  const box = $('#gmailSources');
+  box.addEventListener('change', (e) => {
+    const sel = e.target.closest('[data-src-cat]');
+    if (!sel) return;
+    const key = sel.dataset.srcCat;
+    if (key.startsWith('c:')) {
+      const c = gmailCustomSources().find((x) => x.id === key.slice(2));
+      if (c) c.category = sel.value;
+    } else {
+      state.settings.gmailCats = { ...(state.settings.gmailCats || {}), [key]: sel.value };
+    }
+    // Bills already synced from this sender move to the new category too.
+    state.bills.forEach((b) => { if (b.gmail && b.gmail.provider === key) b.category = sel.value; });
+    save();
+    render();
+    gmailRenderResults();
+    toast('บันทึกแล้ว');
+  });
+  box.addEventListener('click', (e) => {
+    const del = e.target.closest('[data-src-del]');
+    if (!del) return;
+    const list = gmailCustomSources();
+    const c = list.find((x) => x.id === del.dataset.srcDel);
+    if (!c || !confirm(`ลบผู้ส่ง "${c.name}"? บิลที่นำเข้าแล้วยังอยู่`)) return;
+    state.settings.gmailSources = list.filter((x) => x !== c);
+    save();
+    gmailSheet();
+  });
+  $('#gsAdd').addEventListener('click', () => {
+    const name = $('#gsName').value.trim();
+    const sender = $('#gsSender').value.trim().toLowerCase().replace(/^from:/, '');
+    if (!name) { toast('ใส่ชื่อบิล'); $('#gsName').focus(); return; }
+    if (!/^([a-z0-9._%+-]+@)?[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(sender)) { toast('ใส่อีเมลหรือโดเมนผู้ส่งให้ถูกต้อง'); $('#gsSender').focus(); return; }
+    gmailCustomSources().push({ id: uid(), name, sender, category: $('#gsCat').value });
+    save();
+    gmail.results = null;
+    gmailSheet();
+    toast(`เพิ่ม ${name} แล้ว กดซิงก์เพื่อค้นหาบิล`);
+  });
+}
+
+/* ----- Monthly AutoSync ----- */
+
+// Google only hands the browser a token from a tap (or reuses one for an hour), so the
+// monthly run happens on the first app open on/after the chosen day: silently when a
+// token is still valid, otherwise as a one-tap "sync now" alert.
+function gmailAutoDue() {
+  const day = Number(state.settings.gmailAutoDay) || 0;
+  if (!day) return false;
+  const now = new Date();
+  return now.getDate() >= day && state.settings.gmailLastAuto !== ymOf(now);
+}
+
+function gmailAutoAlert() {
+  return `<button class="alert warn gmail-auto" data-action="gmail-auto">📧<div>ถึงรอบ Gmail AutoSync (ทุกวันที่ ${state.settings.gmailAutoDay}) แตะเพื่อดึงบิลเดือนนี้</div></button>`;
+}
+
+// Import every new bill email from the configured senders without review.
+async function gmailAutoRun(quiet) {
+  if (gmail.autoBusy) return;
+  gmail.autoBusy = true;
+  try {
+    await gmailPrepare();
+    const token = await gmailToken();
+    const rows = await gmailSearch(token);
+    const pending = rows.filter((r) => !gmailImported(r)).sort((a, b) => String(a.ym).localeCompare(String(b.ym)));
+    const done = pending.map((r) => [r, gmailImport(r)]);
+    state.settings.gmailLastAuto = ymOf(new Date());
+    gmail.results = rows;
+    save(); saveMoney(); render();
+    if (!quiet || done.length) toast(done.length ? `Gmail AutoSync: นำเข้า ${done.length} บิล` : 'Gmail AutoSync: ไม่มีบิลใหม่');
+    await Promise.all(done.map(([r, d]) => gmailAttachPdf(r, d.bill.id, d.ym)));
+    render();
+  } catch (err) {
+    if (!quiet) toast('Gmail AutoSync ไม่สำเร็จ: ' + (err.message || 'ลองใหม่'));
+  } finally {
+    gmail.autoBusy = false;
+  }
+}
+
+// On open/return: run silently if the month's sync is due and a token is still valid.
+function gmailAutoTry() {
+  if (gmailAutoDue() && gmailSavedToken()) gmailAutoRun(true);
+}
+
 function gmailSheet() {
   openSheet(`
     <div class="sheet-head">
       <button class="link-btn" data-action="close">ปิด</button>
-      <h2>บิลจาก Gmail</h2>
+      <h2>Gmail AutoSync</h2>
       <span style="width:44px"></span>
     </div>
     <div id="gmailSetup"></div>
-    <button class="btn" id="gmailScan" type="button">📧 ค้นหาบิลค่าโทรศัพท์ใน Gmail</button>
-    <p class="hint">อ่านอีเมลแบบอ่านอย่างเดียว เฉพาะจาก AIS, True, dtac, 3BB, NT ย้อนหลัง 4 เดือน แอปอ่าน Gmail จากเครื่องนี้โดยตรง ไม่ส่งอีเมลไปเก็บที่เซิร์ฟเวอร์</p>
+    <button class="btn" id="gmailScan" type="button">🔄 ซิงก์บิลจาก Gmail</button>
+    <p class="hint">อ่านอีเมลแบบอ่านอย่างเดียว เฉพาะจากผู้ส่งในรายการด้านล่าง ย้อนหลัง 4 เดือน แอปอ่าน Gmail จากเครื่องนี้โดยตรง ไม่ส่งอีเมลไปเก็บที่เซิร์ฟเวอร์</p>
     <div id="gmailResults"></div>
-    <div class="section-title">ผู้ส่งเพิ่มเติม</div>
+    ${gmailSourcesHtml()}
+    <div class="section-title">ซิงก์อัตโนมัติ</div>
     <div class="form">
-      <div class="field"><label for="gmailSenders">โดเมน/อีเมล</label><input id="gmailSenders" placeholder="เช่น ebill@provider.co.th" value="${esc(state.settings.gmailSenders || '')}" autocomplete="off" autocapitalize="off"></div>
+      <div class="field"><label for="gmailAutoDay">ทุกเดือน</label><select id="gmailAutoDay">
+        <option value="0">ปิด</option>
+        ${Array.from({ length: 28 }, (_, i) => i + 1).map((d) => `<option value="${d}" ${Number(state.settings.gmailAutoDay) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('')}
+      </select></div>
     </div>
-    <p class="hint">คั่นหลายรายการด้วยเว้นวรรค ใช้เมื่อผู้ให้บริการส่งใบแจ้งค่าบริการจากอีเมลที่แอปยังไม่รู้จัก</p>
+    <p class="hint">ตั้งแต่วันที่เลือก เมื่อเปิดแอปครั้งแรกของเดือน แอปจะดึงบิลใหม่จากผู้ส่งทั้งหมดเข้าให้เอง ถ้าสิทธิ์ Google หมดอายุ จะมีแจ้งเตือนให้แตะครั้งเดียวเพื่อซิงก์${state.settings.gmailLastAuto ? ` · ซิงก์ล่าสุด ${thMonthYear(state.settings.gmailLastAuto)}` : ''}</p>
     ${gmailSavedToken() ? '<button class="btn ghost" id="gmailOut" type="button">ตัดการเชื่อม Gmail</button>' : ''}
   `);
   gmailRenderResults();
@@ -427,10 +567,11 @@ function gmailSheet() {
   });
   scan.addEventListener('click', () => gmailScan(scan));
 
-  $('#gmailSenders').addEventListener('change', (e) => {
-    state.settings.gmailSenders = e.target.value.trim();
-    save();
-    toast('บันทึกแล้ว');
+  gmailBindSources();
+  $('#gmailAutoDay').addEventListener('change', (e) => {
+    state.settings.gmailAutoDay = Number(e.target.value);
+    save(); render();
+    toast(state.settings.gmailAutoDay ? `ซิงก์ทุกวันที่ ${state.settings.gmailAutoDay}` : 'ปิดซิงก์อัตโนมัติแล้ว');
   });
   $('#gmailResults').addEventListener('click', (e) => {
     const t = e.target.closest('[data-gmail-import]');
@@ -450,6 +591,11 @@ function gmailSheet() {
     gmailSheet();
     toast('ตัดการเชื่อมแล้ว');
   });
+}
+
+if (typeof document !== 'undefined') {
+  setTimeout(gmailAutoTry, 1500);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAutoTry(); });
 }
 
 if (typeof module !== 'undefined') module.exports = { gmailParseBill, gmailParseDate, gmailProvider };

@@ -606,7 +606,7 @@ function alertList() {
   const approvals = toApprove();
   return { bills, over, approvals };
 }
-function alertCount() { const a = alertList(); return a.bills.length + a.over.length + a.approvals.length; }
+function alertCount() { const a = alertList(); return a.bills.length + a.over.length + a.approvals.length + (gmailAutoDue() ? 1 : 0); }
 
 function alertsSheet() {
   const { bills, over, approvals } = alertList();
@@ -614,10 +614,11 @@ function alertsSheet() {
   const S = walletSet('total');
   openSheet(`
     <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>การแจ้งเตือน</h2><span style="width:40px"></span></div>
+    ${gmailAutoDue() ? gmailAutoAlert() : ''}
     ${approvals.length ? `<div class="section-title">รอคุณอนุมัติ</div><div class="list">${approvals.map((t) => txItem(t, S)).join('')}</div>` : ''}
     ${bills.length ? `<div class="section-title">บิลใกล้ครบกำหนด / เลยกำหนด</div><div class="list">${bills.map(occItem).join('')}</div>` : ''}
     ${over.length ? `<div class="section-title">งบประมาณใช้ไปแล้ว 80% ขึ้นไป</div>${over.map((bg) => budgetRow(bg, ym)).join('')}` : ''}
-    ${bills.length || over.length || approvals.length ? '' : '<div class="empty"><div class="e-ico">🔔</div>ไม่มีการแจ้งเตือน</div>'}
+    ${bills.length || over.length || approvals.length || gmailAutoDue() ? '' : '<div class="empty"><div class="e-ico">🔔</div>ไม่มีการแจ้งเตือน</div>'}
   `);
 }
 

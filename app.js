@@ -257,7 +257,8 @@ function renderMonth() {
   if (missing.length) alerts += `<div class="alert warn">✏️<div>ยังไม่ได้ระบุยอดเดือนนี้: ${missing.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
   if (peaDue.length) alerts += `<div class="alert warn">⚡<div>ถึงรอบบิลค่าไฟ กดที่บิลเพื่อดึงยอดเดือนนี้จาก PEA: ${peaDue.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
 
-  alerts += `<button class="btn ghost gmail-btn" data-action="gmail">📧 ดึงบิลค่าโทรศัพท์จาก Gmail</button>`;
+  if (gmailAutoDue()) alerts += gmailAutoAlert();
+  alerts += `<button class="btn ghost gmail-btn" data-action="gmail">📧 Gmail AutoSync</button>`;
 
   const unpaid = occ.filter((o) => !o.paid);
   const done = occ.filter((o) => o.paid);
@@ -529,7 +530,7 @@ function billForm(b) {
     startMonth: ui.ym, months: 12, onceDate: `${ui.ym}-${pad(Math.min(today().getDate(), daysInMonth(ui.ym)))}`,
   };
   const draft = { ...b };
-  // Auto Sync bills (PEA electricity, Gmail phone e-bills) are monthly bills whose
+  // Auto Sync bills (PEA electricity, Gmail AutoSync e-bills) are monthly bills whose
   // amounts are pulled in automatically; the sheet shows their source settings instead.
   draft.auto = !!(b.pea || b.gmail);
   draft.source = b.gmail ? 'gmail' : 'pea';
@@ -679,15 +680,15 @@ function billForm(b) {
     if (!draft.auto) { box.innerHTML = ''; renderPea(); return; }
     const src = (k, label) => `<button type="button" class="chip ${draft.source === k ? 'on' : ''}" data-source="${k}">${label}</button>`;
     // An existing bill keeps its source; switching would drop its link.
-    const sources = isNew ? `<div class="chips" id="srcChips">${src('pea', '⚡ ค่าไฟ (PEA)')}${src('gmail', '📱 ค่าโทรศัพท์ (Gmail)')}</div>` : '';
+    const sources = isNew ? `<div class="chips" id="srcChips">${src('pea', '⚡ ค่าไฟ (PEA)')}${src('gmail', '📧 Gmail AutoSync')}</div>` : '';
     let html = `${sources}<p class="hint">Auto Sync ดึงยอดบิลแต่ละเดือนให้อัตโนมัติจากผู้ให้บริการ บิลที่ได้จะแสดงในรายการบิลเหมือนบิลปกติ</p>`;
     if (draft.source === 'gmail') {
       const g = b && b.gmail;
       html += `
         <div class="section-title">เชื่อมกับ Gmail</div>
-        ${g ? `<div class="form"><div class="kv"><span>ผู้ให้บริการ</span><span>${esc(g.provider)}${g.account ? ' ' + esc(gmailShortAccount(g.account)) : ''}</span></div></div>` : ''}
-        <button class="btn" id="autoGmail" type="button">📧 ดึงบิลค่าโทรศัพท์จาก Gmail</button>
-        <p class="hint">ค้นหาใบแจ้งค่าบริการจาก AIS, True, dtac, 3BB, NT ใน Gmail แล้วสร้างบิลและเติมยอดกับวันครบกำหนดให้อัตโนมัติ ตั้งค่าผู้ส่งเพิ่มเติมและตัดการเชื่อมได้ในหน้าถัดไป</p>`;
+        ${g ? `<div class="form"><div class="kv"><span>ผู้ให้บริการ</span><span>${esc((gmailProviderList().find((p) => p.key === g.provider) || { name: g.provider }).name)}${g.account ? ' ' + esc(gmailShortAccount(g.account)) : ''}</span></div></div>` : ''}
+        <button class="btn" id="autoGmail" type="button">📧 Gmail AutoSync</button>
+        <p class="hint">ค้นหาอีเมลบิลจาก AIS, True, dtac, 3BB, NT และผู้ส่งที่เพิ่มเอง แล้วสร้างบิลและเติมยอดกับวันครบกำหนดให้อัตโนมัติ เพิ่มผู้ส่ง เลือกหมวดหมู่ และตัดการเชื่อมได้ในหน้าถัดไป</p>`;
     }
     box.innerHTML = html;
     const chipsEl = $('#srcChips');
@@ -729,7 +730,7 @@ function billForm(b) {
     if (!draft.name) { toast('กรุณาใส่ชื่อบิล'); $('#fName').focus(); return; }
     if (draft.auto) {
       if (draft.source === 'pea' && !(draft.pea && draft.pea.ca && draft.pea.peano)) { toast('กรอกหมายเลขผู้ใช้ไฟฟ้าและรหัสเครื่องวัดก่อน'); return; }
-      if (draft.source === 'gmail' && !(b && b.gmail)) { toast('กดดึงบิลค่าโทรศัพท์จาก Gmail'); return; }
+      if (draft.source === 'gmail' && !(b && b.gmail)) { toast('กด Gmail AutoSync เพื่อดึงบิล'); return; }
       draft.type = 'monthly';
       draft.variable = true;
       if (draft.source === 'pea') draft.category = 'electric';
@@ -1142,6 +1143,7 @@ document.addEventListener('click', (e) => {
     case 'import': $('#importFile').click(); break;
     case 'ics': exportIcs(); break;
     case 'gmail': gmailSheet(); break;
+    case 'gmail-auto': gmailAutoRun(false); break;
     case 'reset':
       if (isCloud()) {
         if (confirm('ลบข้อมูลบิลในเครื่องนี้? (รายการรับจ่ายในบัญชีออนไลน์จะไม่ถูกลบ)')) {
