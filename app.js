@@ -408,10 +408,6 @@ function renderSettings() {
     <button class="btn" data-action="ics">📆 เพิ่มการเตือนลงปฏิทิน iPhone</button>
     <p class="hint">สร้างไฟล์ปฏิทิน (.ics) ของบิลทั้งหมด พร้อมเสียงเตือนก่อนวันครบกำหนดตามที่ตั้งไว้ เปิดไฟล์แล้วเลือก "เพิ่มทั้งหมด" ในแอปปฏิทิน · หากแก้ไขบิล ให้ลบปฏิทินเดิมแล้วสร้างใหม่</p>
 
-    <div class="section-title">เชื่อมบัญชี</div>
-    <button class="btn ghost" data-action="gmail">📧 ดึงบิลค่าโทรศัพท์จาก Gmail</button>
-    <p class="hint">ค้นหาใบแจ้งค่าบริการจาก AIS, True, dtac, 3BB, NT ใน Gmail แล้วเพิ่มยอดและวันครบกำหนดเข้าบิลให้อัตโนมัติ</p>
-
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
     <button class="btn ghost" data-action="import">⬆️ นำเข้าข้อมูล</button>
@@ -532,6 +528,10 @@ function billForm(b) {
     startMonth: ui.ym, months: 12, onceDate: `${ui.ym}-${pad(Math.min(today().getDate(), daysInMonth(ui.ym)))}`,
   };
   const draft = { ...b };
+  // Auto Sync bills (PEA electricity, Gmail phone e-bills) are monthly bills whose
+  // amounts are pulled in automatically; the sheet shows their source settings instead.
+  draft.auto = !!(b.pea || b.gmail);
+  draft.source = b.gmail ? 'gmail' : 'pea';
 
   const chips = Object.entries(CATEGORIES).map(([k, c]) =>
     `<button type="button" class="chip ${draft.category === k ? 'on' : ''}" data-cat="${k}">${c.icon} ${c.label}</button>`).join('');
@@ -542,25 +542,29 @@ function billForm(b) {
       <h2>${isNew ? 'เพิ่มบิล' : 'แก้ไขบิล'}</h2>
       <button class="link-btn strong" id="saveBill">บันทึก</button>
     </div>
-    <div class="chips" id="catChips">${chips}</div>
-    <div class="form">
+    <div class="seg" id="typeSeg">
+      <button type="button" data-type="once">ครั้งเดียว</button>
+      <button type="button" data-type="monthly">ทุกเดือน</button>
+      <button type="button" data-type="installment">ผ่อนเป็นงวด</button>
+      <button type="button" data-type="auto">Auto Sync</button>
+    </div>
+    <div id="autoFields"></div>
+    <div id="manualTop">
+      <div class="chips" id="catChips">${chips}</div>
+    </div>
+    <div class="form" id="nameForm">
       <div class="field"><label for="fName">ชื่อบิล</label><input id="fName" placeholder="เช่น KBank, กฟน." value="${esc(draft.name || '')}" autocomplete="off"></div>
-      <div class="field"><label for="fAmount">ยอดเงิน (฿)</label><input id="fAmount" inputmode="decimal" placeholder="0" value="${draft.amount === '' || draft.amount == null ? '' : draft.amount}"></div>
-      <div class="field"><label for="fVariable">ยอดไม่แน่นอน</label>
+      <div class="field" id="amountRow"><label for="fAmount">ยอดเงิน (฿)</label><input id="fAmount" inputmode="decimal" placeholder="0" value="${draft.amount === '' || draft.amount == null ? '' : draft.amount}"></div>
+      <div class="field" id="variableRow"><label for="fVariable">ยอดไม่แน่นอน</label>
         <span style="flex:1"></span><label class="switch"><input type="checkbox" id="fVariable" ${draft.variable ? 'checked' : ''}><span></span></label></div>
     </div>
-    <p class="hint">เปิด "ยอดไม่แน่นอน" สำหรับบัตรเครดิต ค่าน้ำ ค่าไฟ แล้วกรอกยอดจริงในแต่ละเดือน ยอดด้านบนจะใช้เป็นยอดประมาณ</p>
+    <p class="hint" id="variableHint">เปิด "ยอดไม่แน่นอน" สำหรับบัตรเครดิต ค่าน้ำ ค่าไฟ แล้วกรอกยอดจริงในแต่ละเดือน ยอดด้านบนจะใช้เป็นยอดประมาณ</p>
 
     <div id="peaFields"></div>
 
-    <div class="seg" id="typeSeg">
-      <button type="button" data-type="monthly">ทุกเดือน</button>
-      <button type="button" data-type="installment">ผ่อนเป็นงวด</button>
-      <button type="button" data-type="once">ครั้งเดียว</button>
-    </div>
     <div class="form" id="schedFields"></div>
 
-    <div class="form">
+    <div class="form" id="extraForm">
       <div class="field"><label for="fAutopay">ตัดบัญชีอัตโนมัติ</label>
         <span style="flex:1"></span><label class="switch"><input type="checkbox" id="fAutopay" ${draft.autopay ? 'checked' : ''}><span></span></label></div>
       <div class="field col"><label for="fNote">บันทึก</label><textarea id="fNote" placeholder="เช่น เลขบัญชี, วันตัดรอบบัตร">${esc(draft.note || '')}</textarea></div>
@@ -569,11 +573,15 @@ function billForm(b) {
   `);
 
   const renderSched = () => {
-    document.querySelectorAll('#typeSeg button').forEach((x) => x.classList.toggle('on', x.dataset.type === draft.type));
+    const mode = draft.auto ? 'auto' : draft.type;
+    document.querySelectorAll('#typeSeg button').forEach((x) => x.classList.toggle('on', x.dataset.type === mode));
     const days = Array.from({ length: 31 }, (_, i) => i + 1)
       .map((d) => `<option value="${d}" ${Number(draft.dueDay) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
     let html = '';
-    if (draft.type === 'once') {
+    if (draft.auto) {
+      html = `<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
+        <div class="field"><label for="fStart">เริ่มเดือน</label><input type="month" id="fStart" value="${draft.startMonth || ui.ym}"></div>`;
+    } else if (draft.type === 'once') {
       html = `<div class="field"><label for="fOnce">วันครบกำหนด</label><input type="date" id="fOnce" value="${draft.onceDate}"></div>`;
     } else {
       html = `<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
@@ -639,10 +647,10 @@ function billForm(b) {
   const renderPea = () => {
     const box = $('#peaFields');
     if (!box) return;
-    if (draft.category !== 'electric') { box.innerHTML = ''; return; }
+    if (!draft.auto || draft.source !== 'pea') { box.innerHTML = ''; return; }
     const p = draft.pea || {};
     box.innerHTML = `
-      <div class="section-title">⚡ เชื่อมกับการไฟฟ้าส่วนภูมิภาค (PEA)</div>
+      <div class="section-title">เชื่อมกับการไฟฟ้าส่วนภูมิภาค (PEA)</div>
       <div class="form">
         <div class="field"><label for="fPeaCa">หมายเลขผู้ใช้ไฟฟ้า</label><input id="fPeaCa" inputmode="numeric" placeholder="เลข 12 หลักบนใบแจ้งค่าไฟ" value="${esc(p.ca || '')}" autocomplete="off"></div>
         <div class="field"><label for="fPeaNo">รหัสเครื่องวัด</label><input id="fPeaNo" inputmode="numeric" placeholder="เลขมิเตอร์บนใบแจ้งค่าไฟ" value="${esc(p.peano || '')}" autocomplete="off"></div>
@@ -653,7 +661,48 @@ function billForm(b) {
     `;
     $('#peaFetch').addEventListener('click', onPeaFetch);
   };
-  renderPea();
+
+  // Auto Sync: pick the source, then show only that source's settings.
+  const renderAuto = () => {
+    const box = $('#autoFields');
+    const gmailOnly = draft.auto && draft.source === 'gmail' && isNew;
+    $('#manualTop').hidden = draft.auto;
+    $('#amountRow').hidden = draft.auto;
+    $('#variableRow').hidden = draft.auto;
+    $('#variableHint').hidden = draft.auto;
+    $('#nameForm').hidden = gmailOnly;
+    $('#schedFields').hidden = gmailOnly;
+    $('#extraForm').hidden = gmailOnly;
+    $('#saveBill').style.visibility = gmailOnly ? 'hidden' : '';
+    $('#fName').placeholder = draft.auto && draft.source === 'pea' ? 'ชื่อบ้าน เช่น บ้านหลังใหญ่' : 'เช่น KBank, กฟน.';
+    if (!draft.auto) { box.innerHTML = ''; renderPea(); return; }
+    const src = (k, label) => `<button type="button" class="chip ${draft.source === k ? 'on' : ''}" data-source="${k}">${label}</button>`;
+    // An existing bill keeps its source; switching would drop its link.
+    const sources = isNew ? `<div class="chips" id="srcChips">${src('pea', '⚡ ค่าไฟ (PEA)')}${src('gmail', '📱 ค่าโทรศัพท์ (Gmail)')}</div>` : '';
+    let html = `${sources}<p class="hint">Auto Sync ดึงยอดบิลแต่ละเดือนให้อัตโนมัติจากผู้ให้บริการ บิลที่ได้จะแสดงในรายการบิลเหมือนบิลปกติ</p>`;
+    if (draft.source === 'gmail') {
+      const g = b && b.gmail;
+      html += `
+        <div class="section-title">เชื่อมกับ Gmail</div>
+        ${g ? `<div class="form"><div class="kv"><span>ผู้ให้บริการ</span><span>${esc(g.provider)}${g.account ? ' ' + esc(gmailShortAccount(g.account)) : ''}</span></div></div>` : ''}
+        <button class="btn" id="autoGmail" type="button">📧 ดึงบิลค่าโทรศัพท์จาก Gmail</button>
+        <p class="hint">ค้นหาใบแจ้งค่าบริการจาก AIS, True, dtac, 3BB, NT ใน Gmail แล้วสร้างบิลและเติมยอดกับวันครบกำหนดให้อัตโนมัติ ตั้งค่าผู้ส่งเพิ่มเติมและตัดการเชื่อมได้ในหน้าถัดไป</p>`;
+    }
+    box.innerHTML = html;
+    const chipsEl = $('#srcChips');
+    if (chipsEl) chipsEl.addEventListener('click', (e) => {
+      const c = e.target.closest('[data-source]');
+      if (!c) return;
+      sync();
+      draft.source = c.dataset.source;
+      renderAuto();
+      renderSched();
+    });
+    const gBtn = $('#autoGmail');
+    if (gBtn) gBtn.addEventListener('click', () => gmailSheet());
+    renderPea();
+  };
+  renderAuto();
 
   $('#catChips').addEventListener('click', (e) => {
     const c = e.target.closest('[data-cat]');
@@ -669,13 +718,21 @@ function billForm(b) {
     const t = e.target.closest('[data-type]');
     if (!t) return;
     sync();
-    draft.type = t.dataset.type;
+    if (t.dataset.type === 'auto') draft.auto = true;
+    else { draft.auto = false; draft.type = t.dataset.type; }
+    renderAuto();
     renderSched();
   });
   $('#saveBill').addEventListener('click', () => {
     sync();
     if (!draft.name) { toast('กรุณาใส่ชื่อบิล'); $('#fName').focus(); return; }
-    if (draft.type === 'once' && !draft.onceDate) { toast('กรุณาเลือกวันครบกำหนด'); return; }
+    if (draft.auto) {
+      if (draft.source === 'pea' && !(draft.pea && draft.pea.ca && draft.pea.peano)) { toast('กรอกหมายเลขผู้ใช้ไฟฟ้าและรหัสเครื่องวัดก่อน'); return; }
+      if (draft.source === 'gmail' && !(b && b.gmail)) { toast('กดดึงบิลค่าโทรศัพท์จาก Gmail'); return; }
+      draft.type = 'monthly';
+      draft.variable = true;
+      if (draft.source === 'pea') draft.category = 'electric';
+    } else if (draft.type === 'once' && !draft.onceDate) { toast('กรุณาเลือกวันครบกำหนด'); return; }
     const out = {
       id: draft.id || uid(),
       name: draft.name,
@@ -692,9 +749,8 @@ function billForm(b) {
       out.startMonth = draft.startMonth || ui.ym;
       if (draft.type === 'installment') out.months = Math.max(1, draft.months || 1);
     }
-    if (draft.category === 'electric' && draft.pea && (draft.pea.ca || draft.pea.peano)) {
-      out.pea = { ca: draft.pea.ca || '', peano: draft.pea.peano || '' };
-    }
+    if (draft.auto && draft.source === 'pea') out.pea = { ca: draft.pea.ca, peano: draft.pea.peano };
+    if (draft.auto && draft.source === 'gmail') out.gmail = { ...b.gmail };
     const i = state.bills.findIndex((x) => x.id === out.id);
     if (i >= 0) state.bills[i] = out; else state.bills.push(out);
     let filled = 0;
