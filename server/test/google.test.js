@@ -83,3 +83,28 @@ test('bad tokens are refused', async () => {
   assert.equal((await C('POST', '/auth/google', { credential: idToken({ sub: `b${run}`, email: `b${run}@x.dev`, email_verified: false }) })).status, 403);
   assert.equal((await C('GET', '/bootstrap')).status, 401);
 });
+
+test('profile: name and picture are saved, and the Google photo is offered only to its owner', async () => {
+  const photo = `https://lh3.googleusercontent.com/a/p${run}=s96-c`;
+  const A = agent();
+  assert.equal((await A('POST', '/auth/google', { credential: idToken({ sub: `pf${run}`, email: `pf${run}@gmail.com`, name: 'Pf', picture: photo }) })).ok, true);
+  assert.equal((await A('GET', '/bootstrap')).user.googlePicture, photo);
+  assert.equal((await A('PUT', '/profile', { name: '  New name ', avatar: '🐼' })).avatar, '🐼');
+  let me = (await A('GET', '/bootstrap')).user;
+  assert.equal(me.name, 'New name');
+  assert.equal(me.avatar, '🐼');
+  assert.equal((await A('PUT', '/profile', { name: 'New name', avatar: photo })).avatar, photo);
+  // Someone else's photo URL, markup and an empty name are refused or dropped.
+  assert.equal((await A('PUT', '/profile', { name: 'New name', avatar: 'https://lh3.googleusercontent.com/a/other' })).avatar, null);
+  assert.equal((await A('PUT', '/profile', { name: 'x', avatar: '<img src=x>' })).avatar, null);
+  assert.equal((await A('PUT', '/profile', { name: ' ' })).status, 400);
+
+  // An email/password account can fetch its photo from the Google account with the same email only.
+  const E = agent();
+  const email = `pe${run}@gmail.com`;
+  assert.equal((await E('POST', '/auth/register', { email, password: 'password-pe', name: 'Pe' })).ok, true);
+  assert.equal((await E('POST', '/profile/google', { credential: idToken({ sub: `o${run}`, email: `other${run}@gmail.com`, picture: photo }) })).status, 409);
+  assert.equal((await E('POST', '/profile/google', { credential: idToken({ sub: `pe${run}`, email, picture: photo }) })).googlePicture, photo);
+  assert.equal((await E('PUT', '/profile', { name: 'Pe', avatar: photo })).avatar, photo);
+  assert.equal((await E('GET', '/bootstrap')).user.avatar, photo);
+});

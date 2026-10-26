@@ -608,7 +608,13 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 
 /* ---------- Account ---------- */
 .acct { display: flex; align-items: center; gap: 14px; }
-.avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 26px; }
+.avatar { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 26px; }
+.card.acct.tap { width: 100%; border: 0; text-align: left; color: inherit; font: inherit; }
+.card.acct.tap:active { background: var(--accent-soft); }
+.acct .acct-main { flex: 1; min-width: 0; }
+.acct .acct-main .small { overflow: hidden; text-overflow: ellipsis; }
+.p-avatar-in { background: var(--accent-soft); font-weight: 600; }
+.gphoto { margin: -4px 2px 14px; }
 .halves + .section-title { margin-top: 22px; }
 .field[hidden] { display: none; }
 
@@ -1118,3 +1124,18 @@ body::before {
 [data-backdrop="dark"] .badge.label, [data-backdrop="dark"] .lab-tag, [data-backdrop="dark"] .lab-ico { color: #b9a8ff; background: #7a5af833; }
 [data-theme="black"] .sheet, [data-theme="black"] .gc-card { box-shadow: 0 0 0 0.5px rgba(255, 255, 255, .1), 0 20px 60px rgba(0, 0, 0, .7); }
 [data-backdrop="light"] .sheet, [data-backdrop="light"] .gc-card { box-shadow: 0 20px 60px rgba(0, 0, 0, .14); }
+/* Personal vs shared in the add-transaction sheet: personal is the main choice, the
+   partner is a small profile button (about a fifth of the row) with their nickname. */
+.scope-row { display: grid; grid-template-columns: 5fr minmax(64px, 1fr); gap: 3px; background: var(--c-fill); border-radius: 22px; padding: 3px; margin-bottom: 14px; }
+.scope-row button { border: 0; background: none; border-radius: 19px; font: inherit; font-size: 14.5px; color: var(--c-text); min-height: 52px; }
+.scope-row button.on { background: var(--sheet-card); font-weight: 600; box-shadow: 0 2px 8px rgba(4, 22, 48, .12); }
+.scope-partner { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 2px; min-width: 0; }
+.scope-partner span { font-size: 11px; line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-muted); }
+.scope-partner.on span { color: var(--accent); }
+.scope-av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; font-weight: 700; background: var(--accent-soft); color: var(--accent); overflow: hidden; box-shadow: 0 0 0 2px transparent; }
+.scope-av img { width: 100%; height: 100%; object-fit: cover; }
+.scope-partner.on .scope-av { box-shadow: 0 0 0 2px var(--accent); }
+.nick-hero { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; margin: 6px 0 16px; color: var(--c-muted); }
+.nick-hero .avatar.big { width: 72px; height: 72px; flex-basis: 72px; font-size: 32px; }
+.nick-hero p { margin: 0; font-size: 14px; }
+.scope-row[hidden] { display: none; }

@@ -27,6 +27,8 @@ const walletIcon = (v) => {
 const labelIds = (v) => (Array.isArray(v)
   ? [...new Set(v.map((x) => str(x, 60)).filter(Boolean))].slice(0, 30)
   : null);
+// Google profile photos are served from googleusercontent.com.
+const googlePhoto = (v) => (typeof v === 'string' && v.length <= 1000 && /^https:\/\/[a-z0-9-]+\.googleusercontent\.com\/[^\s"'<>]+$/.test(v) ? v : null);
 
 /* ---------- Auth ---------- */
 
@@ -34,13 +36,14 @@ router.post('/auth/register', rateLimit(10, 15 * 60000), wrap(async (req, res) =
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   const name = String(req.body.name || '').trim().slice(0, 60);
+  const nickname = String(req.body.nickname || '').trim().slice(0, 20) || null;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw bad('bad_email');
   if (password.length < 8) throw bad('weak_password');
   if (!name) throw bad('bad_name');
   const hash = await hashPassword(password);
   const r = await pool.query(
-    'insert into users (email, password_hash, display_name) values ($1, $2, $3) on conflict (email) do nothing returning id',
-    [email, hash, name]);
+    'insert into users (email, password_hash, display_name, nickname) values ($1, $2, $3, $4) on conflict (email) do nothing returning id',
+    [email, hash, name, nickname]);
   if (!r.rows[0]) throw bad('email_taken', 409);
   await createSession(res, r.rows[0].id);
   res.json({ ok: true });
@@ -77,6 +80,7 @@ router.post('/auth/google', rateLimit(20, 15 * 60000), wrap(async (req, res) => 
     // The email already belongs to an account linked to a different Google account.
     if (r.rows[0].google_sub !== g.sub) throw bad('google_mismatch', 409);
   }
+  await pool.query('update users set google_picture = $2 where id = $1', [r.rows[0].id, googlePhoto(g.picture)]);
   await createSession(res, r.rows[0].id);
   res.json({ ok: true });
 }));
@@ -122,9 +126,11 @@ async function writeLabels(db, id, ids) {
 }
 
 router.get('/bootstrap', wrap(async (req, res) => {
+  // Only the owner sees their own Google photo offer; app_user cannot read the column.
+  const googlePic = (await pool.query('select google_picture from users where id = $1', [uid(req)])).rows[0]?.google_picture;
   const out = await asUser(uid(req), async (db) => {
-    const me = (await db.query('select id, email, display_name from users where id = app_uid()')).rows[0];
-    const partner = (await db.query('select id, email, display_name from users where id = my_partner()')).rows[0] || null;
+    const me = (await db.query('select id, email, display_name, nickname, avatar from users where id = app_uid()')).rows[0];
+    const partner = (await db.query('select id, email, display_name, nickname, avatar from users where id = my_partner()')).rows[0] || null;
     const couple = (await db.query('select my_couple() as id')).rows[0].id;
     const wallets = (await db.query('select * from wallets order by sort, name')).rows;
     const expenses = (await db.query('select * from expenses order by date, created_at')).rows;
@@ -145,8 +151,8 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const byExp = (rows) => rows.reduce((m, r) => ((m[r.expense_id] = m[r.expense_id] || []).push(r), m), {});
     const sh = byExp(shares), ev = byExp(events), lb = byExp(links);
     return {
-      user: { id: me.id, email: me.email, name: me.display_name },
-      partner: partner && { id: partner.id, email: partner.email, name: partner.display_name },
+      user: { id: me.id, email: me.email, name: me.display_name, nickname: me.nickname || undefined, avatar: me.avatar || undefined, googlePicture: googlePic || undefined },
+      partner: partner && { id: partner.id, email: partner.email, name: partner.display_name, nickname: partner.nickname || undefined, avatar: partner.avatar || undefined },
       coupleId: couple,
       invite: invite && { code: invite.code, expiresAt: invite.expires_at },
       wallets: wallets.map((w) => ({ id: w.id, name: w.name, type: w.type, initial: w.initial, excluded: w.excluded, sort: w.sort, icon: w.icon || undefined })),
@@ -167,6 +173,40 @@ router.get('/bootstrap', wrap(async (req, res) => {
     };
   });
   res.json(out);
+}));
+
+/* ---------- Profile ---------- */
+
+// Display name and picture, shown on every device and to the linked partner.
+router.put('/profile', wrap(async (req, res) => {
+  const name = String(req.body.name || '').trim().slice(0, 60);
+  if (!name) throw bad('bad_name');
+  // Sent → required; left out → kept as it is.
+  const nickname = req.body.nickname === undefined ? null : String(req.body.nickname || '').trim().slice(0, 20);
+  if (nickname === '') throw bad('bad_nickname');
+  const pic = req.body.avatar;
+  const avatar = googlePhoto(pic) ? null : walletIcon(pic);
+  // A photo URL is only accepted when it is this account's own Google photo.
+  const r = await pool.query(
+    `update users set display_name = $2, nickname = coalesce($5, nickname),
+       avatar = case when $3::text is not null and $3 = google_picture then $3 else $4 end
+     where id = $1 returning avatar, nickname`, [uid(req), name, googlePhoto(pic), avatar, nickname]);
+  res.json({ ok: true, avatar: r.rows[0]?.avatar || null, nickname: r.rows[0]?.nickname || null });
+}));
+
+// Fetches the Google photo for an account that signed in before photos were kept,
+// or signs in with email: the Google account must be this account's own.
+router.post('/profile/google', rateLimit(20, 15 * 60000), wrap(async (req, res) => {
+  if (!googleClientId()) throw bad('google_disabled', 503);
+  const g = await verifyGoogleIdToken(req.body.credential);
+  if (!g) throw bad('bad_google_token', 401);
+  const u = (await pool.query('select email, google_sub from users where id = $1', [uid(req)])).rows[0];
+  const sameEmail = (g.email_verified === true || g.email_verified === 'true') && String(g.email || '').toLowerCase() === u.email;
+  if (u.google_sub ? u.google_sub !== g.sub : !sameEmail) throw bad('google_other_account', 409);
+  const pic = googlePhoto(g.picture);
+  if (!pic) throw bad('no_google_photo', 404);
+  await pool.query('update users set google_picture = $2 where id = $1', [uid(req), pic]);
+  res.json({ googlePicture: pic });
 }));
 
 /* ---------- Couple ---------- */

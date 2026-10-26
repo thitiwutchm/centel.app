@@ -463,6 +463,7 @@ function renderSettings() {
 
 function openSheet(html) {
   const sheet = $('#sheet');
+  delete sheet.dataset.locked;
   sheet.innerHTML = `<div class="grabber"></div>${html}`;
   sheet.hidden = false;
   $('#backdrop').hidden = false;
@@ -471,9 +472,12 @@ function openSheet(html) {
 }
 
 function closeSheet() {
+  // A locked sheet (the nickname prompt) closes only by saving.
+  if ($('#sheet').dataset.locked) return;
   $('#sheet').hidden = true;
   $('#backdrop').hidden = true;
   document.body.style.overflow = '';
+  if (typeof needNickname === 'function' && needNickname()) setTimeout(() => { if ($('#sheet').hidden) nicknameSheet(); }, 350);
 }
 
 /* ---------- PEA electricity bill lookup ---------- */
