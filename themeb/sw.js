@@ -1,5 +1,5 @@
 // ThemeB service worker, scoped to /themeb/. Bump CACHE when shipping changes.
-const CACHE = 'billplanner-themeb-v3';
+const CACHE = 'billplanner-themeb-v4';
 const ASSETS = [
   './',
   'index.html',
@@ -14,8 +14,8 @@ const ASSETS = [
   'fonts/plexthai-600-latin.woff2',
   'fonts/intertight-600-latin.woff2',
   'fonts/jetbrainsmono-500-latin.woff2',
-  '../icons/icon-192.png',
-  '../icons/apple-touch-icon.png',
+  '../icons/centel-192.png',
+  '../icons/centel-180.png',
 ];
 
 self.addEventListener('install', (e) => {

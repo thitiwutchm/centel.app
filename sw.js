@@ -11,9 +11,9 @@ const ASSETS = [
   'billfiles.js',
   'gmail.js',
   'manifest.webmanifest',
-  'icons/icon-192.png',
-  'icons/icon-512.png',
-  'icons/apple-touch-icon.png',
+  'icons/centel-192.png',
+  'icons/centel-512.png',
+  'icons/centel-180.png',
 ];
 
 self.addEventListener('install', (e) => {
