@@ -142,7 +142,7 @@ function occurrences(ym) {
       const rec = record(ym, b.id);
       const due = dueDateFor(b, ym);
       const amount = rec.amount != null ? rec.amount : (b.amount || 0);
-      const needsAmount = rec.amount == null && b.variable;
+      const needsAmount = rec.amount == null && (b.variable || !!b.pea);
       const paid = !!rec.paid;
       const daysLeft = daysBetween(t, due);
       let status = 'upcoming';
@@ -217,7 +217,7 @@ function occItem(o) {
   const b = o.bill;
   const dueTxt = `ครบกำหนด ${thShortDate(o.due)}`;
   const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
-  const amt = o.needsAmount ? `<span class="badge warn">ระบุยอด</span>` : baht(o.amount);
+  const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : 'ระบุยอด'}</span>` : baht(o.amount);
   return `
     <div class="item ${o.paid ? 'paid' : ''}" data-occ="${b.id}" data-ym="${o.ym}" role="button" tabindex="0">
       ${icoHtml(b)}
@@ -246,12 +246,14 @@ function renderMonth() {
 
   const overdue = occ.filter((o) => o.status === 'overdue' && !o.bill.autopay);
   const soon = occ.filter((o) => o.status === 'soon' && !o.bill.autopay);
-  const missing = occ.filter((o) => o.needsAmount && !o.paid);
+  const missing = occ.filter((o) => o.needsAmount && !o.paid && !o.bill.pea);
+  const peaDue = occ.filter((o) => o.needsAmount && !o.paid && o.bill.pea);
 
   let alerts = '';
   if (overdue.length) alerts += `<div class="alert bad">⚠️<div>เลยกำหนดชำระ ${overdue.length} รายการ รวม ${baht(overdue.reduce((s, o) => s + o.amount, 0))}</div></div>`;
   if (soon.length) alerts += `<div class="alert warn">⏰<div>ใกล้ครบกำหนดภายใน ${state.settings.remindDays} วัน: ${soon.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
   if (missing.length) alerts += `<div class="alert warn">✏️<div>ยังไม่ได้ระบุยอดเดือนนี้: ${missing.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
+  if (peaDue.length) alerts += `<div class="alert warn">⚡<div>ถึงรอบบิลค่าไฟ กดที่บิลเพื่อดึงยอดเดือนนี้จาก PEA: ${peaDue.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
 
   const unpaid = occ.filter((o) => !o.paid);
   const done = occ.filter((o) => o.paid);
@@ -459,6 +461,11 @@ function peaPeriodToYm(p) {
   else if ((mm = s.match(/^(\d{4})(\d{2})(\d{2})$/))) { y = +mm[1]; m = +mm[2]; } // YYYYMMDD (PEA mrdate)
   else if ((mm = s.match(/^(\d{4})(\d{2})$/))) { y = +mm[1]; m = +mm[2]; }        // YYYYMM
   else if ((mm = s.match(/^(\d{4})-(\d{2})-\d{2}/))) { y = +mm[1]; m = +mm[2]; }  // ISO date
+  else if ((mm = s.match(/^(\S+)\s+(\d{4})$/))) {                                  // "ต.ค. 2569"
+    const i = TH_MONTHS_SHORT.indexOf(mm[1]) >= 0 ? TH_MONTHS_SHORT.indexOf(mm[1]) : TH_MONTHS.indexOf(mm[1]);
+    if (i < 0) return null;
+    m = i + 1; y = +mm[2];
+  }
   else return null;
   if (y > 2400) y -= 543;                                // Buddhist -> Gregorian
   if (!(m >= 1 && m <= 12) || !(y >= 2000 && y <= 2100)) return null;
@@ -486,13 +493,15 @@ async function fetchPeaBills(ca, peano) {
   const rows = Array.isArray(data.data) ? data.data : [];
   // Newest period first, with our parsed month and amount attached.
   // PEA's billperiod is Thai text ("ต.ค. 2569"); mrdate (YYYYMMDD) is the reliable month.
+  // PEA lists oldest first, so the row position breaks ties when a month can't be read.
   return rows
-    .map((r) => ({
+    .map((r, i) => ({
       raw: r,
+      i,
       ym: peaPeriodToYm(r.mrdate) || peaPeriodToYm(r.billperiod ?? r.billPeriod ?? r.period),
       amount: peaRowAmount(r),
     }))
-    .sort((a, b2) => (a.ym && b2.ym ? (a.ym < b2.ym ? 1 : -1) : 0));
+    .sort((a, b2) => (a.ym && b2.ym && a.ym !== b2.ym ? (a.ym < b2.ym ? 1 : -1) : b2.i - a.i));
 }
 
 // Write fetched monthly amounts into a bill's records (keeps paid status).
@@ -501,7 +510,7 @@ function applyPeaRows(billId, rows) {
   rows.forEach((r) => {
     if (!r.ym || r.amount == null) return;
     const prev = record(r.ym, billId);
-    setRecord(r.ym, billId, { amount: r.amount });
+    setRecord(r.ym, billId, { amount: r.amount, pea: true });
     const tx = billTxn(billId, r.ym);
     if (tx && prev.paid) { tx.amount = r.amount; }
     n++;
@@ -713,6 +722,7 @@ function occurrenceSheet(id, ym) {
   const o = occurrences(ym).find((x) => x.bill.id === id);
   const rec = record(ym, id);
   const c = cat(b);
+  const peaNeeded = !!b.pea && rec.amount == null && !o.paid;
 
   const history = [];
   for (let i = 1; i <= 6; i++) {
@@ -746,10 +756,11 @@ function occurrenceSheet(id, ym) {
         ${money.wallets.map((w) => `<option value="${w.id}" ${billPayWallet() === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
       </select></div>`}
     </div>
-    ${b.pea && (b.pea.ca || b.pea.peano) ? `<button class="btn ghost" id="oPea" type="button">⚡ ดึงยอดจาก PEA</button>` : ''}
+    ${peaNeeded ? `<div class="alert warn">⚡<div>บิลนี้ผูกกับ PEA ต้องดึงยอด${thMonthYear(ym)}ก่อนจึงจะกดจ่ายได้</div></div>` : ''}
+    ${b.pea ? `<button class="btn ${peaNeeded ? '' : 'ghost'}" id="oPea" type="button">⚡ ดึงยอด${peaNeeded ? 'เดือนนี้' : ''}จาก PEA</button>` : ''}
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
-      : `<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button><button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
+      : `${peaNeeded ? '' : '<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button>'}<button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
     ${history.length ? `<div class="section-title">ย้อนหลัง</div><div class="form history">${history.join('')}</div>` : ''}
   `);
 
@@ -788,7 +799,12 @@ function occurrenceSheet(id, ym) {
       const filled = applyPeaRows(id, rows);
       const match = rows.find((r) => r.ym === ym && r.amount != null);
       save(); saveMoney();
-      toast(match ? `อัปเดตยอดเดือนนี้ ${baht(match.amount)}` : `อัปเดต ${filled} เดือน`);
+      if (match) toast(`ยอด${thMonthYear(ym)} ${baht(match.amount)}`);
+      else {
+        // PEA issues a month's bill only after the meter is read (around the same day each month).
+        const readDay = String((rows[0] && rows[0].raw.mrdate) || '').slice(6, 8);
+        toast(`ยังไม่มีบิล${thMonthYear(ym)}ในระบบ กฟภ.${readDay ? ` (จดมิเตอร์ราววันที่ ${+readDay})` : ''} อัปเดต ${filled} เดือนอื่นแล้ว`);
+      }
       occurrenceSheet(id, ym);
     } catch (err) {
       oPea.disabled = false; oPea.textContent = label;
@@ -804,6 +820,7 @@ function togglePaid(id, ym) {
     setRecord(ym, id, { paid: undefined, paidAt: undefined });
     removeBillTxn(id, ym);
   } else {
+    if (b.pea && rec.amount == null) { occurrenceSheet(id, ym); toast('ดึงยอดเดือนนี้จาก PEA ก่อน'); return; }
     if (b.variable && rec.amount == null) { occurrenceSheet(id, ym); toast('กรอกยอดจริงของเดือนนี้ก่อน'); return; }
     setRecord(ym, id, { paid: true, paidAt: new Date().toISOString() });
     recordBillTxn(b, ym, rec.amount != null ? rec.amount : (b.amount || 0), billPayWallet());
