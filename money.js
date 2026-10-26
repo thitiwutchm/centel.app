@@ -319,7 +319,7 @@ function recordBillTxn(b, ym, amount, walletId, date = dateStr(new Date())) {
   if (!walletId || !walletById(walletId) || !(amount > 0)) return;
   saveTxn({
     id: newId(), type: 'expense', amount, category: BILL_TX_CAT[b.category] || 'other_exp',
-    walletId, date, note: `จ่าย${b.name}`, billId: b.id, billYm: ym,
+    walletId, date, note: tr(`จ่าย${b.name}`), billId: b.id, billYm: ym,
   });
 }
 
@@ -392,7 +392,7 @@ function kbaht(n) {
   return `${n < 0 ? '-' : ''}฿${s}`;
 }
 function masked(s) { return money.prefs.hideBalance ? '฿ ••••••' : s; }
-function thDate(ds) { const d = parseDs(ds); return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + 543).slice(2)}`; }
+function thDate(ds) { const d = parseDs(ds); return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + BE).slice(2)}`; }
 function dayLabel(ds) {
   const diff = daysBetween(today(), parseDs(ds));
   if (diff === 0) return 'วันนี้';
@@ -569,7 +569,7 @@ function dayGroups(list, S, newestFirst = true) {
       <div class="day-card">
         <div class="day-head">
           <div class="dnum">${d.getDate()}</div>
-          <div class="dmeta"><div>${dayLabel(ds)}</div><div>${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}</div></div>
+          <div class="dmeta"><div>${dayLabel(ds)}</div><div>${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + BE}</div></div>
           <div class="dtotal">${net > 0 ? '+' : ''}${sbaht(net)}</div>
         </div>
         ${items.map((t) => txItem(t, S)).join('')}
@@ -680,7 +680,7 @@ function homeReport(ym, S) {
       <button class="${type === 'expense' ? 'on exp' : ''}" data-rtype="expense"><span>ใช้จ่ายทั้งหมด</span><b class="exp">${kbaht(expense)}</b></button>
       <button class="${type === 'income' ? 'on inc' : ''}" data-rtype="income"><span>รายรับทั้งหมด</span><b class="inc">${kbaht(income)}</b></button>
     </div>
-    <div class="tip"><span class="muted">${day}/${m}/${parseYm(ym).y + 543}:</span> <b class="${cls}">${kbaht(now)}</b>
+    <div class="tip"><span class="muted">${day}/${m}/${parseYm(ym).y + BE}:</span> <b class="${cls}">${kbaht(now)}</b>
       ${avg.length ? `<div class="muted small">เฉลี่ย ${prev.length} เดือนก่อน ณ วันเดียวกัน: <b>${kbaht(avg[day - 1])}</b></div>` : ''}</div>
     ${chart}
     <div class="legend"><span><i class="dot ${cls}"></i>เดือนนี้</span>${avg.length ? `<span><i class="dot avg"></i>เฉลี่ย ${prev.length} เดือนก่อน</span>` : ''}</div>`;
@@ -757,7 +757,7 @@ function periodTabs() {
   const tabs = [];
   for (let ym = earliest; ym < addMonths(cur, -1); ym = addMonths(ym, 1)) {
     const { y, m } = parseYm(ym);
-    tabs.push([ym, `${TH_MONTHS_SHORT[m - 1]} ${String(y + 543).slice(2)}`]);
+    tabs.push([ym, `${TH_MONTHS_SHORT[m - 1]} ${String(y + BE).slice(2)}`]);
   }
   tabs.push(['last', 'เดือนก่อน'], ['this', 'เดือนนี้'], ['future', 'อนาคต']);
   return tabs;
@@ -1023,7 +1023,7 @@ function budgetDetail(id) {
       { pts: proj, cls: projected > bg.amount ? 'exp' : 'avg', dash: true },
     ],
     hline: { v: bg.amount, cls: 'exp' },
-    xLabels: [[0, `1/${m}/${String(y + 543).slice(2)}`], [dim - 1, `${dim}/${m}/${String(y + 543).slice(2)}`]],
+    xLabels: [[0, `1/${m}/${String(y + BE).slice(2)}`], [dim - 1, `${dim}/${m}/${String(y + BE).slice(2)}`]],
   });
   const list = txnsInMonth(ym).filter(f);
   const S = walletSet(bg.walletId || 'total');
@@ -1041,7 +1041,7 @@ function budgetDetail(id) {
         <div class="bd-sl"><div><span class="muted">ใช้ไป</span><b>${baht(spent)}</b></div>
           <div style="text-align:right"><span class="muted">${left < 0 ? 'เกินงบ' : 'เหลือ'}</span><b class="${left < 0 ? 'exp' : ''}">${baht(Math.abs(left))}</b></div></div>
         ${budgetBar(spent, bg.amount, ym)}
-        <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + 543}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
+        <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + BE}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
         <div class="bd-meta"><span${wImg(w) ? ' class="has-img"' : ''}>${bg.scope === 'shared' ? '🤝' : w ? wFace(w) : '🌐'}</span><div>${bg.scope === 'shared' ? `งบร่วมกับ ${esc(partnerName())}` : w ? esc(w.name) : 'ทุกกระเป๋าเงิน'}</div></div>
       </div>
     </div>
@@ -1896,6 +1896,8 @@ function sampleMoney() {
     { id: uid(), category: 'apparel', amount: 3000, walletId: 'total' },
     { id: uid(), category: 'transport', amount: 1200, walletId: 'total' },
   ];
+  wallets.forEach((w) => { w.name = tr(w.name); });
+  txns.forEach((x) => { x.note = tr(x.note); });
   money = { wallets, txns, budgets, labels: money.labels || [], prefs: { ...money.prefs, billWallet: bank } };
   // Bills already paid in the sample show up as expenses from the bank account.
   const ym = ymOf(t);
