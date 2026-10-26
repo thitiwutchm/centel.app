@@ -531,6 +531,24 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .halves + .section-title { margin-top: 22px; }
 .field[hidden] { display: none; }
 
+/* ---------- Couple / shared expenses ---------- */
+.badge.share { background: #00b3a422; color: #00897e; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.badges .badge { margin-top: 0; }
+.chips.filters { flex-wrap: nowrap; overflow-x: auto; margin: 0 0 12px; padding-bottom: 2px; scrollbar-width: none; }
+.chips.filters::-webkit-scrollbar { display: none; }
+.chips.filters .chip { flex: none; }
+.receipt-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.receipt-row .chip { cursor: pointer; }
+.rc-status { margin: 0 0 10px; }
+.bad-text { color: var(--bad); }
+.card.couple .cp-top { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.card.couple .cp-ico { font-size: 30px; line-height: 1; }
+.card.couple .cp-actions { padding: 10px 14px 12px; }
+.card.couple .item .badge { margin: 0 6px 0 0; }
+.invite-code { font-size: 34px; font-weight: 700; letter-spacing: 6px; font-variant-numeric: tabular-nums; margin: 6px 0; }
+.halves > .btn { flex: 1; margin: 0; }
+
 .hint.pea-err { color: var(--bad); }
 
 /* ---------- Gmail e-bills ---------- */

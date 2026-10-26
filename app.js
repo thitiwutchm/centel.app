@@ -43,6 +43,7 @@ const ui = {
   search: '',
   searchOpen: false,
   reportType: 'expense',
+  txFilter: 'all',
   budgetOff: 0,
 };
 
@@ -415,7 +416,7 @@ function renderSettings() {
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
     <button class="btn ghost" data-action="import">⬆️ นำเข้าข้อมูล</button>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
-    <p class="hint">ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ</p>
+    <p class="hint">${isCloud() ? 'รายการรับจ่าย งบประมาณ และรายจ่ายร่วมซิงก์กับบัญชีออนไลน์ ส่วนรายการบิลเก็บในเครื่องนี้ ควรส่งออกเก็บไว้เป็นระยะ' : 'ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ'}</p>
 
     ${installTip()}
 
@@ -425,7 +426,7 @@ function renderSettings() {
   `;
   $('#billWallet').addEventListener('change', (e) => {
     money.prefs.billWallet = e.target.value;
-    saveMoney();
+    savePrefs();
     toast('บันทึกแล้ว');
   });
   $('#remindDays').addEventListener('change', (e) => {
@@ -715,7 +716,7 @@ function billForm(b) {
         if (!Object.keys(state.records[ym]).length) delete state.records[ym];
       });
       // Payments already made stay in the wallets as ordinary expenses.
-      money.txns.forEach((t) => { if (t.billId === b.id) { delete t.billId; delete t.billYm; } });
+      money.txns.filter((t) => t.billId === b.id).forEach((t) => { delete t.billId; delete t.billYm; saveTxn(t); });
       save();
       saveMoney();
       closeSheet();
@@ -793,6 +794,7 @@ function occurrenceSheet(id, ym) {
     setRecord(ym, id, { amount, paid: true, paidAt: new Date().toISOString() });
     money.prefs.billWallet = walletId;
     recordBillTxn(b, ym, amount != null ? amount : (b.amount || 0), walletId);
+    savePrefs();
     save(); saveMoney(); closeSheet(); render(); toast(`จ่าย ${b.name} แล้ว`);
   });
   const unpay = $('#oUnpay');
@@ -805,7 +807,7 @@ function occurrenceSheet(id, ym) {
     const amount = readAmount();
     setRecord(ym, id, { amount });
     const tx = billTxn(id, ym);
-    if (tx) { tx.amount = amount != null ? amount : (b.amount || 0); saveMoney(); }
+    if (tx) { tx.amount = amount != null ? amount : (b.amount || 0); saveTxn(tx); }
     save(); closeSheet(); render(); toast('บันทึกยอดแล้ว');
   });
   const oFile = $('#oFile');
@@ -912,7 +914,8 @@ function importData(e) {
         records: data.records || {},
         settings: { ...defaultState().settings, ...(data.settings || {}) },
       };
-      if (data.money) {
+      if (data.money && isCloud()) cloudImport(data.money);
+      else if (data.money) {
         localStorage.setItem(MONEY_KEY, JSON.stringify(data.money));
         money = loadMoney();
       }
@@ -994,6 +997,7 @@ function exportIcs() {
 /* ---------- Sample data ---------- */
 
 function loadSample() {
+  if (isCloud()) { toast('ข้อมูลตัวอย่างใช้ได้เฉพาะเมื่อไม่ได้เข้าสู่ระบบ'); return; }
   if ((state.bills.length || money.txns.length) && !confirm('แทนที่ข้อมูลปัจจุบันด้วยข้อมูลตัวอย่าง?')) return;
   const ym = ymOf(new Date());
   state.bills = [
@@ -1067,10 +1071,10 @@ document.addEventListener('click', (e) => {
   if (day) { ui.selDay = Number(day.dataset.day); render(); return; }
   const bv = t.closest('[data-billview]');
   if (bv) { ui.billView = bv.dataset.billview; render(); return; }
-  if (moneyClick(t)) return;
+  if (moneyClick(t) || cloudClick(t)) return;
   const act = t.closest('[data-action]');
   if (!act) return;
-  if (moneyAction(act.dataset.action, act)) return;
+  if (moneyAction(act.dataset.action, act) || cloudAction(act.dataset.action, act)) return;
   switch (act.dataset.action) {
     case 'close': closeSheet(); break;
     case 'add': billForm(); break;
@@ -1080,7 +1084,11 @@ document.addEventListener('click', (e) => {
     case 'ics': exportIcs(); break;
     case 'gmail': gmailSheet(); break;
     case 'reset':
-      if (confirm('ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) {
+      if (isCloud()) {
+        if (confirm('ลบข้อมูลบิลในเครื่องนี้? (รายการรับจ่ายในบัญชีออนไลน์จะไม่ถูกลบ)')) {
+          state = defaultState(); save(); render(); toast('ลบข้อมูลบิลแล้ว');
+        }
+      } else if (confirm('ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) {
         state = defaultState(); money = defaultMoney(); ui.wallet = 'total';
         billFilesClear();
         save(); saveMoney(); render(); toast('ลบข้อมูลแล้ว');
@@ -1099,7 +1107,7 @@ document.addEventListener('keydown', (e) => {
 
 // Re-render when returning to the app so "today" and statuses stay current.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { render(); updateBadge(); }
+  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) scheduleRefresh(); }
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -1108,3 +1116,4 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 
 render();
 updateBadge();
+cloudStart();
