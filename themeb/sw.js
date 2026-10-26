@@ -1,5 +1,5 @@
 // ThemeB service worker, scoped to /themeb/. Bump CACHE when shipping changes.
-const CACHE = 'billplanner-themeb-v2';
+const CACHE = 'billplanner-themeb-v3';
 const ASSETS = [
   './',
   'index.html',

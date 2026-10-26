@@ -420,7 +420,7 @@ function renderSettings() {
 
     <div class="section-title">อื่นๆ</div>
     <button class="btn danger" data-action="reset">ลบข้อมูลทั้งหมด</button>
-    <p class="hint" style="text-align:center">วางแผนจ่ายบิล · เวอร์ชัน 2.0</p>
+    <p class="hint" style="text-align:center">Centel · เวอร์ชัน 2.0</p>
   `;
   $('#billWallet').addEventListener('change', (e) => {
     money.prefs.billWallet = e.target.value;

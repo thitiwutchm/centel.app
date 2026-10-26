@@ -1,5 +1,5 @@
 // ThemeA service worker, scoped to /themea/. Bump CACHE when shipping changes.
-const CACHE = 'billplanner-themea-v1';
+const CACHE = 'billplanner-themea-v2';
 const ASSETS = [
   './',
   'index.html',
