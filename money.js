@@ -1285,7 +1285,6 @@ function txnForm(t, preset = {}) {
           d.category = x.category || null;
           renderType();
         }
-        $('#tReview').checked = r.status !== 'ok';
         status({
           ok: '✅ อ่านสลิปแล้ว ตรวจสอบข้อมูลอีกครั้งก่อนบันทึก',
           needs_review: '⚠️ อ่านได้ไม่ครบหรือไม่ทราบวัตถุประสงค์ของการโอน กรุณาตรวจสอบและเลือกหมวดหมู่',
@@ -1318,7 +1317,8 @@ function txnForm(t, preset = {}) {
     } else {
       out.category = d.category || null;
       out.merchant = $('#tMerchant').value.trim();
-      out.reviewNeeded = $('#tReview').checked || !out.category;
+      // Off by default: a missing category already shows as รอตรวจสอบ on its own.
+      out.reviewNeeded = $('#tReview').checked;
       if (d.receiptKey) out.receiptKey = d.receiptKey;
       if (d.slipRef) out.slipRef = d.slipRef;
     }
