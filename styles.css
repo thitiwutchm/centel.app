@@ -941,3 +941,180 @@ body::before {
 }
 .form.rows #schedFields .field { border-bottom: 0.5px solid var(--line); }
 .field.ro .val { flex: 1; text-align: right; font-weight: 600; color: var(--c-muted); }
+
+/* ---------- Colour themes (theme.js sets data-theme + data-backdrop on <html>) ---------- */
+/* Picker in the account tab: a mini backdrop with one card per theme. */
+.theme-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+.tp { border: 0; background: none; padding: 0; color: var(--on-bg); font: inherit; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.tp-prev {
+  width: 100%; aspect-ratio: 3 / 4; border-radius: 18px; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; padding: 8px;
+  border: 0.5px solid rgba(255, 255, 255, .35); box-shadow: 0 4px 14px rgba(0, 20, 50, .18); margin-bottom: 6px; transition: transform .2s;
+}
+.tp-prev i { display: block; height: 16px; border-radius: 6px; }
+.tp-prev i:first-child { width: 60%; height: 8px; border-radius: 4px; }
+.tp:active .tp-prev { transform: scale(.95); }
+.tp.on .tp-prev { box-shadow: 0 0 0 2.5px var(--on-bg), 0 4px 14px rgba(0, 20, 50, .18); }
+.tp-name { font-size: 13.5px; font-weight: 600; }
+.tp-glass .tp-prev { background: linear-gradient(165deg, #2c6aa6, #16416d 55%, #0f3256); }
+.tp-glass i { background: rgba(238, 244, 250, .85); }
+.tp-glass i:first-child { background: #1f6fe5; }
+.tp-pink .tp-prev { background: linear-gradient(165deg, #fff0f5, #fbd3e3 55%, #f5c2d8); }
+.tp-pink i { background: rgba(255, 255, 255, .9); }
+.tp-pink i:first-child { background: #e0528a; }
+.tp-black .tp-prev { background: #000; border-color: rgba(255, 255, 255, .2); }
+.tp-black i { background: #1c1c1e; }
+.tp-black i:first-child { background: #0a84ff; }
+.tp-white .tp-prev { background: #fff; border-color: rgba(0, 0, 0, .1); }
+.tp-white i { background: #f1f2f5; }
+.tp-white i:first-child { background: #111; }
+
+/* Pastel pink: soft blush backdrop, rose accents, dark text everywhere. */
+:root[data-theme="pink"] {
+  --c-text: #3a1f2b;
+  --c-muted: #8f6676;
+  --c-line: rgba(120, 40, 70, .1);
+  --c-accent: #e0528a;
+  --c-accent-soft: rgba(224, 82, 138, .13);
+  --c-ok: #1d9a62;
+  --c-warn: #c27800;
+  --c-bad: #d9302a;
+  --c-fill: rgba(150, 50, 90, .06);
+  --bg: #fbdbe7;
+  --card: rgba(255, 250, 252, .74);
+  --sheet: rgba(255, 246, 250, .95);
+  --sheet-card: rgba(255, 255, 255, .85);
+  --glass-edge: rgba(255, 255, 255, .75);
+  --ok-soft: rgba(20, 160, 90, .14);
+  --warn-soft: rgba(230, 150, 0, .16);
+  --bad-soft: rgba(230, 50, 40, .12);
+  --ink: #e0528a;
+  --ink-text: #fff;
+  --on-bg: #4a2333;
+  --on-bg-muted: rgba(74, 35, 51, .64);
+  --shadow: 0 10px 30px rgba(190, 70, 120, .13), inset 0 1px 0 rgba(255, 255, 255, .7);
+  --bd-glass: rgba(255, 255, 255, .55);
+  --bd-glass-on: rgba(255, 255, 255, .8);
+  --bd-edge: rgba(255, 255, 255, .8);
+  --bd-bar: rgba(255, 232, 241, .62);
+  --bd-accent: #d23f7c;
+  --bd-line: rgba(120, 40, 70, .14);
+  --tab-bg: rgba(255, 248, 251, .8);
+  --tab-fg: #a07484;
+  --tab-on: #3a1f2b;
+  --tab-on-bg: rgba(224, 82, 138, .15);
+  --scrim: rgba(90, 30, 55, .25);
+  color-scheme: light;
+}
+[data-theme="pink"] body::before {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(70% 38% at 18% 6%, rgba(255, 255, 255, .85), transparent 70%),
+    radial-gradient(55% 30% at 88% 22%, rgba(230, 210, 255, .7), transparent 70%),
+    radial-gradient(90% 40% at 40% 45%, rgba(255, 196, 220, .8), transparent 75%),
+    linear-gradient(165deg, #fff0f5 0%, #fcdce8 40%, #f8cadd 72%, #fde3ec 100%);
+}
+
+/* Pure black: OLED black backdrop, solid near-black cards, iOS-style colours. */
+:root[data-theme="black"] {
+  --c-text: #f5f5f7;
+  --c-muted: #8e8e93;
+  --c-line: rgba(255, 255, 255, .1);
+  --c-accent: #0a84ff;
+  --c-accent-soft: rgba(10, 132, 255, .18);
+  --c-ok: #30d158;
+  --c-warn: #ffd60a;
+  --c-bad: #ff453a;
+  --c-fill: rgba(255, 255, 255, .07);
+  --bg: #000;
+  --card: #111113;
+  --sheet: rgba(22, 22, 24, .97);
+  --sheet-card: #222225;
+  --glass-edge: rgba(255, 255, 255, .08);
+  --ok-soft: rgba(48, 209, 88, .15);
+  --warn-soft: rgba(255, 214, 10, .14);
+  --bad-soft: rgba(255, 69, 58, .15);
+  --ink: #fff;
+  --ink-text: #000;
+  --on-bg: #fff;
+  --on-bg-muted: rgba(235, 235, 245, .6);
+  --shadow: none;
+  --bd-glass: #1c1c1e;
+  --bd-glass-on: #2c2c2e;
+  --bd-edge: rgba(255, 255, 255, .08);
+  --bd-bar: rgba(0, 0, 0, .78);
+  --bd-accent: #4da3ff;
+  --bd-line: rgba(255, 255, 255, .14);
+  --tab-bg: rgba(22, 22, 24, .88);
+  --tab-fg: #8e8e93;
+  --tab-on: #fff;
+  --tab-on-bg: rgba(255, 255, 255, .12);
+  --scrim: rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}
+[data-theme="black"] body::before { background: #000; }
+
+/* White: plain white page, soft grey cards, black main buttons. */
+:root[data-theme="white"] {
+  --c-text: #0b0b0f;
+  --c-muted: #6b7280;
+  --c-line: rgba(0, 0, 0, .08);
+  --c-accent: #1f6fe5;
+  --c-accent-soft: rgba(31, 111, 229, .1);
+  --c-ok: #148a50;
+  --c-warn: #c27800;
+  --c-bad: #d9302a;
+  --c-fill: rgba(0, 0, 0, .045);
+  --bg: #fff;
+  --card: #f3f4f6;
+  --sheet: rgba(255, 255, 255, .97);
+  --sheet-card: #f3f4f6;
+  --glass-edge: rgba(0, 0, 0, .05);
+  --ok-soft: rgba(20, 160, 90, .12);
+  --warn-soft: rgba(230, 150, 0, .14);
+  --bad-soft: rgba(230, 50, 40, .1);
+  --ink: #0b0b0f;
+  --ink-text: #fff;
+  --on-bg: #0b0b0f;
+  --on-bg-muted: #6b7280;
+  --shadow: none;
+  --bd-glass: #f1f2f5;
+  --bd-glass-on: #e4e6ea;
+  --bd-edge: transparent;
+  --bd-bar: rgba(255, 255, 255, .86);
+  --bd-accent: #1f6fe5;
+  --bd-line: rgba(0, 0, 0, .1);
+  --tab-bg: rgba(255, 255, 255, .9);
+  --tab-fg: #8a8f98;
+  --tab-on: #0b0b0f;
+  --tab-on-bg: rgba(0, 0, 0, .06);
+  --scrim: rgba(0, 0, 0, .3);
+  color-scheme: light;
+}
+[data-theme="white"] body::before { background: #fff; }
+
+/* Shared by every non-default theme: the frosted-white pieces on the backdrop take the theme's colours. */
+[data-backdrop] #view, [data-backdrop] .topbar {
+  --line: var(--bd-line); --accent: var(--bd-accent); --accent-soft: var(--c-accent-soft); --bg: var(--bd-glass);
+  --ok: var(--c-ok); --warn: var(--c-warn); --bad: var(--c-bad);
+}
+[data-backdrop] .round-btn, [data-backdrop] .icon-btn, [data-backdrop] .qa-row i, [data-backdrop] .glass-pill {
+  background: var(--bd-glass); border-color: var(--bd-edge); color: var(--on-bg);
+}
+[data-backdrop] .round-btn:active, [data-backdrop] .icon-btn:active, [data-backdrop] .qa-row button:active i { background: var(--bd-glass-on); }
+[data-backdrop] .search-cap, [data-backdrop] .pill { background: var(--bd-glass); border-color: var(--bd-edge); color: var(--on-bg); box-shadow: none; }
+[data-backdrop] .topbar, [data-backdrop] .page-head.sticky { background: var(--bd-bar); }
+[data-backdrop] #view .seg, [data-backdrop] #view .chip { background: var(--bd-glass); color: var(--on-bg); }
+[data-backdrop] #view .seg button.on, [data-backdrop] #view .chip.on { background: var(--ink); color: var(--ink-text); }
+[data-backdrop] .hb-amt { text-shadow: none; }
+[data-backdrop] .avatar-btn { border-color: var(--bd-edge); box-shadow: none; }
+[data-backdrop] .tabbar { background: var(--tab-bg); border-color: var(--glass-edge); box-shadow: 0 10px 30px rgba(0, 0, 0, .12); }
+[data-backdrop] .tabbar button { color: var(--tab-fg); }
+[data-backdrop] .tabbar button.active { color: var(--tab-on); background: var(--tab-on-bg); }
+[data-backdrop] .sheet-backdrop, [data-backdrop] .gc-scrim { background: var(--scrim); }
+[data-backdrop] .card, [data-backdrop] .list, [data-backdrop] .day-card, [data-backdrop] .cal, [data-backdrop] .alert { box-shadow: var(--shadow); }
+[data-backdrop] .tp-prev { box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
+[data-backdrop] .tp.on .tp-prev { box-shadow: 0 0 0 2.5px var(--bd-accent); }
+[data-backdrop="light"] .badge.label, [data-backdrop="light"] .lab-tag, [data-backdrop="light"] .lab-ico { color: #6a4ce0; background: #7a5af81f; }
+[data-backdrop="dark"] .badge.label, [data-backdrop="dark"] .lab-tag, [data-backdrop="dark"] .lab-ico { color: #b9a8ff; background: #7a5af833; }
+[data-theme="black"] .sheet, [data-theme="black"] .gc-card { box-shadow: 0 0 0 0.5px rgba(255, 255, 255, .1), 0 20px 60px rgba(0, 0, 0, .7); }
+[data-backdrop="light"] .sheet, [data-backdrop="light"] .gc-card { box-shadow: 0 20px 60px rgba(0, 0, 0, .14); }

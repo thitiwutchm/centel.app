@@ -520,7 +520,7 @@ async function googleButton(box, mode) {
   google.accounts.id.initialize({ client_id: id, callback: (r) => googleSignedIn(r.credential), ux_mode: 'popup', auto_select: false });
   box.hidden = false;
   google.accounts.id.renderButton(box.querySelector('.gbtn'), {
-    theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'filled_black' : 'outline',
+    theme: themeIsDark() ? 'filled_black' : 'outline',
     size: 'large', shape: 'pill', locale: 'th',
     text: mode === 'login' ? 'signin_with' : 'signup_with',
     width: Math.min(400, box.clientWidth || 320),
