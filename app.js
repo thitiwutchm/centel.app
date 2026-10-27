@@ -480,6 +480,8 @@ function openSheet(html) {
 function closeSheet() {
   // A locked sheet (the nickname prompt) closes only by saving.
   if ($('#sheet').dataset.locked) return;
+  const layer = $('#catLayer');
+  if (layer) layer.remove();
   $('#sheet').hidden = true;
   $('#backdrop').hidden = true;
   document.body.style.overflow = '';
