@@ -95,6 +95,30 @@ router.get('/config', (_req, res) => {
   res.set('Cache-Control', 'no-store').json({ googleClientId: googleClientId() });
 });
 
+/* ---------- Calendar subscription feed (public, by secret token) ---------- */
+
+// iPhone Calendar fetches this URL on its own schedule without the session cookie,
+// so the long random token in the path is the only key. Regenerating it cuts off
+// every calendar that subscribed with the old one.
+const CAL_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const EMPTY_ICS = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//centel.app//Bill Planner//TH',
+  'X-WR-CALNAME:วางแผนจ่ายบิล', 'END:VCALENDAR', ''].join('\r\n');
+
+router.get('/calendar/:file', wrap(async (req, res) => {
+  const token = String(req.params.file).replace(/\.ics$/, '');
+  if (!CAL_TOKEN.test(token)) throw bad('not_found', 404);
+  const r = await pool.query('select ics, updated_at from calendar_feeds where token = $1', [token]);
+  if (!r.rows[0]) throw bad('not_found', 404);
+  res.set({
+    'Content-Type': 'text/calendar; charset=utf-8',
+    'Content-Disposition': 'inline; filename="centel-bills.ics"',
+    'Cache-Control': 'no-cache',
+    'Last-Modified': new Date(r.rows[0].updated_at).toUTCString(),
+    'X-Robots-Tag': 'noindex',
+  });
+  res.send(r.rows[0].ics || EMPTY_ICS);
+}));
+
 /* ---------- Everything below needs a session ---------- */
 
 router.use(requireUser);
@@ -433,6 +457,44 @@ router.put('/budgets/:id', wrap(async (req, res) => {
 router.delete('/budgets/:id', wrap(async (req, res) => {
   if (!isUuid(req.params.id)) throw bad('bad_id');
   await asUser(uid(req), (db) => db.query('delete from budgets where id = $1', [req.params.id]));
+  res.json({ ok: true });
+}));
+
+/* ---------- Calendar subscription (owner side) ---------- */
+
+const CAL_MAX = 1024 * 1024;
+const calOut = (row) => (row ? { token: row.token, updatedAt: row.updated_at } : { token: null });
+
+router.get('/calendar', wrap(async (req, res) => {
+  const row = await asUser(uid(req), async (db) =>
+    (await db.query('select token, updated_at from calendar_feeds where user_id = app_uid()')).rows[0]);
+  res.json(calOut(row));
+}));
+
+// Turn the feed on, or give it a new URL (the old one stops working at once).
+router.post('/calendar/token', rateLimit(30, 60 * 60000), wrap(async (req, res) => {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const row = await asUser(uid(req), async (db) => (await db.query(
+    `insert into calendar_feeds (user_id, token) values (app_uid(), $1)
+     on conflict (user_id) do update set token = excluded.token, updated_at = now()
+     returning token, updated_at`, [token])).rows[0]);
+  res.json(calOut(row));
+}));
+
+// The app sends the whole calendar (built from this device's bills) whenever they change.
+router.put('/calendar', wrap(async (req, res) => {
+  const ics = req.body && req.body.ics;
+  if (typeof ics !== 'string' || !ics.startsWith('BEGIN:VCALENDAR') || !/END:VCALENDAR\s*$/.test(ics)) throw bad('bad_calendar');
+  if (Buffer.byteLength(ics) > CAL_MAX) throw bad('too_large', 413);
+  const row = await asUser(uid(req), async (db) => (await db.query(
+    `update calendar_feeds set ics = $1, updated_at = now() where user_id = app_uid() returning token, updated_at`,
+    [ics])).rows[0]);
+  if (!row) throw bad('not_found', 404);
+  res.json(calOut(row));
+}));
+
+router.delete('/calendar', wrap(async (req, res) => {
+  await asUser(uid(req), (db) => db.query('delete from calendar_feeds where user_id = app_uid()'));
   res.json({ ok: true });
 }));
 
