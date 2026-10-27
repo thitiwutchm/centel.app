@@ -586,7 +586,7 @@ function billForm(b, opts = {}) {
     <div class="sheet-head">
       <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'เพิ่มบิล' : 'แก้ไขบิล'}</h2>
-      <button class="link-btn strong" id="saveBill">บันทึก</button>
+      <span class="sheet-head-pad"></span>
     </div>
     <div class="seg" id="typeSeg">
       <button type="button" data-type="once">ครั้งเดียว</button>
@@ -617,6 +617,7 @@ function billForm(b, opts = {}) {
       <textarea id="fNote" placeholder="บันทึก เช่น เลขบัญชี, วันตัดรอบบัตร" aria-label="บันทึก">${esc(draft.note || '')}</textarea>
     </div>
     ${isNew ? '' : `<button class="btn danger" id="delBill">ลบบิลนี้</button>`}
+    <div class="save-bar"><button type="button" class="save-pill" id="saveBill">${isNew ? 'เพิ่มบิล' : 'บันทึก'}</button></div>
   `);
   const paintHero = () => {
     const c = CATEGORIES[draft.auto && draft.source === 'pea' ? 'electric' : draft.category] || CATEGORIES.other;
