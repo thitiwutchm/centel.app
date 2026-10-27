@@ -565,9 +565,20 @@ function txItem(t, S) {
     </button>`;
 }
 
+// money.txns is kept in the order entries were added (the server sends them
+// by created_at), so a higher index means a more recently added entry.
+function addedRank() {
+  const rank = new Map();
+  money.txns.forEach((t, i) => rank.set(t.id, i));
+  return (t) => rank.get(t.id) ?? -1;
+}
+
 function dayGroups(list, S, newestFirst = true) {
   const by = {};
+  const added = addedRank();
   list.forEach((t) => { (by[t.date] = by[t.date] || []).push(t); });
+  // Within a day, the most recently added entry goes on top.
+  Object.values(by).forEach((items) => items.sort((a, b) => added(b) - added(a)));
   const days = Object.keys(by).sort();
   if (newestFirst) days.reverse();
   return days.map((ds) => {
@@ -604,8 +615,9 @@ function renderHome() {
 
   const occ = state.bills.length ? occurrences(ym).filter((o) => !o.paid) : [];
   const billsLeft = occ.reduce((s, o) => s + o.amount, 0);
+  const added = addedRank();
   const recent = money.txns.filter((t) => t.date <= dateStr(new Date()) && t.type !== 'settle')
-    .sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 4);
+    .sort((a, b) => b.date.localeCompare(a.date) || added(b) - added(a)).slice(0, 4);
 
   view.innerHTML = `
     <div class="hero">
