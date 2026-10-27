@@ -131,6 +131,7 @@ function expenseOut(e, shares, events, labels) {
     merchant: e.merchant, amount: e.amount, category: e.category, note: e.note, walletId: e.wallet_id,
     toWalletId: e.to_wallet_id, payerId: e.payer_id, payerWalletId: e.payer_wallet_id, status: e.status,
     reviewNeeded: e.review_needed, receiptKey: e.receipt_key, slipRef: e.slip_ref, billId: e.bill_id, billYm: e.bill_ym,
+    currency: e.currency || 'THB',
     revision: e.revision, approvedBy: e.approved_by, approvedAt: e.approved_at, rejectedBy: e.rejected_by,
     rejectedAt: e.rejected_at, rejectReason: e.reject_reason, createdAt: e.created_at,
     shares: shares ? Object.fromEntries(shares.map((s) => [s.user_id, s.amount])) : undefined,
@@ -282,7 +283,7 @@ function readExpense(body) {
     note: str(body.note, 500), walletId: str(body.walletId, 60), toWalletId: type === 'transfer' ? str(body.toWalletId, 60) : null,
     reviewNeeded: !!body.reviewNeeded, receiptKey: str(body.receiptKey, 200), slipRef: str(body.slipRef, 80),
     billId: str(body.billId, 60), billYm: str(body.billYm, 7), payerId: body.payerId, shares: body.shares || {},
-    labels: labelIds(body.labels),
+    labels: labelIds(body.labels), currency: /^[A-Z]{3}$/.test(body.currency || '') ? body.currency : 'THB',
   };
 }
 
@@ -322,11 +323,11 @@ router.post('/expenses', wrap(async (req, res) => {
     const shared = x.scope === 'shared';
     await db.query(
       `insert into expenses (id, owner_id, couple_id, scope, type, date, merchant, amount, category, note, wallet_id,
-         to_wallet_id, payer_id, status, review_needed, receipt_key, slip_ref, bill_id, bill_ym)
-       values ($1, app_uid(), case when $2 = 'shared' then my_couple() end, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+         to_wallet_id, payer_id, status, review_needed, receipt_key, slip_ref, bill_id, bill_ym, currency)
+       values ($1, app_uid(), case when $2 = 'shared' then my_couple() end, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
       [id, x.scope, x.type, x.date, x.merchant, x.amount, x.category, x.note,
         shared && x.payerId !== me ? null : x.walletId, x.toWalletId, shared ? x.payerId : null,
-        shared ? 'draft' : 'approved', x.reviewNeeded, x.receiptKey, x.slipRef, x.billId, x.billYm]);
+        shared ? 'draft' : 'approved', x.reviewNeeded, x.receiptKey, x.slipRef, x.billId, x.billYm, x.currency]);
     if (shared) {
       await writeShares(db, id, x, me);
       await db.query('select submit_expense($1)', [id]);
@@ -355,11 +356,11 @@ router.put('/expenses/:id', wrap(async (req, res) => {
       `update expenses set scope = $2, couple_id = case when $2 = 'shared' then my_couple() end, type = $3, date = $4,
          merchant = $5, amount = $6, category = $7, note = $8, wallet_id = $9, to_wallet_id = $10, payer_id = $11,
          status = case when $2 = 'personal' then 'approved' when status = 'approved' then 'draft' else status end,
-         review_needed = $12, receipt_key = $13, slip_ref = $14, bill_id = $15, bill_ym = $16, updated_at = now()
+         review_needed = $12, receipt_key = $13, slip_ref = $14, bill_id = $15, bill_ym = $16, currency = $17, updated_at = now()
        where id = $1`,
       [id, x.scope, x.type, x.date, x.merchant, x.amount, x.category, x.note,
         shared && x.payerId !== me ? null : x.walletId, x.toWalletId, shared ? x.payerId : null,
-        x.reviewNeeded, x.receiptKey, x.slipRef, x.billId, x.billYm]);
+        x.reviewNeeded, x.receiptKey, x.slipRef, x.billId, x.billYm, x.currency]);
     if (!r.rowCount) throw bad('locked', 409);
     if (shared) {
       await writeShares(db, id, x, me);

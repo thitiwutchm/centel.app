@@ -230,7 +230,8 @@ const I18N_EN = {
   'ถูกปฏิเสธ: {0} — แก้ไขแล้วกดบันทึกเพื่อส่งใหม่': 'Rejected: {0} — edit and save to send again',
   'รายการนี้สร้างจากการจ่ายบิล': 'This transaction was created by paying a bill', 'ลบรายการ': 'Delete transaction',
   'เช่น 7-Eleven': 'e.g. 7-Eleven', 'เช่น ข้าวกลางวัน': 'e.g. Lunch',
-  'ยังไม่ได้เลือกหมวดหมู่': 'No category picked yet',
+  'ยังไม่ได้เลือกหมวดหมู่': 'No category picked yet', 'เลือกหมวดหมู่': 'Select category', 'สกุลเงิน': 'Currency',
+  'โน้ต': 'Note', 'วันก่อนหน้า': 'Previous day', 'วันถัดไป': 'Next day', 'เลือกวันที่': 'Pick a date',
   'ร้านค้า / ผู้รับ': 'Merchant / payee', 'ใครจ่าย': 'Who paid', 'ฉัน': 'Me', 'ส่วนของฉัน (฿)': 'My share (฿)', 'ส่วนของ {0}': '{0}’s share',
   'ใส่ยอดรวมทั้งบิล ค่าเริ่มต้นแบ่งครึ่ง แก้ส่วนของแต่ละคนได้ รายการจะนับเป็นรายจ่ายเมื่อ {0} อนุมัติแล้วเท่านั้น':
     'Enter the full bill total. It is split in half by default and you can change each share. It counts as spending only after {0} approves.',

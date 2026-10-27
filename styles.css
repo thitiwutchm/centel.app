@@ -679,19 +679,66 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
   border: 1.5px solid transparent; background: var(--card); border-radius: 14px; padding: 10px 4px 8px;
   display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 11.5px; line-height: 1.25; text-align: center; min-width: 0;
 }
-/* Transaction form: one round category button ("?" until picked); the grid opens in a layer over the sheet. */
-.cat-pick-btn {
-  width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 8px; margin-bottom: 14px;
-  border: 1.5px solid transparent; background: var(--card); border-radius: 999px; color: inherit; font: inherit; text-align: left;
+/* Transaction form rows: a 56px icon column on the left, content on the right, and a divider
+   under each row's content (not under the icon), like a native settings list. */
+.tx-rows { padding: 0 0 0 0; }
+.tr {
+  display: flex; align-items: stretch; width: 100%; border: 0; background: none; color: inherit; font: inherit;
+  text-align: left; padding: 0;
 }
-.cat-pick-btn.on { border-color: var(--accent); background: var(--accent-soft); }
-.cat-pick-btn .ico { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; font-size: 21px; }
-.cat-pick-btn .ico.q { background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 22px; }
-.cat-pick-btn .cp-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.cat-pick-btn .cp-name small { color: var(--muted); font-size: 12px; }
-.cat-pick-btn .cp-name b { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cat-pick-btn.on .cp-name b { color: var(--accent); }
-.cat-pick-btn .chev { color: var(--muted); font-size: 20px; line-height: 1; }
+.tr[hidden] { display: none; }
+.tr-ico { flex: 0 0 64px; display: grid; place-items: center; color: var(--text); }
+.tr-ico .svg-i { width: 24px; height: 24px; }
+.tr-body {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 6px 16px 6px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+.tr:last-child .tr-body { border-bottom: 0; }
+.tr-body.col { flex-direction: column; align-items: stretch; gap: 6px; padding-top: 12px; padding-bottom: 8px; }
+.tr-body.col .seg, .tr-body.col .chips { margin-bottom: 0; }
+.tr-body.col .kv { padding: 6px 0 2px; border: 0; }
+.tr-lab { font-size: 13px; color: var(--muted); }
+.tr-body > label { flex: 0 0 auto; }
+.tr-body input, .tr-body select {
+  flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 17px; padding: 10px 0; color: var(--text);
+}
+.tr-body select { direction: rtl; -webkit-appearance: none; appearance: none; color: var(--accent); }
+.tr-body input::placeholder { color: var(--muted); opacity: .8; }
+.tr-chev { color: var(--muted); flex: 0 0 auto; }
+.svg-i.flip { transform: scaleX(-1); }
+/* Amount: small label above a large number; the currency chip sits in the icon column. */
+.tr-amt .tr-body { flex-direction: column; align-items: stretch; gap: 0; padding-top: 12px; padding-bottom: 6px; }
+.tr-amt .tr-body input { font-size: 40px; font-weight: 500; padding: 0; line-height: 1.2; letter-spacing: -.5px; }
+.tr-amt.exp .tr-body input { color: var(--bad); }
+.tr-amt.inc .tr-body input { color: var(--accent); }
+.cur-chip {
+  position: relative; display: grid; place-items: center; min-width: 46px; height: 34px; padding: 0 7px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--muted);
+  font-size: 13px; font-weight: 700; letter-spacing: .3px;
+}
+.cur-chip select { position: absolute; inset: 0; opacity: 0; width: 100%; font-size: 16px; }
+.cur-chip:active { background: var(--accent-soft); }
+/* Category: a plain row, empty circle + "เลือกหมวดหมู่" until picked. */
+.tr-cat .tr-body { min-height: 64px; }
+.tr-cat .ico { width: 40px; height: 40px; display: grid; place-items: center; font-size: 21px; }
+.tr-cat .ico.blank { background: var(--muted); opacity: .45; }
+.tr-cat .cp-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tr-cat .cp-name small { color: var(--muted); font-size: 12px; }
+.tr-cat .cp-name b { font-size: 22px; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-cat.on .cp-name b { font-size: 18px; font-weight: 600; color: var(--text); }
+.tr-cat:active .tr-body { opacity: .7; }
+/* Date: ‹ [long date pill] › */
+.tr-date .tr-body { gap: 8px; }
+.day-step {
+  flex: 0 0 36px; height: 36px; border-radius: 50%; border: 0; background: var(--bg); color: var(--accent);
+  display: grid; place-items: center;
+}
+.tr-body > .date-pill {
+  position: relative; flex: 1; min-width: 0; height: 36px; border-radius: 10px; background: var(--bg);
+  display: grid; place-items: center; color: var(--accent); font-size: 15.5px; font-weight: 500;
+  white-space: nowrap; overflow: hidden;
+}
+.date-pill input { position: absolute; inset: 0; opacity: 0; width: 100%; padding: 0; }
 .cat-layer-bg { z-index: 30; }
 .sheet.cat-layer { z-index: 31; }
 .sheet-head-pad { width: 40px; }
