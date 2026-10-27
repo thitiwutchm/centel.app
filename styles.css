@@ -354,6 +354,8 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .gsignin .or::before, .gsignin .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 
 .switch { position: relative; width: 51px; height: 31px; flex: 0 0 51px; }
+/* A switch sits in a .field as a <label>; keep it 51px, not the 96px row-label width. */
+.field > label.switch { flex: 0 0 51px; min-width: 51px; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
 /* Crystal-clear glass switch, matching the ✕ button: a see-through track with a white rim that
    fills with a clear tint of the theme accent when on, and a glass bead for the knob. */
