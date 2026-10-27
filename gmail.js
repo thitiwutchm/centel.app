@@ -345,9 +345,42 @@ function gmailImported(r) {
 
 function gmailShortAccount(a) { return a && a.length >= 4 ? `…${a.slice(-4)}` : a; }
 
+// Rule options shared by the bill form and the bill detail sheet. `day` is the monthly fetch
+// day (0 = only when the user taps fetch); `payDays` sets the due date that many days after
+// the bill is fetched instead of the date printed in the email.
+function gmailDayOptions(day) {
+  const cur = Number(day) || 0;
+  return `<option value="0" ${!cur ? 'selected' : ''}>ไม่ดึงเอง</option>`
+    + Array.from({ length: 31 }, (_, i) => i + 1).map((d) => `<option value="${d}" ${cur === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
+}
+
+function gmailPayOptions(n) {
+  const cur = Number(n) || 0;
+  return `<option value="0" ${!cur ? 'selected' : ''}>ตามวันครบกำหนดในอีเมล</option>`
+    + Array.from({ length: 31 }, (_, i) => i + 1).map((d) => `<option value="${d}" ${cur === d ? 'selected' : ''}>ภายใน ${d} วันหลังดึง</option>`).join('');
+}
+
+function gmailFetchDay(g, ym) { return g.day ? Math.min(Number(g.day), daysInMonth(ym)) : 0; }
+
+// Due date for an email under a "pay within N days" rule: N days after the bill was fetched,
+// i.e. after the later of the rule's fetch day and the day the email arrived.
+function gmailPayDue(g, r) {
+  const got = r.date ? new Date(r.date) : new Date();
+  got.setHours(0, 0, 0, 0);
+  const ym = ymOf(got);
+  const fd = gmailFetchDay(g, ym);
+  const base = fd && fd > got.getDate() ? new Date(got.getFullYear(), got.getMonth(), fd) : got;
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate() + Number(g.payDays));
+}
+
 // Put the email's amount on its rule's bill for that month; the newest email sets the due day.
 function gmailImport(r) {
   const b = r.rule;
+  if (b.gmail.payDays) {
+    const due = gmailPayDue(b.gmail, r);
+    r.ym = ymOf(due);
+    r.due = dateStr(due);
+  }
   const ym = r.ym || ymOf(new Date());
   if (b.startMonth && ym < b.startMonth) b.startMonth = ym;
   if (r.due && (!b.gmail.dueYm || ym >= b.gmail.dueYm)) { b.dueDay = Number(r.due.slice(8, 10)); b.gmail.dueYm = ym; }
@@ -449,7 +482,7 @@ function gmailDueRules() {
   if (typeof state === 'undefined') return [];
   const now = new Date();
   const ym = ymOf(now);
-  return gmailRules().filter((b) => b.gmail.day && now.getDate() >= b.gmail.day && b.gmail.last !== ym);
+  return gmailRules().filter((b) => gmailFetchDay(b.gmail, ym) && now.getDate() >= gmailFetchDay(b.gmail, ym) && b.gmail.last !== ym);
 }
 
 function gmailAutoDue() { return gmailDueRules().length > 0; }

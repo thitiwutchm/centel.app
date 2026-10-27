@@ -162,6 +162,11 @@ function billDetail(id) {
     rows += pick('ดึงค่าไฟอัตโนมัติ', fd === 'due' ? `ตามวันครบกำหนด (วันที่ ${b.dueDay})` : fd ? `ทุกวันที่ ${fd}` : 'ไม่ดึงเอง',
       `<select data-bset="peaDay">${peaDayOptions(fd)}</select>`);
   }
+  if (b.gmail) {
+    const g = b.gmail;
+    rows += pick('ดึงจาก Gmail', g.day ? `ทุกวันที่ ${g.day}` : 'ไม่ดึงเอง', `<select data-bset="gmailDay">${gmailDayOptions(g.day)}</select>`);
+    rows += pick('จ่ายภายใน', g.payDays ? `${g.payDays} วันหลังดึง` : 'ตามวันครบกำหนดในอีเมล', `<select data-bset="gmailPay">${gmailPayOptions(g.payDays)}</select>`);
+  }
   rows += pick('เตือน', `${svgIcon('bell', 'svg-i xs')} ${remindLab(remindOf(b))}`, `<select data-bset="remind">${remindOpts(b.remind)}</select>`);
   rows += pick('ตัดบัญชีอัตโนมัติ', b.autopay ? 'ใช่' : 'ไม่',
     `<select data-bset="autopay"><option value="">ไม่</option><option value="1" ${b.autopay ? 'selected' : ''}>ใช่</option></select>`);
@@ -192,6 +197,15 @@ function billDetail(id) {
     else if (k === 'remind') { if (v === '') delete b.remind; else b.remind = Number(v); }
     else if (k === 'autopay') b.autopay = !!v;
     else if (k === 'peaDay') { b.pea.day = v === 'due' ? 'due' : Number(v); delete b.pea.tried; setTimeout(peaAutoTry, 0); }
+    else if (k === 'gmailDay') { b.gmail.day = Number(v); delete b.gmail.last; setTimeout(gmailAutoTry, 0); }
+    else if (k === 'gmailPay') {
+      b.gmail.payDays = Number(v);
+      // With a fetch day the due day is known now: fetch day + N (this month's calendar).
+      if (b.gmail.payDays && b.gmail.day) {
+        const now = new Date();
+        b.dueDay = new Date(now.getFullYear(), now.getMonth(), gmailFetchDay(b.gmail, ymOf(now)) + b.gmail.payDays).getDate();
+      }
+    }
     else if (k === 'startMonth' || k === 'onceDate') { if (!v) return; b[k] = v; }
     else b[k] = v;
     save();
