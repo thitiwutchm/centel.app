@@ -206,7 +206,7 @@ const I18N_EN = {
   'ยอดรวม': 'Total', 'เลือกกระเป๋าเงิน': 'Choose wallet', 'เสร็จ': 'Done', 'รวมในยอดรวม': 'Include in total', 'เพิ่มกระเป๋าเงิน': 'Add wallet',
   'แก้ไขกระเป๋าเงิน': 'Edit wallet', 'ลบกระเป๋าเงิน': 'Delete wallet', 'ลบกระเป๋าเงินและรายการทั้งหมด': 'Delete wallet and all its transactions',
   'เปลี่ยนรูป': 'Change picture', 'พิมพ์เอง': 'Type your own', 'เช่น KBank ออมทรัพย์': 'e.g. KBank Savings', '📷 เลือกรูป': '📷 Choose photo',
-  '😀 อีโมจิ': '😀 Emoji', 'ใช้ไอคอนประเภท': 'Use type icon', 'ชื่อ': 'Name', 'ยอดเริ่มต้น (฿)': 'Starting balance (฿)',
+  '😀 อีโมจิ': '😀 Emoji', 'ใช้ไอคอนประเภท': 'Use type icon', 'ใช้ไอคอนหมวดหมู่': 'Use category icon', 'ชื่อ': 'Name', 'ยอดเริ่มต้น (฿)': 'Starting balance (฿)',
   'บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000': 'For a credit card with an outstanding balance, enter a negative starting balance, e.g. -12000',
   'เปิดรูปนี้ไม่ได้': 'Can’t open this image', 'กรุณาใส่ชื่อกระเป๋าเงิน': 'Please enter a wallet name', 'เพิ่มกระเป๋าเงินแล้ว': 'Wallet added',
   'ต้องมีกระเป๋าเงินอย่างน้อย 1 ใบ': 'You need at least one wallet', 'รายการทั้งหมดของกระเป๋านี้จะถูกลบด้วย': 'All transactions in this wallet are deleted too',
