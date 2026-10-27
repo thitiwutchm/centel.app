@@ -610,6 +610,8 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .gauge-card { text-align: center; padding-top: 12px; }
 .gc-head { display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 4px 0; width: 100%; font-weight: 600; }
 .gc-head span { flex: 1; text-align: left; }
+.gauge-card.empty .gauge { opacity: .6; }
+.gc-hint { margin: 2px 8px 14px; }
 .gauge-wrap { position: relative; max-width: 300px; margin: 4px auto 0; }
 .gauge { width: 100%; display: block; }
 .gauge .g-bg, .gauge .g-fg { fill: none; stroke-width: 12; stroke-linecap: round; }
@@ -649,7 +651,7 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .btoday-wrap { position: relative; height: 22px; margin-left: 52px; }
 .btoday-lab {
   position: absolute; top: 4px; transform: translateX(-50%); font-size: 11.5px; color: var(--muted);
-  background: var(--bg); border-radius: 6px; padding: 1px 7px;
+  background: var(--bg); border-radius: 6px; padding: 1px 7px; white-space: nowrap;
 }
 .bd .bd-body { padding-left: 52px; }
 .bd .big-name { font-size: 21px; }
