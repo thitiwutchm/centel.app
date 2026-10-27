@@ -187,9 +187,15 @@ function esc(s) {
 
 function cat(b) { return CATEGORIES[b.category] || CATEGORIES.other; }
 
+// A bill can carry its own picture in b.icon: an emoji, or a small photo / logo as a data URL
+// (made by squareImage in money.js, same as wallets). Without one it shows its category icon.
+const BILL_EMOJIS = ['💳', '⚡', '💧', '🌐', '📱', '🏠', '🚗', '🛡️', '📺', '🎵', '🎮', '☁️', '🏦', '🎓', '🏥', '🐶', '👶', '🧾', '🔥', '📦', '⭐'];
+function billImg(b) { return b && WALLET_IMG.test(b.icon || '') ? b.icon : ''; }
+function billFace(b) { const img = billImg(b); return img ? `<img src="${img}" alt="">` : esc((b && b.icon) || cat(b).icon); }
+
 function icoHtml(b, cls = 'ico') {
   const c = cat(b);
-  return `<div class="${cls}" style="background:${c.color}22">${c.icon}</div>`;
+  return `<div class="${cls}${billImg(b) ? ' has-img' : ''}" style="background:${c.color}22">${billFace(b)}</div>`;
 }
 
 function render() {
@@ -596,7 +602,16 @@ function billForm(b, opts = {}) {
     </div>
     <div id="autoFields"></div>
     <div class="bf-hero">
-      <div class="hero-ico" id="heroIco"></div>
+      <button type="button" class="hero-ico hero-edit" id="heroIco" aria-label="เปลี่ยนรูป"></button>
+      <div class="bf-pic" id="bPic" hidden>
+        <div class="w-pic-actions">
+          <button type="button" class="chip" id="bPhoto">📷 เลือกรูป</button>
+          <button type="button" class="chip" id="bEmojiBtn">😀 อีโมจิ</button>
+          <button type="button" class="chip" id="bReset" hidden>ใช้ไอคอนหมวดหมู่</button>
+        </div>
+        <div class="chips w-emojis" id="bEmojis" hidden>${BILL_EMOJIS.map((e) => `<button type="button" class="chip emoji" data-bemoji="${e}">${e}</button>`).join('')}<input id="bEmojiIn" class="chip" placeholder="พิมพ์เอง" maxlength="8" autocomplete="off"></div>
+        <input type="file" id="bFile" accept="image/*" hidden>
+      </div>
       <input id="fName" class="bf-name" placeholder="ชื่อบิล" value="${esc(draft.name || '')}" autocomplete="off" aria-label="ชื่อบิล">
       <label class="bf-amt" id="amountRow"><span>฿</span><input id="fAmount" inputmode="decimal" placeholder="0" aria-label="ยอดเงิน" value="${draft.amount === '' || draft.amount == null ? '' : draft.amount}"></label>
     </div>
@@ -622,10 +637,33 @@ function billForm(b, opts = {}) {
   const paintHero = () => {
     const c = CATEGORIES[draft.auto && draft.source === 'pea' ? 'electric' : draft.category] || CATEGORIES.other;
     const ico = $('#heroIco');
-    ico.textContent = c.icon;
+    const img = billImg(draft);
+    ico.classList.toggle('has-img', !!img);
+    ico.innerHTML = (img ? `<img src="${img}" alt="">` : esc(draft.icon || c.icon)) + '<span class="w-cam">✎</span>';
     ico.style.background = `${c.color}2e`;
+    $('#bReset').hidden = !draft.icon;
+    document.querySelectorAll('#bEmojis [data-bemoji]').forEach((x) => x.classList.toggle('on', x.dataset.bemoji === draft.icon));
   };
   paintHero();
+  // Tapping the icon opens the picture choices: a photo / logo, an emoji, or back to the category icon.
+  $('#heroIco').addEventListener('click', () => { $('#bPic').hidden = !$('#bPic').hidden; });
+  $('#bPhoto').addEventListener('click', () => $('#bFile').click());
+  $('#bEmojiBtn').addEventListener('click', () => { $('#bEmojis').hidden = !$('#bEmojis').hidden; });
+  $('#bReset').addEventListener('click', () => { delete draft.icon; $('#bEmojiIn').value = ''; paintHero(); });
+  $('#bEmojis').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-bemoji]');
+    if (c) { draft.icon = c.dataset.bemoji; $('#bEmojiIn').value = ''; paintHero(); }
+  });
+  $('#bEmojiIn').addEventListener('input', (e) => {
+    const v = e.target.value.trim().replace(/[<>&"']/g, '');
+    if (v) { draft.icon = [...v].slice(0, 4).join(''); paintHero(); }
+  });
+  $('#bFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try { draft.icon = await squareImage(f); paintHero(); } catch { toast('เปิดรูปนี้ไม่ได้'); }
+  });
   // The amount grows with what is typed so it stays centred under the name.
   const fitAmt = () => { const el = $('#fAmount'); el.style.width = `${Math.max(1, el.value.length) + 0.4}ch`; };
   $('#fAmount').addEventListener('input', fitAmt);
@@ -832,6 +870,7 @@ function billForm(b, opts = {}) {
       walletId: draft.walletId,
     };
     if (draft.remind != null) out.remind = draft.remind;
+    if (draft.icon) out.icon = draft.icon;
     if (draft.type === 'once') out.onceDate = draft.onceDate;
     else {
       out.dueDay = Math.min(31, Math.max(1, draft.dueDay || 1));
@@ -911,7 +950,7 @@ function occurrenceSheet(id, ym) {
       <button class="link-btn" data-edit="${b.id}">แก้ไขบิล</button>
     </div>
     <div class="detail-head">
-      <div class="hero-ico" style="background:${c.color}2e">${c.icon}</div>
+      <div class="hero-ico${billImg(b) ? ' has-img' : ''}" style="background:${c.color}2e">${billFace(b)}</div>
       <h3>${esc(b.name)}</h3>
       <div class="sub">${c.label} · ครบกำหนด ${thShortDate(o.due)} ${o.due.getFullYear() + BE}</div>
       <div style="margin-top:6px">${statusBadge(o)}</div>
