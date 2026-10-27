@@ -756,6 +756,7 @@ function billForm(b, opts = {}) {
         sender: $('#fGSender').value.trim().toLowerCase().replace(/^from:/, ''),
         account: $('#fGAcc').value.replace(/[\s-]/g, ''),
         day: Number($('#fGDay').value),
+        payDays: Number($('#fGPay').value),
       };
     }
   };
@@ -834,17 +835,16 @@ function billForm(b, opts = {}) {
     let html = `${sources}<p class="hint">Auto Sync ดึงยอดบิลแต่ละเดือนให้อัตโนมัติ บิลที่ได้จะแสดงในรายการบิลเหมือนบิลปกติ</p>`;
     if (gm) {
       const g = draft.gmail || {};
-      const days = Array.from({ length: 28 }, (_, i) => i + 1)
-        .map((d) => `<option value="${d}" ${Number(g.day) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
       html += `
         <div class="section-title">กฎดึงบิลจาก Gmail</div>
         ${isNew ? `<div class="chips" id="gPresets">${GMAIL_PROVIDERS.map((p) => `<button type="button" class="chip" data-preset="${p.key}">${esc(p.name)}</button>`).join('')}</div>` : ''}
         <div class="form">
           <div class="field"><label for="fGSender">อีเมลผู้ส่ง</label><input id="fGSender" type="email" placeholder="เช่น ebill@ktc.co.th" value="${esc(g.sender || '')}" autocomplete="off" autocapitalize="off"></div>
           <div class="field"><label for="fGAcc">เบอร์/เลขบัญชี</label><input id="fGAcc" inputmode="numeric" placeholder="ไม่บังคับ" value="${esc(g.account || '')}" autocomplete="off"></div>
-          <div class="field"><label for="fGDay">ดึงทุกเดือน</label><select id="fGDay"><option value="0" ${!Number(g.day) ? 'selected' : ''}>ไม่ดึงเอง</option>${days}</select></div>
+          <div class="field"><label for="fGDay">ดึงทุกเดือน</label><select id="fGDay">${gmailDayOptions(g.day)}</select></div>
+          <div class="field"><label for="fGPay">จ่ายภายใน</label><select id="fGPay">${gmailPayOptions(g.payDays)}</select></div>
         </div>
-        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · เลือกหมวดหมู่ด้านล่าง</p>`;
+        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · "จ่ายภายใน" ตั้งวันครบกำหนดเป็นจำนวนวันหลังดึงบิล แทนวันที่ในอีเมล · เลือกหมวดหมู่ด้านล่าง</p>`;
     }
     box.innerHTML = html;
     const chipsEl = $('#srcChips');

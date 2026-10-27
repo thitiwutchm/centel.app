@@ -104,11 +104,14 @@ const I18N_EN = {
   'ไม่มีวันสิ้นสุด': 'Never', 'เช่น ebill@ktc.co.th': 'e.g. ebill@ktc.co.th', 'ไม่บังคับ': 'Optional',
   'กฎดึงบิลจาก Gmail': 'Gmail bill rule', 'อีเมลผู้ส่ง': 'Sender email', 'เบอร์/เลขบัญชี': 'Phone / account no.',
   'ดึงทุกเดือน': 'Fetch monthly on', 'ไม่ดึงเอง': 'Manual only',
+  'ดึงจาก Gmail': 'Fetch from Gmail', 'จ่ายภายใน': 'Pay within', 'ตามวันครบกำหนดในอีเมล': 'Due date in the email',
+  'ภายใน {0} วันหลังดึง': 'Within {0} days of fetching', '{0} วันหลังดึง': '{0} days after fetch',
+  '"จ่ายภายใน" ตั้งวันครบกำหนดเป็นจำนวนวันหลังดึงบิล แทนวันที่ในอีเมล': '"Pay within" sets the due date that many days after the bill is fetched, instead of the date in the email',
   'ดึงอัตโนมัติ': 'Auto fetch', 'ดึงค่าไฟอัตโนมัติ': 'Auto fetch', 'ตามวันครบกำหนด': 'On the due day',
   'ตามวันครบกำหนด (วันที่ {0})': 'On the due day (day {0})', 'ดึงค่าไฟ {0}: {1}': 'Electricity fetched · {0}: {1}',
   'แอปจะดึงยอดให้เองตั้งแต่วันที่ {0} เมื่อเปิดแอป': 'The app fetches this for you from day {0} whenever you open it',
-  'ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · เลือกหมวดหมู่ด้านล่าง':
-    'Enter a full email to fetch only that sender, or just the domain (e.g. ktc.co.th) for every email from that company; separate several with spaces · Add the phone / account number when one sender sends several bills · From the chosen day on, the app fetches that month’s bill when you open it · Pick a category below',
+  'ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · "จ่ายภายใน" ตั้งวันครบกำหนดเป็นจำนวนวันหลังดึงบิล แทนวันที่ในอีเมล · เลือกหมวดหมู่ด้านล่าง':
+    'Enter a full email to fetch only that sender, or just the domain (e.g. ktc.co.th) for every email from that company; separate several with spaces · Add the phone / account number when one sender sends several bills · From the chosen day on, the app fetches that month’s bill when you open it · “Pay within” sets the due date that many days after the bill is fetched, instead of the date in the email · Pick a category below',
   'กรุณาใส่ชื่อบิล': 'Please enter a bill name', 'ใส่อีเมลหรือโดเมนผู้ส่งให้ถูกต้อง': 'Enter a valid sender email or domain',
   'กรุณาเลือกวันครบกำหนด': 'Please choose a due date', 'บันทึกและเติมยอดค่าไฟ {0} เดือน': 'Saved and filled {0} months of electricity',
   'เพิ่มบิลแล้ว': 'Bill added', 'ลบ "{0}"?': 'Delete "{0}"?', 'ประวัติการจ่ายทั้งหมดของบิลนี้จะถูกลบด้วย': 'All payment history of this bill is deleted too',
