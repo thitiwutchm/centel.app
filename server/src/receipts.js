@@ -113,7 +113,7 @@ export async function analyzeReceipt(base64, mediaType, labels = [], categories 
   const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
   let r;
   try { r = JSON.parse(text); } catch { return { status: 'failed', result: null, reason: 'bad_json' }; }
-  // A transfer slip with no stated purpose waits for the person to choose (PRD: "รอตรวจสอบ").
+  // A transfer slip with no stated purpose is left without a category so the person picks one.
   if (r.kind === 'bank_transfer_slip' && !r.purpose_known) r.category = null;
   if (r.category != null && !cats.some((c) => c.id === r.category)) r.category = null;
   r.labels = Array.isArray(r.labels) ? r.labels.filter((x) => labels.includes(x)) : [];

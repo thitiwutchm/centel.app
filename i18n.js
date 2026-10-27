@@ -137,7 +137,7 @@ const I18N_EN = {
   // Wallets and transaction categories
   'เงินสด': 'Cash', 'บัญชีธนาคาร': 'Bank account', 'เงินออม': 'Savings', 'การลงทุน': 'Investments',
   'เงินเดือน': 'Salary', 'โบนัส': 'Bonus', 'ขายของ': 'Sales', 'ดอกเบี้ยและปันผล': 'Interest & dividends', 'รับคืนเงินยืม': 'Loan repaid to me',
-  'รายรับอื่นๆ': 'Other income', 'โอนเงิน': 'Transfer', 'คืนเงินระหว่างคู่': 'Couple settle-up', 'รอตรวจสอบ': 'To review', 'ทุกหมวดหมู่': 'All categories',
+  'รายรับอื่นๆ': 'Other income', 'โอนเงิน': 'Transfer', 'คืนเงินระหว่างคู่': 'Couple settle-up', 'รอตรวจสอบ': 'To review', 'ไม่มีหมวดหมู่': 'No category', 'ทุกหมวดหมู่': 'All categories',
 
   // Home / transactions
   'จ่าย{0}': 'Pay {0}', 'ร่าง': 'Draft', 'รออนุมัติ': 'Awaiting approval', 'ถูกปฏิเสธ': 'Rejected',
@@ -186,7 +186,7 @@ const I18N_EN = {
   'ถูกปฏิเสธ: {0} — แก้ไขแล้วกดบันทึกเพื่อส่งใหม่': 'Rejected: {0} — edit and save to send again',
   'รายการนี้สร้างจากการจ่ายบิล': 'This transaction was created by paying a bill', 'ลบรายการ': 'Delete transaction',
   'เช่น 7-Eleven': 'e.g. 7-Eleven', 'เช่น ข้าวกลางวัน': 'e.g. Lunch',
-  'ยังไม่ได้เลือกหมวดหมู่ รายการจะถูกบันทึกเป็น "รอตรวจสอบ" จนกว่าจะเลือก': 'No category yet. It is saved as "To review" until you pick one.',
+  'ยังไม่ได้เลือกหมวดหมู่': 'No category picked yet',
   'ร้านค้า / ผู้รับ': 'Merchant / payee', 'ใครจ่าย': 'Who paid', 'ฉัน': 'Me', 'ส่วนของฉัน (฿)': 'My share (฿)', 'ส่วนของ {0}': '{0}’s share',
   'ใส่ยอดรวมทั้งบิล ค่าเริ่มต้นแบ่งครึ่ง แก้ส่วนของแต่ละคนได้ รายการจะนับเป็นรายจ่ายเมื่อ {0} อนุมัติแล้วเท่านั้น':
     'Enter the full bill total. It is split in half by default and you can change each share. It counts as spending only after {0} approves.',
