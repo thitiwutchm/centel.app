@@ -211,7 +211,7 @@ function render() {
   // Schedule has its own floating "รายการประจำ" button (with add inside).
   fab.hidden = ui.tab === 'account' || ui.tab === 'home' || (bills && ui.billView === 'schedule');
   fab.classList.toggle('ext', ui.tab === 'home' && !ui.fabMini);
-  fab.setAttribute('aria-label', bills ? 'เพิ่มบิล' : 'เพิ่มรายการ');
+  fab.setAttribute('aria-label', bills ? 'เพิ่มบิล' : ui.tab === 'budgets' ? 'สร้างงบประมาณ' : 'เพิ่มรายการ');
   $('#addLabel').textContent = bills ? 'เพิ่มบิล' : 'เพิ่มรายการ';
   if (ui.tab === 'home') renderHome();
   else if (ui.tab === 'txns') renderTxns();
@@ -1292,7 +1292,7 @@ function toast(msg) {
 $('#prevMonth').addEventListener('click', () => { ui.ym = addMonths(ui.ym, -1); ui.selDay = null; render(); });
 $('#nextMonth').addEventListener('click', () => { ui.ym = addMonths(ui.ym, 1); ui.selDay = null; render(); });
 $('#monthTitle').addEventListener('click', () => { ui.ym = ymOf(new Date()); ui.selDay = null; render(); });
-$('#addBtn').addEventListener('click', () => (ui.tab === 'bills' ? billForm() : txnForm()));
+$('#addBtn').addEventListener('click', () => (ui.tab === 'bills' ? billForm() : ui.tab === 'budgets' ? budgetForm() : txnForm()));
 $('#backdrop').addEventListener('click', closeSheet);
 document.querySelector('.tabbar').addEventListener('click', (e) => {
   const b = e.target.closest('[data-tab]');

@@ -984,7 +984,7 @@ function renderBudgets() {
       <button class="btn" data-action="add-budget" style="margin-top:14px">สร้างงบประมาณ</button>
     </div>`}
     ${isCloud() && cloud.partner ? `
-    <div class="section-row"><span>งบร่วมกับ ${esc(partnerName())}</span><button class="link-btn" data-action="add-budget-shared">＋ สร้างงบร่วม</button></div>
+    <div class="section-row"><span>งบร่วมกับ ${esc(partnerName())}</span></div>
     ${shared.map((bg) => budgetRow(bg, ym)).join('') || '<div class="card muted small">งบร่วมนับยอดรวมทั้งบิลของรายจ่ายร่วม ทั้งสองคนเห็นงบเดียวกัน</div>'}` : ''}
   `;
 }
