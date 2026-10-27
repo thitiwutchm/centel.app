@@ -3,19 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>วางแผนจ่ายบิล · รายรับรายจ่าย</title>
+  <title>Centel</title>
   <meta name="description" content="วางแผนการจ่ายบิล บันทึกรายรับรายจ่าย กระเป๋าเงิน และงบประมาณรายเดือน">
   <meta name="theme-color" content="#16416d" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#071a2e" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="จ่ายบิล">
+  <meta name="apple-mobile-web-app-title" content="Centel">
   <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" type="image/png" href="icons/icon-192.png">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/centel-192.png">
+  <link rel="apple-touch-icon" href="icons/centel-180.png">
   <link rel="stylesheet" href="styles.css">
+  <script src="i18n.js"></script>
+  <script src="theme.js"></script>
 </head>
 <body>
   <header class="topbar" hidden>
@@ -29,11 +31,11 @@
   <button class="fab ext" id="addBtn" aria-label="เพิ่มรายการ"><span class="fab-plus">＋</span><span class="fab-label" id="addLabel">เพิ่มรายการ</span></button>
 
   <nav class="tabbar">
-    <button data-tab="home" class="active"><svg class="ti" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.5l8.5 7V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z"/></svg><span>หน้าหลัก</span></button>
-    <button data-tab="txns"><svg class="ti" viewBox="0 0 24 24"><path d="M4 7.5h14.5a1.5 1.5 0 0 1 1.5 1.5v9.5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 18.5V6a2 2 0 0 1 2-2h10v3.5"/><path d="M15 12h5v3.5h-5a1.75 1.75 0 0 1 0-3.5z"/></svg><span>รายการ</span></button>
-    <button data-tab="bills"><svg class="ti" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg><span>บิล</span></button>
-    <button data-tab="budgets"><svg class="ti" viewBox="0 0 24 24"><path d="M3.5 17a8.5 8.5 0 1 1 17 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.2"/></svg><span>งบประมาณ</span></button>
-    <button data-tab="account"><svg class="ti" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20.5c1.4-3.6 4.4-5.5 8-5.5s6.6 1.9 8 5.5"/></svg><span>บัญชี</span></button>
+    <button data-tab="home" class="active"><span class="tab-in"><svg class="ti" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.5l8.5 7V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z"/></svg><span>หน้าหลัก</span></span></button>
+    <button data-tab="txns"><span class="tab-in"><svg class="ti" viewBox="0 0 24 24"><path d="M4 7.5h14.5a1.5 1.5 0 0 1 1.5 1.5v9.5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 18.5V6a2 2 0 0 1 2-2h10v3.5"/><path d="M15 12h5v3.5h-5a1.75 1.75 0 0 1 0-3.5z"/></svg><span>รายการ</span></span></button>
+    <button data-tab="bills"><span class="tab-in"><svg class="ti" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg><span>บิล</span></span></button>
+    <button data-tab="budgets"><span class="tab-in"><svg class="ti" viewBox="0 0 24 24"><path d="M9.5 7V6.5A2.5 2.5 0 0 1 12 4h5a2.5 2.5 0 0 1 2.5 2.5v9A2.5 2.5 0 0 1 17 18h-1.5"/><rect x="4.5" y="7" width="11" height="13.5" rx="2.5"/><path d="M4.5 11h11"/></svg><span>งบประมาณ</span></span></button>
+    <button data-tab="account"><span class="tab-in"><svg class="ti" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20.5c1.4-3.6 4.4-5.5 8-5.5s6.6 1.9 8 5.5"/></svg><span>บัญชี</span></span></button>
   </nav>
 
   <div class="sheet-backdrop" id="backdrop" hidden></div>
@@ -45,6 +47,7 @@
   <script src="money.js"></script>
   <script src="billfiles.js"></script>
   <script src="gmail.js"></script>
+  <script src="schedule.js"></script>
   <script src="calfeed.js"></script>
   <script src="app.js"></script>
 </body>

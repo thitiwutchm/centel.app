@@ -11,7 +11,7 @@
 
 const CALFEED_KEY = 'centel.calfeed.v1'; // { userId, token, updatedAt, sent: hash of the last calendar sent }
 
-const calfeed = { checked: null, timer: null, sending: false, again: false };
+const calfeed = { checked: null, timer: null, sending: false, again: false, afterLogin: false };
 
 function calFeedLocal() {
   try {
@@ -47,6 +47,7 @@ async function calFeedCheck() {
     else if (!cur || cur.token !== r.token) setCalFeedLocal({ token: r.token, updatedAt: r.updatedAt, sent: null });
     if (ui.tab === 'account') render();
     if (r.token) calFeedChanged(0);
+    if (calfeed.afterLogin) { calfeed.afterLogin = false; setTimeout(calFeedSheet, 300); }
   } catch (e) { calfeed.checked = null; }
 }
 
@@ -85,32 +86,37 @@ function calFeedWhen(iso) {
   return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-// The block in Settings → การแจ้งเตือน.
+// The block in Settings → การแจ้งเตือน. Auto sync is the main option; the one-time file is secondary.
 function calFeedSettings() {
-  const fileBtn = (cls) => `<button class="btn ${cls}" data-action="ics">📆 ${cls ? 'ดาวน์โหลดไฟล์ปฏิทิน (.ics) ครั้งเดียว' : 'เพิ่มการเตือนลงปฏิทิน iPhone'}</button>`;
-  if (!isCloud()) {
-    return `${fileBtn('')}
-    <p class="hint">สร้างไฟล์ปฏิทิน (.ics) ของบิลทั้งหมด พร้อมเสียงเตือนก่อนวันครบกำหนดตามที่ตั้งไว้ เปิดไฟล์แล้วเลือก "เพิ่มทั้งหมด" ในแอปปฏิทิน · หากแก้ไขบิล ให้ลบปฏิทินเดิมแล้วสร้างใหม่</p>
-    <p class="hint"><b>เข้าสู่ระบบ</b> เพื่อให้ปฏิทิน iPhone อัปเดตบิลให้อัตโนมัติ ไม่ต้องนำเข้าไฟล์ใหม่ทุกครั้ง</p>`;
-  }
-  calFeedCheck();
-  const cur = calFeedLocal();
+  const cur = isCloud() ? calFeedLocal() : null;
+  if (isCloud()) calFeedCheck();
+  const sub = cur
+    ? `บิลใหม่ บิลที่แก้ไข และบิลที่จ่ายแล้วจะอัปเดตในปฏิทินเอง${cur.updatedAt ? ` · ส่งล่าสุด ${calFeedWhen(cur.updatedAt)}` : ''}`
+    : `สมัครปฏิทินครั้งเดียว แล้วทุกบิลที่มีกำหนดจ่ายจะไปอยู่ในปฏิทิน iPhone พร้อมเสียงเตือน และอัปเดตเองเมื่อเพิ่ม แก้ไข หรือจ่ายบิล${isCloud() ? '' : ' (ต้องเข้าสู่ระบบ)'}`;
   return `
     <button class="btn" data-action="calfeed">📆 ${cur ? 'ปฏิทิน iPhone: ซิงก์อัตโนมัติอยู่' : 'ซิงก์บิลเข้าปฏิทิน iPhone อัตโนมัติ'}</button>
-    <p class="hint">${cur
-    ? `บิลใหม่ บิลที่แก้ไข และบิลที่จ่ายแล้วจะอัปเดตในปฏิทินเอง${cur.updatedAt ? ` · ส่งล่าสุด ${calFeedWhen(cur.updatedAt)}` : ''}`
-    : 'สมัครปฏิทินครั้งเดียว แล้วทุกบิลที่มีกำหนดจ่ายจะไปอยู่ในปฏิทิน iPhone พร้อมเสียงเตือนตามที่ตั้งไว้ และอัปเดตเองเมื่อเพิ่ม แก้ไข หรือจ่ายบิล'}</p>`;
+    <p class="hint">${sub}</p>
+    ${cur ? '' : `<button class="btn ghost" data-action="ics">📄 ดาวน์โหลดไฟล์ปฏิทิน (.ics) ครั้งเดียว</button>
+    <p class="hint">ไฟล์ไม่อัปเดตเอง หากแก้ไขบิลต้องลบปฏิทินเดิมแล้วนำเข้าใหม่</p>`}`;
 }
 
+const CLOSE_X = '<button class="close-x" data-action="close" aria-label="ปิด"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>';
+
 function calFeedSheet() {
-  if (!isCloud()) { loginSheet(); return; }
+  if (!isCloud()) {
+    // Signing in first: once the account is ready, this sheet opens again (calFeedCheck).
+    calfeed.afterLogin = true;
+    loginSheet();
+    toast('เข้าสู่ระบบก่อน เพื่อให้ปฏิทินอัปเดตอัตโนมัติ');
+    return;
+  }
   const cur = calFeedLocal();
   if (!cur) {
     openSheet(`
-      <div class="sheet-head"><button class="link-btn" data-action="close">ยกเลิก</button><h2>ปฏิทิน iPhone</h2><span style="width:40px"></span></div>
+      <div class="sheet-head">${CLOSE_X}<h2>ปฏิทิน iPhone</h2><span style="width:40px"></span></div>
       <p class="hint">แอปจะสร้างลิงก์ปฏิทินส่วนตัวของบัญชีนี้ แล้วเปิดให้ iPhone กด <b>สมัคร</b> ครั้งเดียว หลังจากนั้นบิลทุกใบที่มีกำหนดจ่ายจะอยู่ในแอปปฏิทินและอัปเดตเอง</p>
       <ul class="hint">
-        <li>เตือนล่วงหน้า ${state.settings.remindDays ? `${state.settings.remindDays} วัน และ` : ''}เช้าวันครบกำหนด (09:00)</li>
+        <li>${state.settings.remindDays ? `เตือนล่วงหน้า ${state.settings.remindDays} วัน และเช้าวันครบกำหนด (09:00)` : 'เตือนเช้าวันครบกำหนด (09:00)'}</li>
         <li>เดือนที่จ่ายแล้วขึ้นเป็น ✅ และไม่เตือนซ้ำ</li>
         <li>บิลที่ตั้งตัดบัญชีอัตโนมัติจะไม่ใส่ในปฏิทิน</li>
       </ul>
@@ -134,14 +140,14 @@ function calFeedSheet() {
     return;
   }
   openSheet(`
-    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>ปฏิทิน iPhone</h2><span style="width:40px"></span></div>
+    <div class="sheet-head">${CLOSE_X}<h2>ปฏิทิน iPhone</h2><span style="width:40px"></span></div>
     <div class="card"><b>✅ ซิงก์อัตโนมัติอยู่</b>
       <div class="muted small" style="margin-top:4px">ส่งปฏิทินล่าสุด ${esc(calFeedWhen(calFeedLocal().updatedAt))} · iPhone ดึงข้อมูลใหม่เองเป็นระยะ</div></div>
     <button class="btn" id="cfSub">📲 สมัครในปฏิทินเครื่องนี้</button>
     <button class="btn ghost" id="cfCopy">🔗 คัดลอกลิงก์ปฏิทิน</button>
     <p class="hint">ถ้ากดสมัครแล้วไม่ขึ้น: เปิด <b>การตั้งค่า › ปฏิทิน › บัญชี › เพิ่มบัญชี › อื่นๆ › เพิ่มปฏิทินที่สมัครรับ</b> แล้ววางลิงก์ · ถ้าไม่มีเสียงเตือน ให้ปิด "ลบการเตือน" (Remove Alerts) ในหน้าตั้งค่าของปฏิทินนี้ · ลิงก์นี้เป็นความลับ ใครมีลิงก์จะเห็นรายการบิล</p>
     <button class="btn ghost" id="cfNew">🔄 สร้างลิงก์ใหม่ (ลิงก์เดิมใช้ไม่ได้)</button>
-    <button class="btn ghost" data-action="ics">📆 ดาวน์โหลดไฟล์ปฏิทิน (.ics) ครั้งเดียว</button>
+    <button class="btn ghost" data-action="ics">📄 ดาวน์โหลดไฟล์ปฏิทิน (.ics) ครั้งเดียว</button>
     <button class="btn danger" id="cfOff">ปิดการซิงก์ปฏิทิน</button>
   `);
   $('#cfSub').addEventListener('click', () => { location.href = calFeedUrl(calFeedLocal().token); });

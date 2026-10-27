@@ -5,16 +5,16 @@
 const STORAGE_KEY = 'billplanner.v1';
 
 const CATEGORIES = {
-  credit:    { label: 'บัตรเครดิต', icon: '💳', color: '#7c5cff' },
-  electric:  { label: 'ค่าไฟ',      icon: '⚡', color: '#f5a623' },
-  water:     { label: 'ค่าน้ำ',      icon: '💧', color: '#2fa8ff' },
-  internet:  { label: 'อินเทอร์เน็ต', icon: '📶', color: '#00b3a4' },
-  phone:     { label: 'ค่าโทรศัพท์', icon: '📱', color: '#4f6bed' },
-  loan:      { label: 'ผ่อนชำระ',   icon: '🏦', color: '#e0552b' },
-  insurance: { label: 'ประกัน',     icon: '🛡️', color: '#1a9e5c' },
-  rent:      { label: 'ค่าเช่า/ส่วนกลาง', icon: '🏠', color: '#b26a3c' },
-  subscription: { label: 'สมาชิกรายเดือน', icon: '🎬', color: '#e83e8c' },
-  other:     { label: 'อื่นๆ',      icon: '🧾', color: '#8a8f99' },
+  credit:    { label: 'บัตรเครดิต', icon: '💳', color: '#7c5cff', svg: 'card' },
+  electric:  { label: 'ค่าไฟ',      icon: '⚡', color: '#f5a623', svg: 'bolt' },
+  water:     { label: 'ค่าน้ำ',      icon: '💧', color: '#2fa8ff', svg: 'drop' },
+  internet:  { label: 'อินเทอร์เน็ต', icon: '📶', color: '#00b3a4', svg: 'wifi' },
+  phone:     { label: 'ค่าโทรศัพท์', icon: '📱', color: '#4f6bed', svg: 'phone' },
+  loan:      { label: 'ผ่อนชำระ',   icon: '🏦', color: '#e0552b', svg: 'bank' },
+  insurance: { label: 'ประกัน',     icon: '🛡️', color: '#1a9e5c', svg: 'shield' },
+  rent:      { label: 'ค่าเช่า/ส่วนกลาง', icon: '🏠', color: '#b26a3c', svg: 'home' },
+  subscription: { label: 'สมาชิกรายเดือน', icon: '🎬', color: '#e83e8c', svg: 'play' },
+  other:     { label: 'อื่นๆ',      icon: '🧾', color: '#8a8f99', svg: 'receipt' },
 };
 
 const TH_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -35,7 +35,9 @@ const defaultState = () => ({
 let state = load();
 const ui = {
   tab: 'home',          // home | txns | bills | budgets | account
-  billView: 'month',    // month | calendar | list (inside the bills tab)
+  billView: 'month',    // month | schedule | calendar | list (inside the bills tab)
+  schedYm: null,        // month shown in the Schedule view
+  schedDay: null,       // day picked in the Schedule calendar (null = whole month)
   ym: ymOf(new Date()),
   selDay: null,
   wallet: 'total',
@@ -44,6 +46,7 @@ const ui = {
   searchOpen: false,
   reportType: 'expense',
   txFilter: 'all',
+  txLabel: '',          // label id filter on the transactions tab ('' = all)
   budgetOff: 0,
 };
 
@@ -86,7 +89,7 @@ function daysInMonth(ym) { const { y, m } = parseYm(ym); return new Date(y, m, 0
 function monthDiff(a, b) { const A = parseYm(a), B = parseYm(b); return (B.y - A.y) * 12 + (B.m - A.m); }
 function today() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
 function dateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
-function thMonthYear(ym) { const { y, m } = parseYm(ym); return `${TH_MONTHS[m - 1]} ${y + 543}`; }
+function thMonthYear(ym) { const { y, m } = parseYm(ym); return `${TH_MONTHS[m - 1]} ${y + BE}`; }
 function thShortDate(d) { return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]}`; }
 function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
 
@@ -125,6 +128,15 @@ function dueDateFor(b, ym) {
   return new Date(y, m - 1, Math.min(b.dueDay || 1, daysInMonth(ym)));
 }
 
+// Days before the due date a bill counts as "soon"; a bill can override the app default.
+function remindOf(b) { return b.remind != null ? b.remind : state.settings.remindDays; }
+
+// Wallet a bill is paid from: its own choice ('' = don't record a transaction), else the last used one.
+function billWallet(b) {
+  if (b.walletId === '' || (b.walletId && walletById(b.walletId))) return b.walletId;
+  return billPayWallet();
+}
+
 function record(ym, id) { return (state.records[ym] || {})[id] || {}; }
 function setRecord(ym, id, patch) {
   state.records[ym] = state.records[ym] || {};
@@ -137,7 +149,6 @@ function setRecord(ym, id, patch) {
 
 function occurrences(ym) {
   const t = today();
-  const remind = state.settings.remindDays;
   return state.bills
     .filter((b) => billAppliesTo(b, ym))
     .map((b) => {
@@ -150,7 +161,7 @@ function occurrences(ym) {
       let status = 'upcoming';
       if (paid) status = 'paid';
       else if (daysLeft < 0) status = 'overdue';
-      else if (daysLeft <= remind) status = 'soon';
+      else if (daysLeft <= remindOf(b)) status = 'soon';
       const inst = b.type === 'installment' ? { n: monthDiff(b.startMonth, ym) + 1, of: b.months } : null;
       return { bill: b, ym, due, amount, needsAmount, paid, paidAt: rec.paidAt, status, daysLeft, inst };
     })
@@ -177,24 +188,37 @@ function esc(s) {
 
 function cat(b) { return CATEGORIES[b.category] || CATEGORIES.other; }
 
+// A bill can carry its own picture in b.icon: an emoji, or a small photo / logo as a data URL
+// (made by squareImage in money.js, same as wallets). Without one it shows its category icon.
+const BILL_EMOJIS = ['💳', '⚡', '💧', '🌐', '📱', '🏠', '🚗', '🛡️', '📺', '🎵', '🎮', '☁️', '🏦', '🎓', '🏥', '🐶', '👶', '🧾', '🔥', '📦', '⭐'];
+function billImg(b) { return b && WALLET_IMG.test(b.icon || '') ? b.icon : ''; }
+function billFace(b) { const img = billImg(b); return img ? `<img src="${img}" alt="">` : esc((b && b.icon) || cat(b).icon); }
+
+// Small muted line under a bill's name naming its type with a line icon, e.g. card + "บัตรเครดิต".
+function billTypeLine(b) {
+  const c = cat(b);
+  return `<div class="type-line">${svgIcon(c.svg || 'receipt', 'svg-i')}<span>${c.label}</span></div>`;
+}
+
 function icoHtml(b, cls = 'ico') {
   const c = cat(b);
-  return `<div class="${cls}" style="background:${c.color}22">${c.icon}</div>`;
+  return `<div class="${cls}${billImg(b) ? ' has-img' : ''}" style="background:${c.color}22">${billFace(b)}</div>`;
 }
 
 function render() {
   const bills = ui.tab === 'bills';
-  const nav = bills && ui.billView !== 'list';
+  const nav = bills && (ui.billView === 'month' || ui.billView === 'calendar');
   document.body.classList.toggle('with-topbar', bills);
   $('.topbar').hidden = !bills;
   $('.topbar').classList.toggle('hide-nav', !nav);
-  $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : 'บิลทั้งหมด';
+  $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : ui.billView === 'schedule' ? 'Schedule' : 'บิลทั้งหมด';
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
   const fab = $('#addBtn');
   // Home has its own add button in the quick-action row.
-  fab.hidden = ui.tab === 'account' || ui.tab === 'home';
+  // Schedule has its own floating "รายการประจำ" button (with add inside).
+  fab.hidden = ui.tab === 'account' || ui.tab === 'home' || (bills && ui.billView === 'schedule');
   fab.classList.toggle('ext', ui.tab === 'home' && !ui.fabMini);
-  fab.setAttribute('aria-label', bills ? 'เพิ่มบิล' : 'เพิ่มรายการ');
+  fab.setAttribute('aria-label', bills ? 'เพิ่มบิล' : ui.tab === 'budgets' ? 'สร้างงบประมาณ' : 'เพิ่มรายการ');
   $('#addLabel').textContent = bills ? 'เพิ่มบิล' : 'เพิ่มรายการ';
   if (ui.tab === 'home') renderHome();
   else if (ui.tab === 'txns') renderTxns();
@@ -202,9 +226,10 @@ function render() {
   else if (ui.tab === 'account') renderSettings();
   else {
     if (ui.billView === 'month') renderMonth();
+    else if (ui.billView === 'schedule') renderSchedule();
     else if (ui.billView === 'calendar') renderCalendar();
     else renderBills();
-    view.insertAdjacentHTML('afterbegin', `<div class="seg bill-seg">${[['month', 'เดือนนี้'], ['calendar', 'ปฏิทิน'], ['list', 'บิลทั้งหมด']]
+    view.insertAdjacentHTML('afterbegin', `<div class="seg bill-seg">${[['month', 'เดือนนี้'], ['schedule', 'Schedule'], ['calendar', 'ปฏิทิน'], ['list', 'ทั้งหมด']]
       .map(([k, l]) => `<button data-billview="${k}" class="${ui.billView === k ? 'on' : ''}">${l}</button>`).join('')}</div>`);
   }
 }
@@ -226,6 +251,7 @@ function occItem(o) {
       ${icoHtml(b)}
       <div class="main">
         <div class="name">${esc(b.name)}</div>
+        ${billTypeLine(b)}
         <div class="sub">${dueTxt}${extra ? ' · ' + extra : ''}</div>
         ${statusBadge(o)}
       </div>
@@ -254,7 +280,7 @@ function renderMonth() {
 
   let alerts = '';
   if (overdue.length) alerts += `<div class="alert bad">⚠️<div>เลยกำหนดชำระ ${overdue.length} รายการ รวม ${baht(overdue.reduce((s, o) => s + o.amount, 0))}</div></div>`;
-  if (soon.length) alerts += `<div class="alert warn">⏰<div>ใกล้ครบกำหนดภายใน ${state.settings.remindDays} วัน: ${soon.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
+  if (soon.length) alerts += `<div class="alert warn">⏰<div>ใกล้ครบกำหนด: ${soon.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
   if (missing.length) alerts += `<div class="alert warn">✏️<div>ยังไม่ได้ระบุยอดเดือนนี้: ${missing.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
   if (peaDue.length) alerts += `<div class="alert warn">⚡<div>ถึงรอบบิลค่าไฟ กดที่บิลเพื่อดึงยอดเดือนนี้จาก PEA: ${peaDue.map((o) => esc(o.bill.name)).join(', ')}</div></div>`;
 
@@ -336,7 +362,7 @@ function renderCalendar() {
         <span><i class="dot over"></i>เลยกำหนด</span><span><i class="dot paid"></i>จ่ายแล้ว</span>
       </div>
     </div>
-    <div class="section-title">${thShortDate(selDate)} ${y + 543}${sel.length ? ` · ${baht(selTotal)}` : ''}</div>
+    <div class="section-title">${thShortDate(selDate)} ${y + BE}${sel.length ? ` · ${baht(selTotal)}` : ''}</div>
     ${sel.length ? `<div class="list">${sel.map(occItem).join('')}</div>` : `<div class="card muted" style="text-align:center">ไม่มีบิลครบกำหนดวันนี้</div>`}
   `;
 }
@@ -356,7 +382,7 @@ function renderBills() {
     html += `<div class="section-title">${CATEGORIES[k].icon} ${CATEGORIES[k].label}</div><div class="list">`;
     list.sort((a, b) => (a.dueDay || 0) - (b.dueDay || 0)).forEach((b) => {
       html += `
-        <button class="item" data-edit="${b.id}">
+        <button class="item" data-bill="${b.id}">
           ${icoHtml(b)}
           <div class="main"><div class="name">${esc(b.name)}</div><div class="sub">${billScheduleText(b)}</div></div>
           <div class="right"><div class="amt">${b.variable && !b.amount ? '<span class="muted small">ไม่แน่นอน</span>' : baht(b.amount)}</div>
@@ -371,12 +397,12 @@ function renderBills() {
 function billScheduleText(b) {
   if (b.type === 'once') {
     const [y, m, d] = b.onceDate.split('-').map(Number);
-    return `ครั้งเดียว ${d} ${TH_MONTHS_SHORT[m - 1]} ${y + 543}`;
+    return `ครั้งเดียว ${d} ${TH_MONTHS_SHORT[m - 1]} ${y + BE}`;
   }
   let s = `ทุกวันที่ ${b.dueDay}`;
   if (b.type === 'installment') {
     const end = parseYm(billEndMonth(b));
-    s += ` · ${b.months} งวด ถึง ${TH_MONTHS_SHORT[end.m - 1]} ${String(end.y + 543).slice(2)}`;
+    s += ` · ${b.months} งวด ถึง ${TH_MONTHS_SHORT[end.m - 1]} ${String(end.y + BE).slice(2)}`;
   }
   if (b.variable) s += ' · ยอดไม่แน่นอน';
   return s;
@@ -401,6 +427,13 @@ function renderSettings() {
   const s = state.settings;
   view.innerHTML = `
     ${accountTop()}
+    <div class="section-title">ธีม</div>
+    <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
+      <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
+    <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>
+    <div class="section-title">ภาษา · Language</div>
+    <div class="seg lang-seg">${[['th', 'ไทย'], ['en', 'English']]
+      .map(([k, l]) => `<button type="button" data-lang="${k}" class="${LANG === k ? 'on' : ''}" aria-pressed="${LANG === k}">${l}</button>`).join('')}</div>
     <div class="section-title">การแจ้งเตือน</div>
     <div class="form">
       <div class="field"><label for="remindDays">เตือนล่วงหน้า</label>
@@ -420,7 +453,7 @@ function renderSettings() {
 
     <div class="section-title">อื่นๆ</div>
     <button class="btn danger" data-action="reset">ลบข้อมูลทั้งหมด</button>
-    <p class="hint" style="text-align:center">วางแผนจ่ายบิล · เวอร์ชัน 2.0</p>
+    <p class="hint" style="text-align:center">Centel · เวอร์ชัน 2.0</p>
   `;
   $('#billWallet').addEventListener('change', (e) => {
     money.prefs.billWallet = e.target.value;
@@ -433,12 +466,23 @@ function renderSettings() {
     toast('บันทึกแล้ว');
   });
   $('#importFile').addEventListener('change', importData);
+  view.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.themePick === themeId()) return;
+    setTheme(b.dataset.themePick);
+    const y = window.scrollY;
+    renderSettings();
+    window.scrollTo(0, y);
+  }));
+  view.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.lang !== LANG) setLang(b.dataset.lang);
+  }));
 }
 
 /* ---------- Sheets ---------- */
 
 function openSheet(html) {
   const sheet = $('#sheet');
+  delete sheet.dataset.locked;
   sheet.innerHTML = `<div class="grabber"></div>${html}`;
   sheet.hidden = false;
   $('#backdrop').hidden = false;
@@ -447,9 +491,14 @@ function openSheet(html) {
 }
 
 function closeSheet() {
+  // A locked sheet (the nickname prompt) closes only by saving.
+  if ($('#sheet').dataset.locked) return;
+  const layer = $('#catLayer');
+  if (layer) layer.remove();
   $('#sheet').hidden = true;
   $('#backdrop').hidden = true;
   document.body.style.overflow = '';
+  if (typeof needNickname === 'function' && needNickname()) setTimeout(() => { if ($('#sheet').hidden) nicknameSheet(); }, 350);
 }
 
 /* ---------- PEA electricity bill lookup ---------- */
@@ -523,6 +572,43 @@ function applyPeaRows(billId, rows) {
   return n;
 }
 
+// Day of the month a PEA bill fetches itself: 'due' (the default) follows the bill's
+// due day, 0 means only when the user taps fetch.
+function peaFetchDay(b, ym) {
+  const d = b.pea && (b.pea.day === undefined ? 'due' : b.pea.day);
+  if (!d) return 0;
+  return Math.min(d === 'due' ? (b.dueDay || 1) : Number(d), daysInMonth(ym));
+}
+
+// On app open: from each PEA bill's fetch day, pull this month's amount until PEA has it.
+// At most one try per bill per day, so a bill PEA hasn't issued yet is retried tomorrow.
+function peaDayOptions(day) {
+  const cur = day === undefined ? 'due' : day;
+  return `<option value="due" ${cur === 'due' ? 'selected' : ''}>ตามวันครบกำหนด</option>`
+    + `<option value="0" ${cur === 0 ? 'selected' : ''}>ไม่ดึงเอง</option>`
+    + Array.from({ length: 31 }, (_, i) => i + 1).map((d) => `<option value="${d}" ${cur === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
+}
+
+async function peaAutoTry() {
+  const ym = ymOf(new Date());
+  const dayNow = today().getDate();
+  const ds = dateStr(today());
+  const due = state.bills.filter((b) => b.pea && b.pea.ca && b.pea.peano && billAppliesTo(b, ym)
+    && peaFetchDay(b, ym) && dayNow >= peaFetchDay(b, ym)
+    && b.pea.tried !== ds && record(ym, b.id).amount == null && !record(ym, b.id).paid);
+  if (!due.length) return;
+  for (const b of due) {
+    b.pea.tried = ds;
+    try {
+      const rows = await fetchPeaBills(b.pea.ca, b.pea.peano);
+      applyPeaRows(b.id, rows);
+      const hit = rows.find((r) => r.ym === ym && r.amount != null);
+      if (hit) toast(`ดึงค่าไฟ ${b.name}: ${baht(hit.amount)}`);
+    } catch (e) { /* offline or PEA down: the bill still offers a manual fetch */ }
+  }
+  save(); saveMoney(); render();
+}
+
 function billForm(b, opts = {}) {
   const isNew = !b;
   b = b || {
@@ -540,44 +626,92 @@ function billForm(b, opts = {}) {
     gmailPrepare().catch(() => {});
   }
 
-  const chips = Object.entries(CATEGORIES).map(([k, c]) =>
-    `<button type="button" class="chip ${draft.category === k ? 'on' : ''}" data-cat="${k}">${c.icon} ${c.label}</button>`).join('');
+  const catOpts = Object.entries(CATEGORIES).map(([k, c]) =>
+    `<option value="${k}" ${draft.category === k ? 'selected' : ''}>${c.label}</option>`).join('');
+  const walletOpts = (sel) => `<option value="">ไม่บันทึกเป็นรายการ</option>${money.wallets
+    .map((w) => `<option value="${w.id}" ${sel === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}`;
 
+  // Clean layout: hero (icon, name, amount) on top, then one grouped list of value pickers.
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'เพิ่มบิล' : 'แก้ไขบิล'}</h2>
-      <button class="link-btn strong" id="saveBill">บันทึก</button>
+      <span class="sheet-head-pad"></span>
     </div>
     <div class="seg" id="typeSeg">
       <button type="button" data-type="once">ครั้งเดียว</button>
       <button type="button" data-type="monthly">ทุกเดือน</button>
-      <button type="button" data-type="installment">ผ่อนเป็นงวด</button>
+      <button type="button" data-type="installment">ผ่อนงวด</button>
       <button type="button" data-type="auto">Auto Sync</button>
     </div>
     <div id="autoFields"></div>
-    <div id="manualTop">
-      <div class="chips" id="catChips">${chips}</div>
+    <div class="bf-hero">
+      <button type="button" class="hero-ico hero-edit" id="heroIco" aria-label="เปลี่ยนรูป"></button>
+      <div class="bf-pic" id="bPic" hidden>
+        <div class="w-pic-actions">
+          <button type="button" class="chip" id="bPhoto">📷 เลือกรูป</button>
+          <button type="button" class="chip" id="bEmojiBtn">😀 อีโมจิ</button>
+          <button type="button" class="chip" id="bReset" hidden>ใช้ไอคอนหมวดหมู่</button>
+        </div>
+        <div class="chips w-emojis" id="bEmojis" hidden>${BILL_EMOJIS.map((e) => `<button type="button" class="chip emoji" data-bemoji="${e}">${e}</button>`).join('')}<input id="bEmojiIn" class="chip" placeholder="พิมพ์เอง" maxlength="8" autocomplete="off"></div>
+        <input type="file" id="bFile" accept="image/*" hidden>
+      </div>
+      <input id="fName" class="bf-name" placeholder="ชื่อบิล" value="${esc(draft.name || '')}" autocomplete="off" aria-label="ชื่อบิล">
+      <label class="bf-amt" id="amountRow"><span>฿</span><input id="fAmount" inputmode="decimal" placeholder="0" aria-label="ยอดเงิน" value="${draft.amount === '' || draft.amount == null ? '' : draft.amount}"></label>
     </div>
-    <div class="form" id="nameForm">
-      <div class="field"><label for="fName">ชื่อบิล</label><input id="fName" placeholder="เช่น KBank, กฟน." value="${esc(draft.name || '')}" autocomplete="off"></div>
-      <div class="field" id="amountRow"><label for="fAmount">ยอดเงิน (฿)</label><input id="fAmount" inputmode="decimal" placeholder="0" value="${draft.amount === '' || draft.amount == null ? '' : draft.amount}"></div>
-      <div class="field" id="variableRow"><label for="fVariable">ยอดไม่แน่นอน</label>
-        <span style="flex:1"></span><label class="switch"><input type="checkbox" id="fVariable" ${draft.variable ? 'checked' : ''}><span></span></label></div>
-    </div>
-    <p class="hint" id="variableHint">เปิด "ยอดไม่แน่นอน" สำหรับบัตรเครดิต ค่าน้ำ ค่าไฟ แล้วกรอกยอดจริงในแต่ละเดือน ยอดด้านบนจะใช้เป็นยอดประมาณ</p>
 
     <div id="peaFields"></div>
 
-    <div class="form" id="schedFields"></div>
-
-    <div class="form" id="extraForm">
+    <div class="form rows">
+      <div class="field" id="manualTop"><label for="fCat">หมวดหมู่</label><select id="fCat">${catOpts}</select></div>
+      <div id="schedFields"></div>
+      <div class="field" id="variableRow"><label for="fVariable">ยอดไม่แน่นอน<small>กรอกยอดจริงทุกเดือน</small></label>
+        <span style="flex:1"></span><label class="switch"><input type="checkbox" id="fVariable" ${draft.variable ? 'checked' : ''}><span></span></label></div>
+      <div class="field"><label for="fWallet">จ่ายจาก</label><select id="fWallet">${walletOpts(isNew ? billPayWallet() : billWallet(draft))}</select></div>
+      <div class="field"><label for="fRemind">เตือน</label><select id="fRemind">${remindOpts(draft.remind)}</select></div>
       <div class="field"><label for="fAutopay">ตัดบัญชีอัตโนมัติ</label>
         <span style="flex:1"></span><label class="switch"><input type="checkbox" id="fAutopay" ${draft.autopay ? 'checked' : ''}><span></span></label></div>
-      <div class="field col"><label for="fNote">บันทึก</label><textarea id="fNote" placeholder="เช่น เลขบัญชี, วันตัดรอบบัตร">${esc(draft.note || '')}</textarea></div>
+    </div>
+    <div class="form note-card">
+      <textarea id="fNote" placeholder="บันทึก เช่น เลขบัญชี, วันตัดรอบบัตร" aria-label="บันทึก">${esc(draft.note || '')}</textarea>
     </div>
     ${isNew ? '' : `<button class="btn danger" id="delBill">ลบบิลนี้</button>`}
+    <div class="save-bar"><button type="button" class="save-pill" id="saveBill">${isNew ? 'เพิ่มบิล' : 'บันทึก'}</button></div>
   `);
+  const paintHero = () => {
+    const c = CATEGORIES[draft.auto && draft.source === 'pea' ? 'electric' : draft.category] || CATEGORIES.other;
+    const ico = $('#heroIco');
+    const img = billImg(draft);
+    ico.classList.toggle('has-img', !!img);
+    ico.innerHTML = (img ? `<img src="${img}" alt="">` : esc(draft.icon || c.icon)) + '<span class="w-cam">✎</span>';
+    ico.style.background = `${c.color}2e`;
+    $('#bReset').hidden = !draft.icon;
+    document.querySelectorAll('#bEmojis [data-bemoji]').forEach((x) => x.classList.toggle('on', x.dataset.bemoji === draft.icon));
+  };
+  paintHero();
+  // Tapping the icon opens the picture choices: a photo / logo, an emoji, or back to the category icon.
+  $('#heroIco').addEventListener('click', () => { $('#bPic').hidden = !$('#bPic').hidden; });
+  $('#bPhoto').addEventListener('click', () => $('#bFile').click());
+  $('#bEmojiBtn').addEventListener('click', () => { $('#bEmojis').hidden = !$('#bEmojis').hidden; });
+  $('#bReset').addEventListener('click', () => { delete draft.icon; $('#bEmojiIn').value = ''; paintHero(); });
+  $('#bEmojis').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-bemoji]');
+    if (c) { draft.icon = c.dataset.bemoji; $('#bEmojiIn').value = ''; paintHero(); }
+  });
+  $('#bEmojiIn').addEventListener('input', (e) => {
+    const v = e.target.value.trim().replace(/[<>&"']/g, '');
+    if (v) { draft.icon = [...v].slice(0, 4).join(''); paintHero(); }
+  });
+  $('#bFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try { draft.icon = await squareImage(f); paintHero(); } catch { toast('เปิดรูปนี้ไม่ได้'); }
+  });
+  // The amount grows with what is typed so it stays centred under the name.
+  const fitAmt = () => { const el = $('#fAmount'); el.style.width = `${Math.max(1, el.value.length) + 0.4}ch`; };
+  $('#fAmount').addEventListener('input', fitAmt);
+  fitAmt();
 
   const renderSched = () => {
     const mode = draft.auto ? 'auto' : draft.type;
@@ -589,17 +723,22 @@ function billForm(b, opts = {}) {
       html = `<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
         <div class="field"><label for="fStart">เริ่มเดือน</label><input type="month" id="fStart" value="${draft.startMonth || ui.ym}"></div>`;
     } else if (draft.type === 'once') {
-      html = `<div class="field"><label for="fOnce">วันครบกำหนด</label><input type="date" id="fOnce" value="${draft.onceDate}"></div>`;
+      html = `<div class="field"><label for="fOnce">วันที่จ่าย</label><input type="date" id="fOnce" value="${draft.onceDate}"></div>`;
     } else {
       html = `<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
         <div class="field"><label for="fStart">เริ่มเดือน</label><input type="month" id="fStart" value="${draft.startMonth || ui.ym}"></div>`;
       if (draft.type === 'installment') {
         html += `<div class="field"><label for="fMonths">จำนวนงวด</label><input id="fMonths" inputmode="numeric" value="${draft.months || 12}"></div>`;
+        const end = addMonths(draft.startMonth || ui.ym, Math.max(1, draft.months || 12) - 1);
+        html += `<div class="field ro"><label>สิ้นสุด</label><span class="val">${thMonthYear(end)}</span></div>`;
+      } else {
+        html += `<div class="field ro"><label>สิ้นสุด</label><span class="val">ไม่มีวันสิ้นสุด</span></div>`;
       }
     }
     $('#schedFields').innerHTML = html;
+    // Keep the "สิ้นสุด" row in step with the start month and number of installments.
+    ['#fStart', '#fMonths'].forEach((q) => { const el = $(q); if (el) el.addEventListener('change', () => { sync(); renderSched(); }); });
   };
-  renderSched();
 
   const sync = () => {
     draft.name = $('#fName').value.trim();
@@ -607,20 +746,29 @@ function billForm(b, opts = {}) {
     draft.variable = $('#fVariable').checked;
     draft.autopay = $('#fAutopay').checked;
     draft.note = $('#fNote').value.trim();
+    draft.category = $('#fCat').value;
+    draft.walletId = $('#fWallet').value;
+    draft.remind = $('#fRemind').value === '' ? undefined : Number($('#fRemind').value);
     if ($('#fDue')) draft.dueDay = Number($('#fDue').value);
     if ($('#fStart')) draft.startMonth = $('#fStart').value || ui.ym;
     if ($('#fMonths')) draft.months = parseInt($('#fMonths').value, 10) || 1;
     if ($('#fOnce')) draft.onceDate = $('#fOnce').value;
-    if ($('#fPeaCa')) draft.pea = { ca: $('#fPeaCa').value.trim(), peano: $('#fPeaNo') ? $('#fPeaNo').value.trim() : '' };
+    if ($('#fPeaCa')) {
+      const dv = $('#fPeaDay') ? $('#fPeaDay').value : 'due';
+      draft.pea = { ...(draft.pea || {}), ca: $('#fPeaCa').value.trim(), peano: $('#fPeaNo') ? $('#fPeaNo').value.trim() : '', day: dv === 'due' ? 'due' : Number(dv) };
+    }
     if ($('#fGSender')) {
       draft.gmail = {
         ...draft.gmail,
         sender: $('#fGSender').value.trim().toLowerCase().replace(/^from:/, ''),
         account: $('#fGAcc').value.replace(/[\s-]/g, ''),
         day: Number($('#fGDay').value),
+        payDays: Number($('#fGPay').value),
       };
     }
   };
+
+  renderSched();
 
   // Rows last fetched from PEA, written into records when the bill is saved.
   let peaRows = null;
@@ -669,6 +817,7 @@ function billForm(b, opts = {}) {
       <div class="form">
         <div class="field"><label for="fPeaCa">หมายเลขผู้ใช้ไฟฟ้า</label><input id="fPeaCa" inputmode="numeric" placeholder="เลข 12 หลักบนใบแจ้งค่าไฟ" value="${esc(p.ca || '')}" autocomplete="off"></div>
         <div class="field"><label for="fPeaNo">รหัสเครื่องวัด</label><input id="fPeaNo" inputmode="numeric" placeholder="เลขมิเตอร์บนใบแจ้งค่าไฟ" value="${esc(p.peano || '')}" autocomplete="off"></div>
+        <div class="field"><label for="fPeaDay">ดึงอัตโนมัติ</label><select id="fPeaDay">${peaDayOptions(p.day)}</select></div>
       </div>
       <button class="btn" id="peaFetch" type="button">⚡ ดึงยอดค่าไฟจาก PEA</button>
       <div id="peaResult"></div>
@@ -684,7 +833,7 @@ function billForm(b, opts = {}) {
     $('#manualTop').hidden = draft.auto && !gm;
     $('#amountRow').hidden = draft.auto;
     $('#variableRow').hidden = draft.auto;
-    $('#variableHint').hidden = draft.auto;
+    paintHero();
     $('#fName').placeholder = !draft.auto ? 'เช่น KBank, กฟน.' : gm ? 'เช่น ค่าโทรศัพท์ True, บัตร KTC' : 'ชื่อบ้าน เช่น บ้านหลังใหญ่';
     if (!draft.auto) { box.innerHTML = ''; renderPea(); return; }
     const src = (k, label) => `<button type="button" class="chip ${draft.source === k ? 'on' : ''}" data-source="${k}">${label}</button>`;
@@ -693,17 +842,16 @@ function billForm(b, opts = {}) {
     let html = `${sources}<p class="hint">Auto Sync ดึงยอดบิลแต่ละเดือนให้อัตโนมัติ บิลที่ได้จะแสดงในรายการบิลเหมือนบิลปกติ</p>`;
     if (gm) {
       const g = draft.gmail || {};
-      const days = Array.from({ length: 28 }, (_, i) => i + 1)
-        .map((d) => `<option value="${d}" ${Number(g.day) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
       html += `
         <div class="section-title">กฎดึงบิลจาก Gmail</div>
         ${isNew ? `<div class="chips" id="gPresets">${GMAIL_PROVIDERS.map((p) => `<button type="button" class="chip" data-preset="${p.key}">${esc(p.name)}</button>`).join('')}</div>` : ''}
         <div class="form">
           <div class="field"><label for="fGSender">อีเมลผู้ส่ง</label><input id="fGSender" type="email" placeholder="เช่น ebill@ktc.co.th" value="${esc(g.sender || '')}" autocomplete="off" autocapitalize="off"></div>
           <div class="field"><label for="fGAcc">เบอร์/เลขบัญชี</label><input id="fGAcc" inputmode="numeric" placeholder="ไม่บังคับ" value="${esc(g.account || '')}" autocomplete="off"></div>
-          <div class="field"><label for="fGDay">ดึงทุกเดือน</label><select id="fGDay"><option value="0" ${!Number(g.day) ? 'selected' : ''}>ไม่ดึงเอง</option>${days}</select></div>
+          <div class="field"><label for="fGDay">ดึงทุกเดือน</label><select id="fGDay">${gmailDayOptions(g.day)}</select></div>
+          <div class="field"><label for="fGPay">จ่ายภายใน</label><select id="fGPay">${gmailPayOptions(g.payDays)}</select></div>
         </div>
-        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · เลือกหมวดหมู่ด้านล่าง</p>`;
+        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · "จ่ายภายใน" ตั้งวันครบกำหนดเป็นจำนวนวันหลังดึงบิล แทนวันที่ในอีเมล · เลือกหมวดหมู่ด้านล่าง</p>`;
     }
     box.innerHTML = html;
     const chipsEl = $('#srcChips');
@@ -724,17 +872,16 @@ function billForm(b, opts = {}) {
       $('#fGSender').value = p.domains.join(' ');
       if (!$('#fName').value.trim()) $('#fName').value = `${CATEGORIES[p.category].label} ${p.name}`;
       draft.category = p.category;
-      document.querySelectorAll('#catChips .chip').forEach((x) => x.classList.toggle('on', x.dataset.cat === p.category));
+      $('#fCat').value = p.category;
+      paintHero();
     });
     renderPea();
   };
   renderAuto();
 
-  $('#catChips').addEventListener('click', (e) => {
-    const c = e.target.closest('[data-cat]');
-    if (!c) return;
-    draft.category = c.dataset.cat;
-    document.querySelectorAll('#catChips .chip').forEach((x) => x.classList.toggle('on', x === c));
+  $('#fCat').addEventListener('change', (e) => {
+    draft.category = e.target.value;
+    paintHero();
     if (['credit', 'electric', 'water'].includes(draft.category) && isNew) $('#fVariable').checked = true;
     if (['loan', 'insurance', 'rent', 'subscription', 'internet'].includes(draft.category) && isNew) $('#fVariable').checked = false;
     if (draft.category === 'loan' && isNew && draft.type === 'monthly') { sync(); draft.type = 'installment'; renderSched(); }
@@ -768,14 +915,22 @@ function billForm(b, opts = {}) {
       autopay: !!draft.autopay,
       type: draft.type,
       note: draft.note,
+      walletId: draft.walletId,
     };
+    if (draft.remind != null) out.remind = draft.remind;
+    if (draft.icon) out.icon = draft.icon;
     if (draft.type === 'once') out.onceDate = draft.onceDate;
     else {
       out.dueDay = Math.min(31, Math.max(1, draft.dueDay || 1));
       out.startMonth = draft.startMonth || ui.ym;
       if (draft.type === 'installment') out.months = Math.max(1, draft.months || 1);
     }
-    if (draft.auto && draft.source === 'pea') out.pea = { ca: draft.pea.ca, peano: draft.pea.peano };
+    if (draft.auto && draft.source === 'pea') {
+      const prev = (b && b.pea) || {};
+      out.pea = { ca: draft.pea.ca, peano: draft.pea.peano, day: draft.pea.day === undefined ? 'due' : draft.pea.day };
+      // A changed account or fetch day should try again today.
+      if (prev.ca === out.pea.ca && prev.peano === out.pea.peano && prev.day === out.pea.day && prev.tried) out.pea.tried = prev.tried;
+    }
     if (draft.auto && draft.source === 'gmail') out.gmail = { ...draft.gmail };
     const i = state.bills.findIndex((x) => x.id === out.id);
     if (i >= 0) state.bills[i] = out; else state.bills.push(out);
@@ -793,24 +948,35 @@ function billForm(b, opts = {}) {
   const del = $('#delBill');
   if (del) {
     del.addEventListener('click', () => {
-      confirmDelete(`ลบ "${b.name}"?`, 'ประวัติการจ่ายทั้งหมดของบิลนี้จะถูกลบด้วย', () => {
-        state.bills = state.bills.filter((x) => x.id !== b.id);
-        Object.keys(state.records).forEach((ym) => {
-          if (record(ym, b.id).file) billFileDel(b.id, ym);
-          delete state.records[ym][b.id];
-          if (!Object.keys(state.records[ym]).length) delete state.records[ym];
-        });
-        // Payments already made stay in the wallets as ordinary expenses.
-        money.txns.filter((t) => t.billId === b.id).forEach((t) => { delete t.billId; delete t.billYm; saveTxn(t); });
-        save();
-        saveMoney();
-        closeSheet();
-        render();
-        toast('ลบแล้ว');
-      });
+      deleteBill(b);
     });
   }
   if (isNew) setTimeout(() => $('#fName') && $('#fName').focus(), 300);
+}
+
+function deleteBill(b) {
+  confirmDelete(`ลบ "${b.name}"?`, 'ประวัติการจ่ายทั้งหมดของบิลนี้จะถูกลบด้วย', () => {
+    state.bills = state.bills.filter((x) => x.id !== b.id);
+    Object.keys(state.records).forEach((ym) => {
+      if (record(ym, b.id).file) billFileDel(b.id, ym);
+      delete state.records[ym][b.id];
+      if (!Object.keys(state.records[ym]).length) delete state.records[ym];
+    });
+    // Payments already made stay in the wallets as ordinary expenses.
+    money.txns.filter((t) => t.billId === b.id).forEach((t) => { delete t.billId; delete t.billYm; saveTxn(t); });
+    save();
+    saveMoney();
+    closeSheet();
+    render();
+    toast('ลบแล้ว');
+  });
+}
+
+// Options for a bill's reminder picker; '' follows the app-wide setting.
+function remindOpts(sel) {
+  const lab = (n) => (n === 0 ? 'วันครบกำหนด' : `ล่วงหน้า ${n} วัน`);
+  return `<option value="">ค่าเริ่มต้น (${lab(state.settings.remindDays)})</option>${[0, 1, 2, 3, 5, 7]
+    .map((n) => `<option value="${n}" ${sel === n ? 'selected' : ''}>${lab(n)}</option>`).join('')}`;
 }
 
 function occurrenceSheet(id, ym) {
@@ -837,24 +1003,25 @@ function occurrenceSheet(id, ym) {
       <button class="link-btn" data-edit="${b.id}">แก้ไขบิล</button>
     </div>
     <div class="detail-head">
-      <div class="ico" style="background:${c.color}22">${c.icon}</div>
+      <div class="hero-ico${billImg(b) ? ' has-img' : ''}" style="background:${c.color}2e">${billFace(b)}</div>
       <h3>${esc(b.name)}</h3>
-      <div class="sub">${c.label} · ครบกำหนด ${thShortDate(o.due)} ${o.due.getFullYear() + 543}</div>
+      <div class="sub">${c.label} · ครบกำหนด ${thShortDate(o.due)} ${o.due.getFullYear() + BE}</div>
       <div style="margin-top:6px">${statusBadge(o)}</div>
     </div>
-    <div class="form">
+    <div class="form rows">
       <div class="field"><label for="oAmount">ยอดเดือนนี้ (฿)</label>
         <input id="oAmount" inputmode="decimal" value="${rec.amount != null ? rec.amount : (b.amount || '')}" placeholder="0"></div>
       ${o.inst ? `<div class="kv"><span>งวดที่</span><span>${o.inst.n} / ${o.inst.of}</span></div>` : ''}
-      ${o.paid && o.paidAt ? `<div class="kv"><span>จ่ายเมื่อ</span><span>${thShortDate(new Date(o.paidAt))} ${new Date(o.paidAt).getFullYear() + 543}</span></div>` : ''}
+      ${o.paid && o.paidAt ? `<div class="kv"><span>จ่ายเมื่อ</span><span>${thShortDate(new Date(o.paidAt))} ${new Date(o.paidAt).getFullYear() + BE}</span></div>` : ''}
       ${b.note ? `<div class="kv"><span>บันทึก</span><span style="text-align:right;max-width:65%">${esc(b.note)}</span></div>` : ''}
       ${o.paid ? '' : `<div class="field"><label for="oWallet">จ่ายจาก</label><select id="oWallet">
         <option value="">ไม่บันทึกเป็นรายการ</option>
-        ${money.wallets.map((w) => `<option value="${w.id}" ${billPayWallet() === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+        ${money.wallets.map((w) => `<option value="${w.id}" ${billWallet(b) === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
       </select></div>`}
     </div>
     ${peaNeeded ? `<div class="alert warn">⚡<div>บิลนี้ผูกกับ PEA ต้องดึงยอด${thMonthYear(ym)}ก่อนจึงจะกดจ่ายได้</div></div>` : ''}
     ${b.pea ? `<button class="btn ${peaNeeded ? '' : 'ghost'}" id="oPea" type="button">⚡ ดึงยอด${peaNeeded ? 'เดือนนี้' : ''}จาก PEA</button>` : ''}
+    ${peaNeeded && peaFetchDay(b, ym) ? `<p class="hint">แอปจะดึงยอดให้เองตั้งแต่วันที่ ${peaFetchDay(b, ym)} เมื่อเปิดแอป</p>` : ''}
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
       : `${peaNeeded ? '' : '<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button>'}<button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
@@ -878,7 +1045,8 @@ function occurrenceSheet(id, ym) {
     const amount = readAmount();
     const walletId = $('#oWallet').value;
     setRecord(ym, id, { amount, paid: true, paidAt: new Date().toISOString() });
-    money.prefs.billWallet = walletId;
+    if (b.walletId !== undefined) b.walletId = walletId;
+    else money.prefs.billWallet = walletId;
     recordBillTxn(b, ym, amount != null ? amount : (b.amount || 0), walletId);
     savePrefs();
     save(); saveMoney(); closeSheet(); render(); toast(`จ่าย ${b.name} แล้ว`);
@@ -950,7 +1118,7 @@ function togglePaid(id, ym) {
     if (b.pea && rec.amount == null) { occurrenceSheet(id, ym); toast('ดึงยอดเดือนนี้จาก PEA ก่อน'); return; }
     if (b.variable && rec.amount == null) { occurrenceSheet(id, ym); toast('กรอกยอดจริงของเดือนนี้ก่อน'); return; }
     setRecord(ym, id, { paid: true, paidAt: new Date().toISOString() });
-    recordBillTxn(b, ym, rec.amount != null ? rec.amount : (b.amount || 0), billPayWallet());
+    recordBillTxn(b, ym, rec.amount != null ? rec.amount : (b.amount || 0), billWallet(b));
     toast(`จ่าย ${b.name} แล้ว`);
   }
   save();
@@ -1040,21 +1208,21 @@ function icsFold(line) {
 // month's own amount, get an override of that occurrence: ✅ and no alarm once paid.
 // `feed` is the subscribed calendar (calfeed.js), which iPhone re-fetches by itself.
 function buildIcs({ feed = false } = {}) {
-  const remind = state.settings.remindDays;
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//centel.app//Bill Planner//TH', 'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH', `X-WR-CALNAME:${feed ? 'บิลที่ต้องจ่าย · centel' : 'วางแผนจ่ายบิล'}`];
+    'METHOD:PUBLISH', `X-WR-CALNAME:${tr(feed ? 'บิลที่ต้องจ่าย · centel' : 'วางแผนจ่ายบิล')}`];
   if (feed) lines.push('X-WR-TIMEZONE:Asia/Bangkok', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H');
-  const alarm = (trigger, desc) => ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEscape(desc)}`, `TRIGGER:${trigger}`, 'END:VALARM'];
+  const alarm = (trigger, desc) => ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEscape(tr(desc))}`, `TRIGGER:${trigger}`, 'END:VALARM'];
   const event = (b, start, { rrule, recurrenceId, amount, paid }) => {
     const c = cat(b);
+    const remind = remindOf(b);
     const summary = `${paid ? '✅' : c.icon} จ่าย${b.name}${amount ? ` ${baht(amount)}` : ''}`;
     const end = new Date(start); end.setDate(end.getDate() + 1);
     const ev = ['BEGIN:VEVENT', `UID:${b.id}@centel.app`, `DTSTAMP:${stamp}`];
     if (recurrenceId) ev.push(`RECURRENCE-ID;VALUE=DATE:${icsDate(recurrenceId)}`);
     if (rrule) ev.push(`RRULE:${rrule}`);
     ev.push(`DTSTART;VALUE=DATE:${icsDate(start)}`, `DTEND;VALUE=DATE:${icsDate(end)}`,
-      `SUMMARY:${icsEscape(summary)}`, `DESCRIPTION:${icsEscape([paid ? 'จ่ายแล้ว' : '', c.label, b.note].filter(Boolean).join('\n'))}`,
+      `SUMMARY:${icsEscape(tr(summary))}`, `DESCRIPTION:${icsEscape([paid ? tr('จ่ายแล้ว') : '', tr(c.label), b.note].filter(Boolean).join('\n'))}`,
       'TRANSP:TRANSPARENT');
     if (!paid) {
       // All-day events start at midnight; fire reminders at 09:00.
@@ -1118,6 +1286,7 @@ function loadSample() {
   occurrences(ym).filter((o) => o.daysLeft < 0 && o.bill.name !== 'ค่าน้ำ (MWA)').forEach((o) => {
     setRecord(ym, o.bill.id, { amount: o.bill.variable ? Math.round(o.bill.amount * 0.9) : undefined, paid: true, paidAt: new Date().toISOString() });
   });
+  state.bills.forEach((b) => { b.name = tr(b.name); if (b.note) b.note = tr(b.note); });
   sampleMoney();
   save();
   saveMoney();
@@ -1148,7 +1317,7 @@ function toast(msg) {
 $('#prevMonth').addEventListener('click', () => { ui.ym = addMonths(ui.ym, -1); ui.selDay = null; render(); });
 $('#nextMonth').addEventListener('click', () => { ui.ym = addMonths(ui.ym, 1); ui.selDay = null; render(); });
 $('#monthTitle').addEventListener('click', () => { ui.ym = ymOf(new Date()); ui.selDay = null; render(); });
-$('#addBtn').addEventListener('click', () => (ui.tab === 'bills' ? billForm() : txnForm()));
+$('#addBtn').addEventListener('click', () => (ui.tab === 'bills' ? billForm() : ui.tab === 'budgets' ? budgetForm() : txnForm()));
 $('#backdrop').addEventListener('click', closeSheet);
 document.querySelector('.tabbar').addEventListener('click', (e) => {
   const b = e.target.closest('[data-tab]');
@@ -1171,6 +1340,12 @@ document.addEventListener('click', (e) => {
   if (edit) { const b = state.bills.find((x) => x.id === edit.dataset.edit); if (b) billForm(b); return; }
   const occ = t.closest('[data-occ]');
   if (occ) { occurrenceSheet(occ.dataset.occ, occ.dataset.ym); return; }
+  const bill = t.closest('[data-bill]');
+  if (bill) { billDetail(bill.dataset.bill); return; }
+  const sym = t.closest('[data-sched-ym]');
+  if (sym) { ui.schedYm = sym.dataset.schedYm; ui.schedDay = null; render(); return; }
+  const sday = t.closest('[data-sched-day]');
+  if (sday) { const d = Number(sday.dataset.schedDay); ui.schedDay = d && ui.schedDay !== d ? d : null; render(); return; }
   const day = t.closest('[data-day]');
   if (day) { ui.selDay = Number(day.dataset.day); render(); return; }
   const bv = t.closest('[data-billview]');
@@ -1188,6 +1363,7 @@ document.addEventListener('click', (e) => {
     case 'ics': exportIcs(); break;
     case 'calfeed': calFeedSheet(); break;
     case 'gmail': gmailSheet(); break;
+    case 'recurring': recurringSheet(); break;
     case 'gmail-rule': billForm(null, { source: 'gmail' }); break;
     case 'gmail-auto': gmailAutoRun(false); break;
     case 'reset':
@@ -1214,7 +1390,7 @@ document.addEventListener('keydown', (e) => {
 
 // Re-render when returning to the app so "today" and statuses stay current.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); } }
+  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); } peaAutoTry(); }
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -1225,3 +1401,4 @@ render();
 updateBadge();
 cloudStart();
 calFeedChanged();
+setTimeout(peaAutoTry, 1500);

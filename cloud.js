@@ -1,4 +1,4 @@
-/* Signed-in mode: the account, the couple link, shared expenses and approvals live in the
+/* Signed-in mode: the account, the couple link and shared expenses live in the
    centel.app API (/api, see server/). Signed out, the app keeps working from localStorage.
    Loaded before money.js; `money`, `render`, `toast` and friends are looked up at call time. */
 
@@ -18,7 +18,20 @@ const cloud = {
 };
 
 function isCloud() { return cloud.on; }
-function partnerName() { return (cloud.partner && cloud.partner.name) || 'คู่ของฉัน'; }
+// The partner by nickname (ชื่อเล่น) when they have set one.
+function partnerName() { return (cloud.partner && (cloud.partner.nickname || cloud.partner.name)) || 'คู่ของฉัน'; }
+function needNickname() { return isCloud() && !!cloud.user && !cloud.user.nickname; }
+// A person's picture: an uploaded photo, their Google photo or an emoji; otherwise the first letter of their name.
+const PHOTO_SRC = /^(data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*|https:\/\/[a-z0-9-]+\.googleusercontent\.com\/[^\s"'<>]+)$/;
+function userImg(u) { return u && PHOTO_SRC.test(u.avatar || '') ? u.avatar : ''; }
+function userFace(u) {
+  const img = userImg(u);
+  if (img) return `<img src="${esc(img)}" alt="" referrerpolicy="no-referrer">`;
+  if (u && u.avatar) return esc(u.avatar);
+  return esc(((u && u.name) || '?').slice(0, 1).toUpperCase());
+}
+function userAvatar(u, cls = 'avatar') { return `<div class="${cls}${userImg(u) ? ' has-img' : ''}">${userFace(u)}</div>`; }
+
 function nameOf(id) {
   if (cloud.user && id === cloud.user.id) return 'ฉัน';
   if (cloud.partner && id === cloud.partner.id) return partnerName();
@@ -38,7 +51,6 @@ const CLOUD_ERRORS = {
   no_partner: 'ยังไม่ได้เชื่อมบัญชีกับคู่',
   locked: 'รายการนี้แก้ไขไม่ได้แล้ว',
   bad_status: 'สถานะรายการเปลี่ยนไปแล้ว',
-  creator_cannot_respond: 'ผู้สร้างรายการอนุมัติเองไม่ได้',
   not_found: 'ไม่พบรายการ',
   too_large: 'ไฟล์ใหญ่เกินไป',
   storage_disabled: 'ยังไม่ได้ตั้งค่าที่เก็บสลิป',
@@ -47,6 +59,8 @@ const CLOUD_ERRORS = {
   google_unverified: 'อีเมล Google นี้ยังไม่ได้ยืนยัน',
   google_mismatch: 'อีเมลนี้เชื่อมกับบัญชี Google อื่นอยู่แล้ว',
   google_disabled: 'ยังไม่ได้ตั้งค่าการเข้าสู่ระบบด้วย Google',
+  no_google_photo: 'บัญชี Google นี้ไม่มีรูปโปรไฟล์',
+  google_other_account: 'บัญชี Google นี้ไม่ใช่บัญชีที่เข้าสู่ระบบอยู่',
 };
 function cloudErr(e) { return CLOUD_ERRORS[e.message] || (e.status ? 'ทำรายการไม่สำเร็จ' : 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'); }
 
@@ -67,10 +81,10 @@ async function api(method, path, body) {
 
 function mapExpense(e, me) {
   const base = {
-    id: e.id, ownerId: e.ownerId, type: e.type, date: e.date, amount: e.amount, category: e.category,
+    id: e.id, ownerId: e.ownerId, type: e.type, date: e.date, amount: e.amount, category: e.category && newCat(e.category),
     note: e.note || '', merchant: e.merchant || '', walletId: e.walletId, toWalletId: e.toWalletId,
     reviewNeeded: e.reviewNeeded, receiptKey: e.receiptKey, slipRef: e.slipRef, billId: e.billId, billYm: e.billYm,
-    scope: e.scope, status: e.status,
+    scope: e.scope, status: e.status, labels: e.labels || [],
   };
   if (!base.billId) { delete base.billId; delete base.billYm; }
   if (e.scope !== 'shared') return base;
@@ -116,7 +130,8 @@ function applyBootstrap(b) {
   money = {
     wallets: b.wallets.length ? b.wallets : [{ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0 }],
     txns,
-    budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: x.category, amount: x.amount, walletId: x.walletId })),
+    budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId })),
+    labels: (b.labels || []).map((l) => ({ id: l.id, name: l.name })),
     prefs,
   };
   if (ui.wallet !== 'total' && !walletById(ui.wallet)) ui.wallet = 'total';
@@ -130,6 +145,7 @@ async function cloudRefresh() {
     applyBootstrap(b);
     try { localStorage.setItem(CLOUD_KEY, JSON.stringify(b)); } catch (e) { /* full */ }
     render();
+    if (needNickname() && $('#sheet').hidden) nicknameSheet();
     return b;
   } catch (e) {
     if (e.status === 401) {
@@ -159,6 +175,7 @@ function cloudSignedOut() {
   money = loadMoney();
   ui.wallet = 'total';
   ui.txFilter = 'all';
+  ui.txLabel = '';
   render();
 }
 
@@ -184,13 +201,14 @@ function cloudCall(method, path, body, onError) {
   return p;
 }
 
-function cloudSaveTxn(t, extra = {}) {
+function cloudSaveTxn(t) {
   const shared = t.scope === 'shared';
   const body = {
     id: t.id, type: t.type, scope: shared ? 'shared' : 'personal', amount: shared ? t.total : t.amount, date: t.date,
     merchant: t.merchant, category: t.category, note: t.note, walletId: t.walletId, toWalletId: t.toWalletId,
     reviewNeeded: !!t.reviewNeeded, receiptKey: t.receiptKey, slipRef: t.slipRef, billId: t.billId, billYm: t.billYm,
-    payerId: t.payerId, shares: shared ? { [cloud.user.id]: t.amount } : undefined, submit: !!extra.submit,
+    payerId: t.payerId, shares: shared ? { [cloud.user.id]: t.amount } : undefined,
+    labels: t.labels || [],
   };
   const known = cloud.ids.has(t.id);
   cloud.ids.add(t.id);
@@ -232,9 +250,11 @@ function shrinkImage(file, max = 1600) {
   });
 }
 
-async function uploadReceipt(file) {
+// labels: the person's label names, so AI Slips can suggest the ones that fit.
+// categories: the person's expense categories ({ id, name, parent }), so AI Slips picks from their own list.
+async function uploadReceipt(file, labels = [], categories = []) {
   const image = await shrinkImage(file);
-  return api('POST', '/receipts', { image, mediaType: 'image/jpeg' });
+  return api('POST', '/receipts', { image, mediaType: 'image/jpeg', labels, categories });
 }
 
 async function openReceipt(key) {
@@ -251,20 +271,13 @@ async function openReceipt(key) {
 /* ---------- Couple summaries ---------- */
 
 function sharedRows() { return isCloud() ? money.txns.filter((t) => t.scope === 'shared') : []; }
-function toApprove() { return sharedRows().filter((t) => t.status === 'pending' && t.ownerId !== cloud.user.id); }
-function myPending() { return sharedRows().filter((t) => t.status === 'pending' && t.ownerId === cloud.user.id); }
-function toFix() { return sharedRows().filter((t) => t.ownerId === cloud.user.id && (t.status === 'rejected' || t.status === 'draft')); }
 
-// Positive: my partner owes me. Only approved, unpaid debts count.
-function netOwed() {
-  const me = cloud.user.id;
-  return cloud.settlements.filter((s) => s.status === 'unpaid')
-    .reduce((n, s) => n + (s.creditorId === me ? s.amount : s.debtorId === me ? -s.amount : 0), 0);
-}
-
-function owedLine(n) {
-  if (Math.abs(n) < 0.005) return 'ไม่มียอดค้างคืน';
-  return n > 0 ? `${esc(partnerName())} ต้องคืนคุณ <b class="inc">${baht(n)}</b>` : `คุณต้องคืน ${esc(partnerName())} <b class="exp">${baht(-n)}</b>`;
+// A shared expense is only a record for the partner to see. Its split says whose cost it is:
+// 'full' when the payer bears all of it (รับผิดชอบทั้งหมด), else 'half' (หาร 2).
+function splitOf(t) { return t.shares && Math.abs((t.shares[t.payerId] || 0) - t.total) < 0.005 ? 'full' : 'half'; }
+function splitLine(t) {
+  if (splitOf(t) === 'half') return `หาร 2 · ส่วนของฉัน ${baht(t.amount)}`;
+  return t.payerId === cloud.user.id ? 'รับผิดชอบทั้งหมด' : `${esc(nameOf(t.payerId))} รับผิดชอบทั้งหมด`;
 }
 
 function coupleCard() {
@@ -273,48 +286,40 @@ function coupleCard() {
     return `
     <div class="card couple">
       <div class="cp-top"><span class="cp-ico">💞</span><div><b>ใช้ร่วมกับคู่ของคุณ</b>
-        <div class="muted small">เชิญคู่เข้าบัญชี แยกรายจ่ายส่วนตัว และส่งรายจ่ายร่วมให้อีกฝ่ายอนุมัติ</div></div></div>
+        <div class="muted small">เชิญคู่เข้าบัญชี แยกรายจ่ายส่วนตัว และลงรายจ่ายร่วมให้อีกฝ่ายเห็น</div></div></div>
       <button class="btn pillbtn" data-action="couple">เชื่อมบัญชีคู่</button>
     </div>`;
   }
   const ym = ymOf(new Date());
-  const appr = toApprove(), mine = myPending(), fix = toFix();
-  const month = sharedRows().filter((t) => t.counted && t.type === 'expense' && t.date.slice(0, 7) === ym).reduce((s, t) => s + t.total, 0);
-  const row = (n, label, kind, cls = '') => (n ? `<button class="item" data-action="shared-list" data-kind="${kind}">
-      <div class="main"><div class="name">${label}</div></div><span class="badge ${cls}">${n}</span>${svgIcon('chev', 'svg-i sm muted')}</button>` : '');
+  const month = sharedRows().filter((t) => t.counted && t.type === 'expense' && t.date.slice(0, 7) === ym);
+  const total = month.reduce((n, t) => n + t.total, 0);
+  const mine = month.reduce((n, t) => n + t.amount, 0);
   return `
-    <div class="section-row"><span>ร่วมกับ ${esc(partnerName())}</span><button class="link-btn" data-action="shared-list" data-kind="all">ดูทั้งหมด</button></div>
+    <div class="section-row"><span>ร่วมกับ ${esc(partnerName())}</span><button class="link-btn" data-action="shared-list">ดูทั้งหมด</button></div>
     <div class="card list-card couple">
-      <button class="item" data-action="settlements">
+      <button class="item" data-action="shared-list">
         <div class="ico round" style="background:#00b3a422">🤝</div>
-        <div class="main"><div class="name">${owedLine(netOwed())}</div><div class="sub">รายจ่ายร่วมเดือนนี้ ${baht(month)} (อนุมัติแล้ว)</div></div>
+        <div class="main"><div class="name">รายจ่ายร่วมเดือนนี้ ${baht(total)}</div><div class="sub">ส่วนของฉัน ${baht(mine)}</div></div>
         ${svgIcon('chev', 'svg-i sm muted')}
       </button>
-      ${row(appr.length, 'รอคุณอนุมัติ', 'approve', 'warn')}
-      ${row(mine.length, `รอ ${esc(partnerName())} อนุมัติ`, 'mine', 'muted')}
-      ${row(fix.length, 'ถูกปฏิเสธ / ร่างที่ยังไม่ส่ง', 'fix', 'bad')}
       <div class="cp-actions"><button class="btn pillbtn" data-action="add-shared">＋ รายจ่ายร่วม</button></div>
     </div>`;
 }
 
-function sharedListSheet(kind) {
-  const lists = { approve: ['รอคุณอนุมัติ', toApprove()], mine: [`รอ ${partnerName()} อนุมัติ`, myPending()], fix: ['ถูกปฏิเสธ / ร่าง', toFix()], all: ['รายจ่ายร่วมทั้งหมด', sharedRows()] };
-  const [title, list] = lists[kind] || lists.all;
+function sharedListSheet() {
+  const list = sharedRows();
   const S = walletSet('total');
   openSheet(`
-    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>${esc(title)}</h2><span style="width:40px"></span></div>
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>รายจ่ายร่วมทั้งหมด</h2><span style="width:40px"></span></div>
     ${list.length ? dayGroups(list, S) : '<div class="empty"><div class="e-ico">🤝</div>ไม่มีรายการ</div>'}
   `);
 }
 
-/* ---------- One shared expense: approve / reject / resubmit / repayment ---------- */
-
-const EVENT_TH = { submitted: 'ส่งขออนุมัติ', resubmitted: 'แก้ไขและส่งใหม่', approved: 'อนุมัติ', rejected: 'ปฏิเสธ' };
-const STATUS_TH = { draft: 'ร่าง (ยังไม่ส่ง)', pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ถูกปฏิเสธ' };
+/* ---------- One shared expense ---------- */
 
 function thTime(iso) {
   const d = new Date(iso);
-  return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + 543).slice(2)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + BE).slice(2)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function walletSelect(id, label) {
@@ -325,74 +330,45 @@ function walletSelect(id, label) {
 }
 
 function sharedSheet(t) {
-  const me = cloud.user.id;
-  const mineOwner = t.ownerId === me;
+  const mineOwner = t.ownerId === cloud.user.id;
   const c = txCat(t);
-  const st = cloud.settlements.filter((s) => s.expenseId === t.id);
-  const canRespond = !mineOwner && t.status === 'pending';
-  const canEdit = mineOwner && (t.status === 'draft' || t.status === 'rejected');
   const partnerShare = t.shares[cloud.partner ? cloud.partner.id : ''] || 0;
   openSheet(`
     <div class="sheet-head">
       <button class="link-btn" data-action="close">ปิด</button>
       <h2>รายจ่ายร่วม</h2>
-      ${canEdit ? `<button class="link-btn" id="shEdit">แก้ไข</button>` : '<span style="width:40px"></span>'}
+      ${mineOwner ? `<button class="link-btn" id="shEdit">แก้ไข</button>` : '<span style="width:40px"></span>'}
     </div>
     <div class="card bd">
       <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(t.merchant || c.label)}</div>
-        <div class="sub">${c.label} · ${thDate(t.date)}</div></div></div>
+        <div class="sub">${esc(c.label)} · ${thDate(t.date)}</div></div></div>
       <div class="bd-body">
         <div class="bd-amt">${baht(t.total)}</div>
-        <div class="badges">${STATUS_BADGE[t.status] || '<span class="badge ok">อนุมัติแล้ว</span>'} ${t.reviewNeeded || !t.category ? '<span class="badge warn">รอตรวจสอบ</span>' : ''}</div>
+        <div class="badges"><span class="badge share">ร่วม</span></div>
         <div class="kv"><span>ผู้จ่าย</span><b>${esc(nameOf(t.payerId))}</b></div>
+        <div class="kv"><span>ต้นทุน</span><b>${splitOf(t) === 'full' ? 'รับผิดชอบทั้งหมด' : 'หาร 2'}</b></div>
         <div class="kv"><span>ส่วนของฉัน</span><b>${baht(t.amount)}</b></div>
         <div class="kv"><span>ส่วนของ ${esc(partnerName())}</span><b>${baht(partnerShare)}</b></div>
-        <div class="kv"><span>สร้างโดย</span><b>${esc(nameOf(t.ownerId))}</b></div>
+        <div class="kv"><span>ลงโดย</span><b>${esc(nameOf(t.ownerId))}</b></div>
         ${t.note ? `<div class="kv"><span>บันทึก</span><span>${esc(t.note)}</span></div>` : ''}
-        ${t.status === 'rejected' && t.rejectReason ? `<div class="kv"><span>เหตุผลที่ปฏิเสธ</span><span class="exp">${esc(t.rejectReason)}</span></div>` : ''}
         ${t.receiptKey ? '<button class="btn ghost" id="shReceipt">🧾 ดูสลิป</button>' : ''}
       </div>
     </div>
-    ${canRespond ? `
-      <div class="form">${t.payerId === me ? walletSelect('shWallet', 'จ่ายจาก') : ''}</div>
-      <p class="hint">ตรวจสอบยอดและการแบ่งให้ถูกต้อง ถ้าไม่ถูกให้ปฏิเสธพร้อมเหตุผล ผู้สร้างจะแก้ไขแล้วส่งใหม่</p>
-      <div class="halves"><button class="btn danger" id="shReject">ปฏิเสธ</button><button class="btn" id="shApprove">อนุมัติ</button></div>` : ''}
-    ${mineOwner && t.status === 'draft' ? '<button class="btn" id="shSubmit">ส่งขออนุมัติ</button>' : ''}
-    ${canEdit && t.status === 'rejected' ? '<button class="btn" id="shResubmit">แก้ไขและส่งใหม่</button>' : ''}
-    ${st.length ? `<div class="section-title">การคืนเงิน</div><div class="list">${st.map(settleItem).join('')}</div>` : ''}
-    ${t.events.length ? `<div class="section-title">ประวัติ</div><div class="list">${t.events.map((e) => `
-      <div class="item"><div class="main"><div class="name">${EVENT_TH[e.action] || e.action} · ${esc(nameOf(e.actorId))}</div>
-        <div class="sub">${thTime(e.at)} · ครั้งที่ ${e.revision}${e.note ? ` · ${esc(e.note)}` : ''}</div></div></div>`).join('')}</div>` : ''}
-    ${mineOwner && t.status !== 'approved' ? `<button class="btn danger" id="shDelete">${t.status === 'pending' ? 'ยกเลิกคำขอและลบ' : 'ลบรายการ'}</button>` : ''}
+    <p class="hint">บันทึกไว้ให้ทั้งสองคนเห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ส่วนของแต่ละคนใช้คำนวณต้นทุนในรายงาน</p>
+    <div class="section-title">ป้ายกำกับของฉัน</div>
+    <div class="chips lab-pick" id="shLabels"></div>
+    ${mineOwner ? '<button class="btn danger" id="shDelete">ลบรายการ</button>' : ''}
   `);
   const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
-  const done = (msg) => { closeSheet(); render(); toast(msg); };
+  // My own labels on this row; the partner never sees them.
+  const picked = new Set(t.labels || []);
+  labelPicker($('#shLabels'), picked, () => setTxnLabels(t, money.labels.filter((l) => picked.has(l.id)).map((l) => l.id)));
   on('#shEdit', () => txnForm(t));
-  on('#shResubmit', () => txnForm(t));
   on('#shReceipt', () => openReceipt(t.receiptKey));
-  on('#shApprove', () => {
-    const walletId = $('#shWallet') ? $('#shWallet').value || null : null;
-    Object.assign(t, { status: 'approved', counted: true });
-    if (t.payerId === me) t.walletId = walletId;
-    cloudCall('POST', `/expenses/${t.id}/respond`, { approve: true, walletId });
-    done('อนุมัติแล้ว');
-  });
-  on('#shReject', () => {
-    const reason = prompt('เหตุผลที่ปฏิเสธ (ผู้สร้างจะเห็นข้อความนี้)', '');
-    if (reason === null) return;
-    t.status = 'rejected';
-    cloudCall('POST', `/expenses/${t.id}/respond`, { approve: false, reason });
-    done('ปฏิเสธแล้ว');
-  });
-  on('#shSubmit', () => {
-    t.status = 'pending';
-    cloudCall('POST', `/expenses/${t.id}/submit`);
-    done(`ส่งให้ ${partnerName()} อนุมัติแล้ว`);
-  });
   on('#shDelete', () => {
     if (!confirm('ลบรายการนี้?')) return;
     deleteTxn(t);
-    done('ลบแล้ว');
+    closeSheet(); render(); toast('ลบแล้ว');
   });
 }
 
@@ -402,7 +378,7 @@ function settleItem(s) {
   const me = cloud.user.id;
   const e = money.txns.find((t) => t.id === s.expenseId);
   const owe = s.debtorId === me;
-  const title = owe ? `คุณต้องคืน ${esc(partnerName())}` : `${esc(partnerName())} ต้องคืนคุณ`;
+  const title = owe ? `คืนเงินให้${esc(partnerName())}` : `รับเงินคืนจาก${esc(partnerName())}`;
   return `
     <button class="item" data-settle="${s.id}">
       <div class="ico round" style="background:#00b3a422">🤝</div>
@@ -413,17 +389,13 @@ function settleItem(s) {
     </button>`;
 }
 
+// Repayments recorded before shared expenses became records only; nothing new is owed.
 function settlementsSheet() {
   if (!isCloud()) return;
-  const unpaid = cloud.settlements.filter((s) => s.status === 'unpaid');
   const paid = cloud.settlements.filter((s) => s.status === 'paid').slice().reverse();
   openSheet(`
-    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>ยอดค้างคืน</h2><span style="width:40px"></span></div>
-    <div class="card summary"><div class="kv" style="padding:0"><span>สรุป</span><span>${owedLine(netOwed())}</span></div>
-      <p class="hint" style="margin:8px 0 0">ยอดค้างเกิดเมื่อรายจ่ายร่วมได้รับอนุมัติแล้วเท่านั้น การคืนเงินไม่นับเป็นรายจ่ายซ้ำ</p></div>
-    ${unpaid.length ? `<div class="section-title">ยังไม่ชำระ</div><div class="list">${unpaid.map(settleItem).join('')}</div>` : ''}
-    ${paid.length ? `<div class="section-title">ชำระแล้ว</div><div class="list">${paid.map(settleItem).join('')}</div>` : ''}
-    ${cloud.settlements.length ? '' : '<div class="empty"><div class="e-ico">🤝</div>ยังไม่มียอดค้างคืน</div>'}
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>การคืนเงินที่ผ่านมา</h2><span style="width:40px"></span></div>
+    ${paid.length ? `<div class="list">${paid.map(settleItem).join('')}</div>` : '<div class="empty"><div class="e-ico">🤝</div>ไม่มีรายการ</div>'}
   `);
 }
 
@@ -437,15 +409,11 @@ function settleSheet(id) {
     <div class="sheet-head"><button class="link-btn" data-action="settlements">กลับ</button><h2>การคืนเงิน</h2><span style="width:40px"></span></div>
     <div class="list">${settleItem(s)}</div>
     <div class="form">${walletSelect('stWallet', owe ? 'คืนจากกระเป๋า' : 'รับเข้ากระเป๋า')}</div>
-    ${s.status === 'unpaid'
-    ? '<button class="btn" id="stPaid">ทำเครื่องหมายว่าชำระแล้ว</button>'
-    : `${myWallet ? '' : '<button class="btn" id="stWalletOnly">บันทึกกระเป๋าเงิน</button>'}<button class="btn ghost" id="stUnpaid">ยกเลิก: ยังไม่ชำระ</button>`}
+    ${myWallet ? '' : '<button class="btn" id="stWalletOnly">บันทึกกระเป๋าเงิน</button>'}
   `);
   if (myWallet) $('#stWallet').value = myWallet;
   const finish = (body, msg) => { cloudCall('POST', `/settlements/${s.id}`, body); closeSheet(); toast(msg); };
   const on = (sel, fn) => { const el = $(sel); if (el) el.addEventListener('click', fn); };
-  on('#stPaid', () => finish({ paid: true, walletId: $('#stWallet').value || null }, 'บันทึกการคืนเงินแล้ว'));
-  on('#stUnpaid', () => finish({ paid: false }, 'เปลี่ยนเป็นยังไม่ชำระแล้ว'));
   on('#stWalletOnly', () => finish({ walletOnly: true, walletId: $('#stWallet').value || null }, 'บันทึกแล้ว'));
 }
 
@@ -454,16 +422,15 @@ function settleSheet(id) {
 function accountCard() {
   if (isCloud()) {
     return `
-    <div class="card acct">
-      <div class="avatar">${esc((cloud.user.name || '?').slice(0, 1).toUpperCase())}</div>
-      <div><b>${esc(cloud.user.name)}</b><div class="muted small">${esc(cloud.user.email)} · ซิงก์กับบัญชีออนไลน์</div></div>
-    </div>
+    <button class="card acct tap" data-action="profile" aria-label="แก้ไขโปรไฟล์">
+      ${userAvatar(cloud.user)}
+      <div class="acct-main"><b>${esc(cloud.user.name)}</b><div class="muted small">${esc(cloud.user.email)} · ซิงก์กับบัญชีออนไลน์</div></div>
+      ${svgIcon('chev', 'svg-i sm muted')}
+    </button>
     <div class="list" style="margin-bottom:14px">
       <button class="item" data-action="couple"><div class="ico round" style="background:#ff4d8d22">💞</div>
         <div class="main"><div class="name">${cloud.partner ? `เชื่อมกับ ${esc(partnerName())}` : 'เชื่อมบัญชีคู่'}</div>
         <div class="sub">${cloud.partner ? esc(cloud.partner.email) : 'ส่งรหัสเชิญให้คู่ หรือใส่รหัสจากคู่'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
-      ${cloud.partner ? `<button class="item" data-action="settlements"><div class="ico round" style="background:#00b3a422">🤝</div>
-        <div class="main"><div class="name">ยอดค้างคืน</div><div class="sub">${owedLine(netOwed())}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>` : ''}
       <button class="item" data-action="logout"><div class="ico round" style="background:#8a8f9922">🚪</div><div class="main"><div class="name">ออกจากระบบ</div></div></button>
     </div>`;
   }
@@ -510,8 +477,8 @@ async function googleButton(box, mode) {
   google.accounts.id.initialize({ client_id: id, callback: (r) => googleSignedIn(r.credential), ux_mode: 'popup', auto_select: false });
   box.hidden = false;
   google.accounts.id.renderButton(box.querySelector('.gbtn'), {
-    theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'filled_black' : 'outline',
-    size: 'large', shape: 'pill', locale: 'th',
+    theme: themeIsDark() ? 'filled_black' : 'outline',
+    size: 'large', shape: 'pill', locale: LANG,
     text: mode === 'login' ? 'signin_with' : 'signup_with',
     width: Math.min(400, box.clientWidth || 320),
   });
@@ -537,11 +504,12 @@ async function signedIn() {
 
 function loginSheet(mode = 'login') {
   openSheet(`
-    <div class="sheet-head"><button class="link-btn" data-action="close">ยกเลิก</button><h2>${mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</h2><span style="width:40px"></span></div>
+    <div class="sheet-head"><button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button><h2>${mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</h2><span style="width:40px"></span></div>
     <div class="seg" id="lgMode"><button type="button" data-lg="login" class="${mode === 'login' ? 'on' : ''}">เข้าสู่ระบบ</button><button type="button" data-lg="register" class="${mode === 'register' ? 'on' : ''}">สมัครสมาชิก</button></div>
     <div class="gsignin" id="lgGoogle" hidden><div class="gbtn"></div><div class="or"><span>หรือใช้อีเมล</span></div></div>
     <form class="form" id="lgForm">
-      ${mode === 'register' ? '<div class="field"><label for="lgName">ชื่อที่แสดง</label><input id="lgName" autocomplete="nickname" placeholder="เช่น ต้น"></div>' : ''}
+      ${mode === 'register' ? `<div class="field"><label for="lgName">ชื่อที่แสดง</label><input id="lgName" autocomplete="name" placeholder="เช่น ต้นกล้า ใจดี"></div>
+        <div class="field"><label for="lgNick">ชื่อเล่น</label><input id="lgNick" maxlength="20" autocomplete="nickname" placeholder="เช่น ต้น"></div>` : ''}
       <div class="field"><label for="lgEmail">อีเมล</label><input id="lgEmail" type="email" autocomplete="email" inputmode="email"></div>
       <div class="field"><label for="lgPass">รหัสผ่าน</label><input id="lgPass" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" placeholder="${mode === 'login' ? '' : 'อย่างน้อย 8 ตัวอักษร'}"></div>
       <button class="btn" type="submit" id="lgGo" style="margin-top:12px">${mode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชี'}</button>
@@ -556,7 +524,11 @@ function loginSheet(mode = 'login') {
     btn.disabled = true;
     try {
       const body = { email: $('#lgEmail').value.trim(), password: $('#lgPass').value };
-      if (mode === 'register') body.name = $('#lgName').value.trim();
+      if (mode === 'register') {
+        body.name = $('#lgName').value.trim();
+        body.nickname = $('#lgNick').value.trim();
+        if (!body.nickname) { toast('กรุณาใส่ชื่อเล่น'); $('#lgNick').focus(); return; }
+      }
       await api('POST', mode === 'login' ? '/auth/login' : '/auth/register', body);
       await signedIn();
     } catch (err) {
@@ -589,6 +561,7 @@ async function cloudImport(data) {
       wallets: data.wallets || [],
       txns: (data.txns || []).filter((t) => t.type !== 'settle' && t.scope !== 'shared'),
       budgets: (data.budgets || []).filter((x) => x.scope !== 'shared'),
+      labels: data.labels || [],
     });
     if (data.prefs) { money.prefs = { ...money.prefs, ...data.prefs }; cloudSavePrefs(); }
     await cloudRefresh();
@@ -611,8 +584,8 @@ function coupleSheet() {
   if (cloud.partner) {
     openSheet(`
       <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>บัญชีคู่</h2><span style="width:40px"></span></div>
-      <div class="card acct"><div class="avatar">💞</div><div><b>${esc(partnerName())}</b><div class="muted small">${esc(cloud.partner.email)}</div></div></div>
-      <p class="hint">${esc(partnerName())} เห็นเฉพาะรายจ่ายร่วม งบร่วม และยอดค้างคืนของคุณทั้งสอง รายจ่ายส่วนตัวของแต่ละคนมองไม่เห็น</p>
+      <div class="card acct">${cloud.partner.avatar ? userAvatar(cloud.partner) : '<div class="avatar">💞</div>'}<div><b>${esc(partnerName())}</b><div class="muted small">${esc(cloud.partner.email)}</div></div></div>
+      <p class="hint">${esc(partnerName())} เห็นเฉพาะรายจ่ายร่วมและงบร่วมของคุณทั้งสอง รายจ่ายส่วนตัวของแต่ละคนมองไม่เห็น</p>
     `);
     return;
   }
@@ -653,6 +626,141 @@ function coupleSheet() {
   });
 }
 
+/* ---------- Profile: display name and picture ---------- */
+
+function profileSheet() {
+  if (!isCloud()) { loginSheet(); return; }
+  const d = { name: cloud.user.name || '', avatar: cloud.user.avatar || '', googlePicture: cloud.user.googlePicture || '' };
+  const emojis = WALLET_EMOJIS.concat(['😀', '😎', '🥰', '🐶', '🐱', '🐻', '🐼', '🦊', '🌸', '🍀'])
+    .map((e) => `<button type="button" class="chip emoji" data-pemoji="${e}">${e}</button>`).join('');
+  openSheet(`
+    <div class="sheet-head">
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <h2>แก้ไขโปรไฟล์</h2>
+      <button class="link-btn strong" id="saveProfile">บันทึก</button>
+    </div>
+    <div class="w-pic">
+      <button type="button" class="w-avatar" id="pAvatar" aria-label="เปลี่ยนรูป"></button>
+      <div class="w-pic-actions">
+        <button type="button" class="chip" id="pPhoto">📷 เลือกรูป</button>
+        <button type="button" class="chip" id="pEmojiBtn">😀 อีโมจิ</button>
+        <button type="button" class="chip" id="pGoogle" hidden>รูปจาก Google</button>
+        <button type="button" class="chip" id="pReset" hidden>ใช้ตัวอักษรย่อ</button>
+      </div>
+      <input type="file" id="pFile" accept="image/*" hidden>
+    </div>
+    <div class="gsignin gphoto" id="pGoogleBox" hidden><div class="gbtn"></div></div>
+    <div class="chips w-emojis" id="pEmojis" hidden>${emojis}<input id="pEmojiIn" class="chip" placeholder="พิมพ์เอง" maxlength="8" autocomplete="off"></div>
+    <div class="form">
+      <div class="field"><label for="pName">ชื่อที่แสดง</label><input id="pName" maxlength="60" autocomplete="name" value="${esc(d.name)}"></div>
+      <div class="field"><label for="pNick">ชื่อเล่น</label><input id="pNick" maxlength="20" autocomplete="nickname" placeholder="เช่น ต้น" value="${esc(cloud.user.nickname || '')}"></div>
+      <div class="field"><label>อีเมล</label><span class="muted" style="flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis">${esc(cloud.user.email)}</span></div>
+    </div>
+    <p class="hint">ชื่อและรูปนี้จะแสดงในทุกเครื่องที่เข้าสู่ระบบ${cloud.partner ? ` และ ${esc(partnerName())} จะเห็นด้วย` : ' และคู่ของคุณเมื่อเชื่อมบัญชีแล้ว'}</p>
+  `);
+  const paint = () => {
+    $('#pAvatar').innerHTML = userAvatar({ name: $('#pName').value.trim() || d.name, avatar: d.avatar }, 'w-avatar-in p-avatar-in') + '<span class="w-cam">✎</span>';
+    $('#pReset').hidden = !d.avatar;
+    $('#pGoogle').hidden = !d.googlePicture || d.avatar === d.googlePicture;
+    document.querySelectorAll('#pEmojis [data-pemoji]').forEach((x) => x.classList.toggle('on', x.dataset.pemoji === d.avatar));
+  };
+  paint();
+  $('#pName').addEventListener('input', paint);
+  $('#pAvatar').addEventListener('click', () => $('#pFile').click());
+  $('#pPhoto').addEventListener('click', () => $('#pFile').click());
+  $('#pEmojiBtn').addEventListener('click', () => { $('#pEmojis').hidden = !$('#pEmojis').hidden; });
+  $('#pReset').addEventListener('click', () => { d.avatar = ''; $('#pEmojiIn').value = ''; paint(); });
+  $('#pGoogle').addEventListener('click', () => { d.avatar = d.googlePicture; paint(); });
+  $('#pEmojis').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-pemoji]');
+    if (c) { d.avatar = c.dataset.pemoji; $('#pEmojiIn').value = ''; paint(); }
+  });
+  $('#pEmojiIn').addEventListener('input', (e) => {
+    const v = e.target.value.trim().replace(/[<>&"']/g, '');
+    if (v) { d.avatar = [...v].slice(0, 4).join(''); paint(); }
+  });
+  $('#pFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try { d.avatar = await squareImage(f, 240); paint(); } catch { toast('เปิดรูปนี้ไม่ได้'); }
+  });
+  // No Google photo kept yet (signed in before photos were saved, or with email):
+  // a Google button fetches it from the person's own Google account.
+  if (!d.googlePicture) googlePhotoButton($('#pGoogleBox'), (pic) => {
+    d.googlePicture = cloud.user.googlePicture = pic;
+    d.avatar = pic;
+    $('#pGoogleBox').hidden = true;
+    paint();
+  });
+  $('#saveProfile').addEventListener('click', async (e) => {
+    const name = $('#pName').value.trim();
+    const nickname = $('#pNick').value.trim();
+    if (!name) { toast('กรุณาใส่ชื่อ'); $('#pName').focus(); return; }
+    if (!nickname) { toast('กรุณาใส่ชื่อเล่น'); $('#pNick').focus(); return; }
+    e.target.disabled = true;
+    try {
+      const r = await api('PUT', '/profile', { name, nickname, avatar: d.avatar || null });
+      cloud.user = { ...cloud.user, name, nickname: r.nickname || nickname, avatar: r.avatar || undefined };
+      closeSheet(); render(); toast('บันทึกโปรไฟล์แล้ว');
+      cloudRefresh();
+    } catch (err) {
+      toast(cloudErr(err));
+      e.target.disabled = false;
+    }
+  });
+}
+
+// Everyone needs a nickname (it names them on shared expenses), including accounts
+// made before it existed. The sheet stays until one is saved.
+function nicknameSheet() {
+  if (!needNickname()) return;
+  const guess = (cloud.user.name || '').trim().split(/\s+/)[0].slice(0, 20);
+  openSheet(`
+    <div class="sheet-head"><span style="width:40px"></span><h2>ตั้งชื่อเล่น</h2><button class="link-btn strong" id="saveNick">บันทึก</button></div>
+    <div class="nick-hero">${userAvatar(cloud.user, 'avatar big')}<p>ชื่อเล่นจะแสดงให้${cloud.partner ? esc(cloud.partner.nickname || cloud.partner.name || 'คู่ของคุณ') : 'คู่ของคุณ'}เห็นในรายจ่ายร่วม</p></div>
+    <form class="form" id="nickForm"><div class="field"><label for="nkName">ชื่อเล่น</label><input id="nkName" maxlength="20" autocomplete="nickname" placeholder="เช่น ต้น" value="${esc(guess)}"></div></form>
+    <p class="hint">เปลี่ยนได้ภายหลังที่ บัญชี → แตะการ์ดโปรไฟล์</p>
+  `);
+  $('#sheet').dataset.locked = '1';
+  const save = async (e) => {
+    if (e) e.preventDefault();
+    const nickname = $('#nkName').value.trim();
+    if (!nickname) { toast('กรุณาใส่ชื่อเล่น'); $('#nkName').focus(); return; }
+    $('#saveNick').disabled = true;
+    try {
+      const r = await api('PUT', '/profile', { name: cloud.user.name || nickname, nickname, avatar: cloud.user.avatar || null });
+      cloud.user = { ...cloud.user, nickname: r.nickname || nickname };
+      delete $('#sheet').dataset.locked;
+      closeSheet(); render(); toast('บันทึกชื่อเล่นแล้ว');
+    } catch (err) {
+      toast(cloudErr(err));
+      $('#saveNick').disabled = false;
+    }
+  };
+  $('#saveNick').addEventListener('click', save);
+  $('#nickForm').addEventListener('submit', save);
+  setTimeout(() => $('#nkName') && $('#nkName').focus(), 300);
+}
+
+async function googlePhotoButton(box, done) {
+  let id = '';
+  try { id = await googleReady(); } catch (e) { /* offline: upload and emoji still work */ }
+  if (!id || !box.isConnected) return;
+  google.accounts.id.initialize({
+    client_id: id, ux_mode: 'popup', auto_select: false,
+    callback: async (r) => {
+      try { done((await api('POST', '/profile/google', { credential: r.credential })).googlePicture); } catch (err) { toast(cloudErr(err)); }
+    },
+  });
+  box.hidden = false;
+  google.accounts.id.renderButton(box.querySelector('.gbtn'), {
+    theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'filled_black' : 'outline',
+    size: 'medium', shape: 'pill', locale: LANG, text: 'continue_with',
+    width: Math.min(400, box.clientWidth || 320),
+  });
+}
+
 /* ---------- Events ---------- */
 
 function cloudClick(t) {
@@ -666,8 +774,9 @@ function cloudAction(action, el) {
     case 'login': loginSheet(); break;
     case 'logout': logout(); break;
     case 'couple': coupleSheet(); break;
+    case 'profile': profileSheet(); break;
     case 'settlements': settlementsSheet(); break;
-    case 'shared-list': sharedListSheet(el.dataset.kind); break;
+    case 'shared-list': sharedListSheet(); break;
     case 'add-shared': txnForm(null, { scope: 'shared' }); break;
     default: return false;
   }

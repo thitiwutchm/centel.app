@@ -17,23 +17,25 @@ const WALLET_TYPES = {
 };
 
 const TX_CATS = {
-  food:          { type: 'expense', label: 'อาหารและเครื่องดื่ม', icon: '🍜', color: '#f5a623' },
-  personal:      { type: 'expense', label: 'ของใช้ส่วนตัว',       icon: '🧴', color: '#4f6bed' },
-  shopping:      { type: 'expense', label: 'ช้อปปิ้ง',           icon: '🛍️', color: '#e83e8c' },
-  transport:     { type: 'expense', label: 'การเดินทาง',         icon: '🚗', color: '#4f6bed' },
-  utility:       { type: 'expense', label: 'ค่าน้ำ ค่าไฟ ค่าเน็ต', icon: '💡', color: '#00b3a4' },
-  creditpay:     { type: 'expense', label: 'ชำระบัตรเครดิต',      icon: '💳', color: '#7c5cff' },
-  loan:          { type: 'expense', label: 'ผ่อนชำระ',           icon: '🏦', color: '#e0552b' },
-  home:          { type: 'expense', label: 'บ้านและที่พัก',       icon: '🏠', color: '#b26a3c' },
-  health:        { type: 'expense', label: 'สุขภาพและฟิตเนส',     icon: '💊', color: '#e0352b' },
-  entertainment: { type: 'expense', label: 'บันเทิง',             icon: '🎬', color: '#9b59b6' },
-  family:        { type: 'expense', label: 'ครอบครัว',           icon: '👨‍👩‍👧', color: '#1a9e5c' },
-  education:     { type: 'expense', label: 'การศึกษา',           icon: '📚', color: '#2fa8ff' },
-  beauty:        { type: 'expense', label: 'ความงาม',            icon: '💄', color: '#ff6f91' },
-  insurance:     { type: 'expense', label: 'ประกัน',             icon: '🛡️', color: '#2e8b57' },
-  gift:          { type: 'expense', label: 'ของขวัญและบริจาค',    icon: '🎁', color: '#c0392b' },
-  travel:        { type: 'expense', label: 'ท่องเที่ยว',          icon: '✈️', color: '#16a085' },
-  other_exp:     { type: 'expense', label: 'รายจ่ายอื่นๆ',        icon: '🧾', color: '#8a8f99' },
+  // Order here is the order of the category pickers.
+  apparel:       { type: 'expense', label: 'Apparel & Accessories',   icon: '👕', color: '#6b7a99' },
+  food:          { type: 'expense', label: 'Food & Groceries',        icon: '🍴', color: '#a8844f' },
+  coffee:        { type: 'expense', label: 'Coffee & Beverage',       icon: '☕', color: '#d98a2b' },
+  hangout:       { type: 'expense', label: 'Hang Out',                icon: '🍸', color: '#d9534f' },
+  utility:       { type: 'expense', label: 'Utility Bills',           icon: '🏠', color: '#f0a92e' },
+  subscription:  { type: 'expense', label: 'Monthly Subscriptions',   icon: '💳', color: '#4fb3ad' },
+  transport:     { type: 'expense', label: 'Transportation',          icon: '🚗', color: '#7a7f88' },
+  home:          { type: 'expense', label: 'Home & Living',           icon: '🛏️', color: '#7d7aa8' },
+  health:        { type: 'expense', label: 'Health & Medical',        icon: '🩺', color: '#3d8fe0' },
+  beauty:        { type: 'expense', label: 'Beauty & Personal Care',  icon: '✂️', color: '#d0507f' },
+  travel:        { type: 'expense', label: 'Travel & Trips',          icon: '✈️', color: '#3fae8c' },
+  fitness:       { type: 'expense', label: 'Fitness & Sports',        icon: '🏋️', color: '#5b6a8f' },
+  pets:          { type: 'expense', label: 'Pets',                    icon: '🐶', color: '#e8a22e' },
+  gift:          { type: 'expense', label: 'Gifts & Donations',       icon: '🧡', color: '#d97a3a' },
+  gadget:        { type: 'expense', label: 'Gadgets & Electronics',   icon: '📱', color: '#5d6b85' },
+  rent:          { type: 'expense', label: 'Rent & Insurance',        icon: '🏛️', color: '#c97a2b' },
+  baby:          { type: 'expense', label: 'Babe👼',                  icon: '🧸', color: '#b8a12a' },
+  other_exp:     { type: 'expense', label: 'Others',                  icon: '🧾', color: '#8a8f99' },
   salary:        { type: 'income', label: 'เงินเดือน',          icon: '💰', color: '#2f6bff' },
   bonus:         { type: 'income', label: 'โบนัส',              icon: '🎉', color: '#f5a623' },
   sale:          { type: 'income', label: 'ขายของ',             icon: '📦', color: '#b26a3c' },
@@ -43,15 +45,23 @@ const TX_CATS = {
 };
 const TRANSFER_CAT = { label: 'โอนเงิน', icon: '🔁', color: '#8a8f99' };
 const SETTLE_CAT = { label: 'คืนเงินระหว่างคู่', icon: '🤝', color: '#00b3a4' };
-const REVIEW_CAT = { label: 'รอตรวจสอบ', icon: '❔', color: '#d98a00' };
+const NO_CAT = { label: 'ไม่มีหมวดหมู่', icon: '❔', color: '#8a8f99' };
 const ALL_CAT = { label: 'ทุกหมวดหมู่', icon: '🌐', color: '#2f6bff' };
 const TOTAL_WALLET = { name: 'ทั้งหมด', icon: '🌐', color: '#2f6bff' };
 
 // Paying a bill is recorded as an expense in the matching category.
 const BILL_TX_CAT = {
-  credit: 'creditpay', electric: 'utility', water: 'utility', internet: 'utility', phone: 'utility',
-  loan: 'loan', insurance: 'insurance', rent: 'home', subscription: 'entertainment', other: 'other_exp',
+  credit: 'other_exp', electric: 'utility', water: 'utility', internet: 'utility', phone: 'utility',
+  loan: 'rent', insurance: 'rent', rent: 'rent', subscription: 'subscription', other: 'other_exp',
 };
+
+// Expense categories from before the current list, and where their records now live.
+// server/migrations/004_categories.sql moves synced data the same way.
+const OLD_CATS = {
+  personal: 'beauty', shopping: 'apparel', creditpay: 'other_exp', loan: 'rent', insurance: 'rent',
+  entertainment: 'hangout', family: 'baby', education: 'other_exp',
+};
+const newCat = (k) => OLD_CATS[k] || k;
 
 const TH_DOW_FULL = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
@@ -62,6 +72,8 @@ const defaultMoney = () => ({
   txns: [],
   // budgets: { id, category ('all' or TX_CATS key), amount, walletId ('total' or wallet id) } — repeats every month
   budgets: [],
+  // labels: { id, name } — tags a transaction can carry several of (t.labels = [label ids])
+  labels: [],
   prefs: { hideBalance: false },
 });
 
@@ -74,8 +86,9 @@ function loadMoney() {
     const d = defaultMoney();
     return {
       wallets: Array.isArray(s.wallets) && s.wallets.length ? s.wallets : d.wallets,
-      txns: Array.isArray(s.txns) ? s.txns : [],
-      budgets: Array.isArray(s.budgets) ? s.budgets : [],
+      txns: Array.isArray(s.txns) ? s.txns.map((t) => (t.category ? { ...t, category: newCat(t.category) } : t)) : [],
+      budgets: Array.isArray(s.budgets) ? s.budgets.map((bg) => ({ ...bg, category: newCat(bg.category) })) : [],
+      labels: Array.isArray(s.labels) ? s.labels : [],
       prefs: { ...d.prefs, ...(s.prefs || {}) },
     };
   } catch (e) {
@@ -105,11 +118,93 @@ function wFace(w) { const img = wImg(w); return img ? `<img src="${img}" alt="">
 function txCat(t) {
   if (t.type === 'transfer') return TRANSFER_CAT;
   if (t.type === 'settle') return SETTLE_CAT;
-  if (!t.category) return REVIEW_CAT;
-  return TX_CATS[t.category] || TX_CATS.other_exp;
+  if (!t.category) return NO_CAT;
+  return catById(t.category) || catFallback(t.type);
 }
-function budgetCat(bg) { return bg.category === 'all' ? ALL_CAT : (TX_CATS[bg.category] || TX_CATS.other_exp); }
-function catsOf(type) { return Object.entries(TX_CATS).filter(([, c]) => c.type === type); }
+function labelById(id) { return money.labels.find((l) => l.id === id); }
+// The labels on a transaction that still exist (a deleted label just disappears).
+function txLabels(t) { return (t.labels || []).map(labelById).filter(Boolean); }
+function budgetCat(bg) { return bg.category === 'all' ? ALL_CAT : (catById(bg.category) || catFallback('expense')); }
+
+/* ---------- Categories ----------
+   The person's own list lives in money.prefs.cats (synced with prefs): [{ id, type, label, icon, color, parent? }]
+   in display order. Until they change anything it is null and TX_CATS is used. A category can have
+   sub-categories (parent = a top-level id of the same type); reports and budgets roll subs up into the parent.
+   Deleting one leaves its transactions alone and records where they now belong in money.prefs.catMoved. */
+
+const DEFAULT_CATS = Object.entries(TX_CATS).map(([id, c]) => ({ id, type: c.type, label: c.label, icon: c.icon, color: c.color }));
+// Kept even if the person's list loses them, so a transaction always has somewhere to show up.
+const CAT_FALLBACK = { expense: 'other_exp', income: 'other_inc' };
+const CAT_ID = /^[A-Za-z0-9_-]{1,40}$/;
+const CAT_COLOR = /^#[0-9a-fA-F]{6}$/;
+let catCache = { src: {}, list: [], map: new Map() };
+
+// prefs.cats comes from storage or the server, so it is checked before it reaches the page.
+function cleanCats(src) {
+  const out = [], seen = new Set();
+  for (const c of src) {
+    if (!c || !CAT_ID.test(c.id) || seen.has(c.id) || !['expense', 'income'].includes(c.type)) continue;
+    const label = String(c.label || '').trim().slice(0, 40);
+    if (!label) continue;
+    const icon = typeof c.icon === 'string' && c.icon.length <= 16 && !/[<>&"']/.test(c.icon) && c.icon.trim() ? c.icon : '🏷️';
+    // 🐾 draws almost black on iPhone, so the built-in Pets icon moved to 🐶.
+    seen.add(c.id);
+    out.push({ id: c.id, type: c.type, label, icon: c.id === 'pets' && icon === '🐾' ? '🐶' : icon, color: CAT_COLOR.test(c.color) ? c.color : '#8a8f99', parent: typeof c.parent === 'string' ? c.parent : undefined });
+  }
+  // A parent must be a top-level category of the same type.
+  const top = new Map(out.filter((c) => !c.parent).map((c) => [c.id, c]));
+  out.forEach((c) => { if (c.parent && (!top.has(c.parent) || top.get(c.parent).type !== c.type)) delete c.parent; if (!c.parent) delete c.parent; });
+  Object.values(CAT_FALLBACK).forEach((id) => { if (!seen.has(id)) out.push({ ...DEFAULT_CATS.find((c) => c.id === id) }); });
+  return out;
+}
+function catList() {
+  const src = money.prefs.cats;
+  if (catCache.src !== src) {
+    const list = Array.isArray(src) && src.length ? cleanCats(src) : DEFAULT_CATS;
+    catCache = { src, list, map: new Map(list.map((c) => [c.id, c])) };
+  }
+  return catCache.list;
+}
+function catMap() { catList(); return catCache.map; }
+// Follows deletions (catMoved) to the category a transaction now counts under.
+function catResolve(id) {
+  const moved = money.prefs.catMoved || {};
+  for (let i = 0; i < 10 && id && moved[id] && !catMap().has(id); i++) id = moved[id];
+  return id;
+}
+function catById(id) {
+  if (!id) return null;
+  return catMap().get(catResolve(id)) || null;
+}
+function catFallback(type) {
+  const id = CAT_FALLBACK[type === 'income' ? 'income' : 'expense'];
+  return catMap().get(id) || DEFAULT_CATS.find((c) => c.id === id);
+}
+// The top-level category a key rolls up into (itself when it has no parent).
+function catRootId(id, type = 'expense') {
+  const c = catById(id) || catFallback(type);
+  return c.parent && catMap().has(c.parent) ? c.parent : c.id;
+}
+// Camera-with-sparkle icon for the AI Slips scan button; stroked with the rainbow gradient's first stop.
+const SCAN_ICON = `<svg class="scan-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M13.5 5H9.6L8.2 7H5.5A2.5 2.5 0 0 0 3 9.5v8A2.5 2.5 0 0 0 5.5 20h11a2.5 2.5 0 0 0 2.5-2.5V13"/>
+  <circle cx="11" cy="13.5" r="3.2"/>
+  <path d="M18.5 2.5c.3 1.9 1 2.6 2.9 2.9-1.9.3-2.6 1-2.9 2.9-.3-1.9-1-2.6-2.9-2.9 1.9-.3 2.6-1 2.9-2.9z"/>
+</svg>`;
+
+// Expense categories for AI Slips to choose from (the server falls back to the built-in list).
+function slipCats() {
+  return catList().filter((c) => c.type === 'expense').map((c) => ({ id: c.id, name: c.label, parent: c.parent ? catById(c.parent).label : undefined }));
+}
+function catChildren(id) { return catList().filter((c) => c.parent === id); }
+// Top-level categories of one type, in order, as [id, cat] pairs.
+function catsOf(type) { return catList().filter((c) => c.type === type && !c.parent).map((c) => [c.id, c]); }
+// Whether a transaction's category counts toward `id` (the category itself or one of its subs).
+function catIn(txCatId, id) {
+  const c = catById(txCatId);
+  const own = c ? c.id : CAT_FALLBACK.expense;
+  return own === id || (!!c && c.parent === id);
+}
 
 function firstWalletId() { return (money.wallets.find((w) => !w.excluded) || money.wallets[0]).id; }
 function defaultWalletId() {
@@ -187,9 +282,10 @@ function cumDaily(ym, type, filter = () => true, value = (t) => t.amount) {
 }
 
 // A personal budget counts my spending (my share of shared bills); a shared budget
-// counts whole approved shared bills, once, for the couple.
+// counts whole shared bills, once, for the couple.
 function budgetFilter(bg) {
-  const cat = (t) => bg.category === 'all' || t.category === bg.category;
+  const target = catById(bg.category) ? catById(bg.category).id : bg.category;
+  const cat = (t) => bg.category === 'all' || catIn(t.category, target);
   if (bg.scope === 'shared') return (t) => t.type === 'expense' && t.scope === 'shared' && t.counted && cat(t);
   const S = walletSet(bg.walletId || 'total');
   return (t) => t.type === 'expense' && counts(t) && inSel(t, S) && cat(t);
@@ -230,7 +326,7 @@ function recordBillTxn(b, ym, amount, walletId, date = dateStr(new Date())) {
   if (!walletId || !walletById(walletId) || !(amount > 0)) return;
   saveTxn({
     id: newId(), type: 'expense', amount, category: BILL_TX_CAT[b.category] || 'other_exp',
-    walletId, date, note: `จ่าย${b.name}`, billId: b.id, billYm: ym,
+    walletId, date, note: tr(`จ่าย${b.name}`), billId: b.id, billYm: ym,
   });
 }
 
@@ -245,9 +341,9 @@ function upsert(list, item) {
   if (i >= 0) list[i] = item; else list.push(item);
 }
 
-function saveTxn(t, extra) {
+function saveTxn(t) {
   upsert(money.txns, t);
-  if (isCloud()) cloudSaveTxn(t, extra); else saveMoney();
+  if (isCloud()) cloudSaveTxn(t); else saveMoney();
 }
 function deleteTxn(t) {
   money.txns = money.txns.filter((x) => x.id !== t.id);
@@ -272,6 +368,22 @@ function deleteBudget(bg) {
   money.budgets = money.budgets.filter((x) => x.id !== bg.id);
   if (isCloud()) cloudCall('DELETE', `/budgets/${bg.id}`); else saveMoney();
 }
+function saveLabel(l) {
+  upsert(money.labels, l);
+  if (isCloud()) cloudCall('PUT', `/labels/${encodeURIComponent(l.id)}`, { ...l, sort: money.labels.indexOf(l) });
+  else saveMoney();
+}
+function deleteLabel(l) {
+  money.labels = money.labels.filter((x) => x.id !== l.id);
+  money.txns.forEach((t) => { if (t.labels && t.labels.includes(l.id)) t.labels = t.labels.filter((x) => x !== l.id); });
+  if (ui.txLabel === l.id) ui.txLabel = '';
+  if (isCloud()) cloudCall('DELETE', `/labels/${encodeURIComponent(l.id)}`); else saveMoney();
+}
+// Labels only (no other change): also works on a partner's shared expense.
+function setTxnLabels(t, ids) {
+  t.labels = ids;
+  if (isCloud()) cloudCall('PUT', `/expenses/${t.id}/labels`, { labels: ids }); else saveMoney();
+}
 function savePrefs() {
   if (isCloud()) cloudSavePrefs(); else saveMoney();
 }
@@ -287,7 +399,7 @@ function kbaht(n) {
   return `${n < 0 ? '-' : ''}฿${s}`;
 }
 function masked(s) { return money.prefs.hideBalance ? '฿ ••••••' : s; }
-function thDate(ds) { const d = parseDs(ds); return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + 543).slice(2)}`; }
+function thDate(ds) { const d = parseDs(ds); return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + BE).slice(2)}`; }
 function dayLabel(ds) {
   const diff = daysBetween(today(), parseDs(ds));
   if (diff === 0) return 'วันนี้';
@@ -315,6 +427,20 @@ const ICONS = {
   swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
   receipt: '<path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 20.5c1.4-3.6 4.4-5.5 8-5.5s6.6 1.9 8 5.5"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11.5V10a4 4 0 0 1 4-4h13M7 21.5 3.5 18 7 14.5"/><path d="M20.5 12.5V14a4 4 0 0 1-4 4h-13"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M5.5 7l1 12.5A1.5 1.5 0 0 0 8 21h8a1.5 1.5 0 0 0 1.5-1.5L18.5 7M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/>',
+  // Bill types (line icons for the type row under a bill's name)
+  card: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/>',
+  bolt: '<path d="M13 2.5 4.5 13.5H12l-1 8 8.5-11H12z"/>',
+  drop: '<path d="M12 3s6.5 7 6.5 11.5a6.5 6.5 0 0 1-13 0C5.5 10 12 3 12 3z"/>',
+  wifi: '<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.6 16a5 5 0 0 1 6.8 0"/><circle cx="12" cy="19.3" r="0.9"/>',
+  phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  bank: '<path d="M3 9.5 12 4l9 5.5M4.5 20.5h15M6 10.5v7M10 10.5v7M14 10.5v7M18 10.5v7"/>',
+  shield: '<path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6z"/>',
+  home: '<path d="M3.5 11 12 4l8.5 7M6 9.5V20h12V9.5M10 20v-5.5h4V20"/>',
+  play: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="m10 9.2 5 2.8-5 2.8z"/>',
+  tag: '<path d="M3 12.2V4.5A1.5 1.5 0 0 1 4.5 3h7.7l8.8 8.8a1.5 1.5 0 0 1 0 2.1l-7.1 7.1a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8" cy="8" r="1.6"/>',
 };
 function svgIcon(name, cls = 'svg-i') {
   return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -410,31 +536,24 @@ function budgetBar(spent, amount, ym) {
 
 /* ---------- Shared list pieces ---------- */
 
-const STATUS_BADGE = {
-  draft: '<span class="badge muted">ร่าง</span>',
-  pending: '<span class="badge warn">รออนุมัติ</span>',
-  rejected: '<span class="badge bad">ถูกปฏิเสธ</span>',
-};
-
 function txItem(t, S) {
   const c = txCat(t);
   const w = walletById(t.walletId);
   const to = t.type === 'transfer' ? walletById(t.toWalletId) : null;
-  let title = t.type === 'transfer' ? `${esc(w ? w.name : '?')} → ${esc(to ? to.name : '?')}` : c.label;
+  let title = t.type === 'transfer' ? `${esc(w ? w.name : '?')} → ${esc(to ? to.name : '?')}` : esc(c.label);
   if (t.type === 'settle') title = t.sign > 0 ? `รับเงินคืนจาก${esc(partnerName())}` : `คืนเงินให้${esc(partnerName())}`;
   const shared = t.scope === 'shared';
   const sub = [
     t.type === 'transfer' ? c.label : '',
     esc(t.merchant || ''),
     esc(t.note || ''),
-    shared ? `ส่วนของฉัน ${baht(t.amount)}` : '',
+    shared ? splitLine(t) : '',
   ].filter(Boolean).join(' · ') || (w ? esc(w.name) : '');
   const badges = [
     shared ? '<span class="badge share">ร่วม</span>' : '',
-    shared ? STATUS_BADGE[t.status] || '' : '',
-    t.reviewNeeded || (!t.category && t.type === 'expense') ? '<span class="badge warn">รอตรวจสอบ</span>' : '',
     t.billId ? '<span class="badge muted">บิล</span>' : '',
     t.receiptKey ? '<span class="badge muted">🧾</span>' : '',
+    ...txLabels(t).map((l) => `<span class="badge label">${svgIcon('tag', 'svg-i xs')}${esc(l.name)}</span>`),
   ].join(' ');
   const amt = shared ? t.total : t.amount;
   const cls = t.type === 'settle' ? (t.sign > 0 ? 'inc' : 'exp') : shared && !t.counted ? 'xfer' : txAmtCls(t, S);
@@ -446,9 +565,20 @@ function txItem(t, S) {
     </button>`;
 }
 
+// money.txns is kept in the order entries were added (the server sends them
+// by created_at), so a higher index means a more recently added entry.
+function addedRank() {
+  const rank = new Map();
+  money.txns.forEach((t, i) => rank.set(t.id, i));
+  return (t) => rank.get(t.id) ?? -1;
+}
+
 function dayGroups(list, S, newestFirst = true) {
   const by = {};
+  const added = addedRank();
   list.forEach((t) => { (by[t.date] = by[t.date] || []).push(t); });
+  // Within a day, the most recently added entry goes on top.
+  Object.values(by).forEach((items) => items.sort((a, b) => added(b) - added(a)));
   const days = Object.keys(by).sort();
   if (newestFirst) days.reverse();
   return days.map((ds) => {
@@ -459,7 +589,7 @@ function dayGroups(list, S, newestFirst = true) {
       <div class="day-card">
         <div class="day-head">
           <div class="dnum">${d.getDate()}</div>
-          <div class="dmeta"><div>${dayLabel(ds)}</div><div>${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}</div></div>
+          <div class="dmeta"><div>${dayLabel(ds)}</div><div>${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + BE}</div></div>
           <div class="dtotal">${net > 0 ? '+' : ''}${sbaht(net)}</div>
         </div>
         ${items.map((t) => txItem(t, S)).join('')}
@@ -485,13 +615,14 @@ function renderHome() {
 
   const occ = state.bills.length ? occurrences(ym).filter((o) => !o.paid) : [];
   const billsLeft = occ.reduce((s, o) => s + o.amount, 0);
+  const added = addedRank();
   const recent = money.txns.filter((t) => t.date <= dateStr(new Date()) && t.type !== 'settle')
-    .sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 4);
+    .sort((a, b) => b.date.localeCompare(a.date) || added(b) - added(a)).slice(0, 4);
 
   view.innerHTML = `
     <div class="hero">
       <div class="hero-top">
-        <button class="avatar-btn" data-goto="account" aria-label="บัญชี">${cloud.user ? esc((cloud.user.name || '?').slice(0, 1).toUpperCase()) : svgIcon('user')}</button>
+        <button class="avatar-btn${userImg(cloud.user) ? ' has-img' : ''}" data-goto="account" aria-label="บัญชี">${cloud.user ? userFace(cloud.user) : svgIcon('user')}</button>
         <button class="search-cap" data-action="search">${svgIcon('search')}<span>ค้นหารายการ</span></button>
         <button class="round-btn" data-action="alerts" aria-label="การแจ้งเตือน">${svgIcon('bell')}${alerts ? `<span class="nbadge">${alerts}</span>` : ''}</button>
       </div>
@@ -570,7 +701,7 @@ function homeReport(ym, S) {
       <button class="${type === 'expense' ? 'on exp' : ''}" data-rtype="expense"><span>ใช้จ่ายทั้งหมด</span><b class="exp">${kbaht(expense)}</b></button>
       <button class="${type === 'income' ? 'on inc' : ''}" data-rtype="income"><span>รายรับทั้งหมด</span><b class="inc">${kbaht(income)}</b></button>
     </div>
-    <div class="tip"><span class="muted">${day}/${m}/${parseYm(ym).y + 543}:</span> <b class="${cls}">${kbaht(now)}</b>
+    <div class="tip"><span class="muted">${day}/${m}/${parseYm(ym).y + BE}:</span> <b class="${cls}">${kbaht(now)}</b>
       ${avg.length ? `<div class="muted small">เฉลี่ย ${prev.length} เดือนก่อน ณ วันเดียวกัน: <b>${kbaht(avg[day - 1])}</b></div>` : ''}</div>
     ${chart}
     <div class="legend"><span><i class="dot ${cls}"></i>เดือนนี้</span>${avg.length ? `<span><i class="dot avg"></i>เฉลี่ย ${prev.length} เดือนก่อน</span>` : ''}</div>`;
@@ -580,13 +711,13 @@ function insightCard(ym, S) {
   const exp = txnsInMonth(ym).filter((t) => t.type === 'expense' && counts(t) && t.category && inSel(t, S));
   if (!exp.length) return '';
   const by = {};
-  exp.forEach((t) => { by[t.category] = (by[t.category] || 0) + t.amount; });
+  exp.forEach((t) => { const k = catRootId(t.category); by[k] = (by[k] || 0) + t.amount; });
   const [top, spent] = Object.entries(by).sort((a, b) => b[1] - a[1])[0];
-  const c = TX_CATS[top] || TX_CATS.other_exp;
+  const c = catById(top) || catFallback('expense');
   const day = new Date().getDate();
   const lastYm = addMonths(ym, -1);
   const lastSame = txnsInMonth(lastYm)
-    .filter((t) => t.type === 'expense' && counts(t) && t.category === top && inSel(t, S) && Number(t.date.slice(8, 10)) <= day)
+    .filter((t) => t.type === 'expense' && counts(t) && catIn(t.category, top) && inSel(t, S) && Number(t.date.slice(8, 10)) <= day)
     .reduce((s, t) => s + t.amount, 0);
   let cmp = '';
   if (lastSame > 0) {
@@ -597,7 +728,7 @@ function insightCard(ym, S) {
   return `
     <div class="section-row"><span>ข้อมูลเชิงลึก</span></div>
     <div class="card insight">
-      <div class="ins-top">${circleIco(c)}<div><b>${c.label}</b><div class="muted small">หมวดที่ใช้มากที่สุดเดือนนี้ · รวม <b class="exp">${baht(spent)}</b></div></div></div>
+      <div class="ins-top">${circleIco(c)}<div><b>${esc(c.label)}</b><div class="muted small">หมวดที่ใช้มากที่สุดเดือนนี้ · รวม <b class="exp">${baht(spent)}</b></div></div></div>
       <div class="ins-row">
         <div><div class="muted small">เฉลี่ยเดือนนี้</div><div class="ins-avg">${baht(Math.round((spent / day) * 100) / 100)}<span class="muted">/วัน</span></div></div>
         ${cmp}
@@ -611,22 +742,19 @@ function alertList() {
     ? occurrences(ym).filter((o) => !o.paid && !o.bill.autopay && (o.status === 'overdue' || o.status === 'soon')) : [];
   // PRD: warn from 80% of a budget, and again once it is over 100%.
   const over = money.budgets.filter((bg) => budgetSpent(bg, ym) >= bg.amount * 0.8);
-  const approvals = toApprove();
-  return { bills, over, approvals };
+  return { bills, over };
 }
-function alertCount() { const a = alertList(); return a.bills.length + a.over.length + a.approvals.length + (gmailAutoDue() ? 1 : 0); }
+function alertCount() { const a = alertList(); return a.bills.length + a.over.length + (gmailAutoDue() ? 1 : 0); }
 
 function alertsSheet() {
-  const { bills, over, approvals } = alertList();
+  const { bills, over } = alertList();
   const ym = ymOf(new Date());
-  const S = walletSet('total');
   openSheet(`
     <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>การแจ้งเตือน</h2><span style="width:40px"></span></div>
     ${gmailAutoDue() ? gmailAutoAlert() : ''}
-    ${approvals.length ? `<div class="section-title">รอคุณอนุมัติ</div><div class="list">${approvals.map((t) => txItem(t, S)).join('')}</div>` : ''}
     ${bills.length ? `<div class="section-title">บิลใกล้ครบกำหนด / เลยกำหนด</div><div class="list">${bills.map(occItem).join('')}</div>` : ''}
     ${over.length ? `<div class="section-title">งบประมาณใช้ไปแล้ว 80% ขึ้นไป</div>${over.map((bg) => budgetRow(bg, ym)).join('')}` : ''}
-    ${bills.length || over.length || approvals.length || gmailAutoDue() ? '' : '<div class="empty"><div class="e-ico">🔔</div>ไม่มีการแจ้งเตือน</div>'}
+    ${bills.length || over.length || gmailAutoDue() ? '' : '<div class="empty"><div class="e-ico">🔔</div>ไม่มีการแจ้งเตือน</div>'}
   `);
 }
 
@@ -647,7 +775,7 @@ function periodTabs() {
   const tabs = [];
   for (let ym = earliest; ym < addMonths(cur, -1); ym = addMonths(ym, 1)) {
     const { y, m } = parseYm(ym);
-    tabs.push([ym, `${TH_MONTHS_SHORT[m - 1]} ${String(y + 543).slice(2)}`]);
+    tabs.push([ym, `${TH_MONTHS_SHORT[m - 1]} ${String(y + BE).slice(2)}`]);
   }
   tabs.push(['last', 'เดือนก่อน'], ['this', 'เดือนนี้'], ['future', 'อนาคต']);
   return tabs;
@@ -683,7 +811,7 @@ function txListHtml(sel) {
   const S = walletSet(sel);
   const q = ui.searchOpen ? ui.search.trim().toLowerCase() : '';
   if (q) {
-    const hits = money.txns.filter((t) => touches(t, S) && txFilterOk(t) && [t.note, t.merchant, txCat(t).label, (walletById(t.walletId) || {}).name, String(t.amount)]
+    const hits = money.txns.filter((t) => touches(t, S) && txFilterOk(t) && [t.note, t.merchant, txCat(t).label, (walletById(t.walletId) || {}).name, String(t.amount), ...txLabels(t).map((l) => l.name)]
       .some((s) => String(s || '').toLowerCase().includes(q)));
     return hits.length ? `<div class="muted small pad">พบ ${hits.length} รายการ</div>${dayGroups(hits, S)}` : '<div class="empty">ไม่พบรายการ</div>';
   }
@@ -714,21 +842,25 @@ function txListHtml(sel) {
     ${list.length ? dayGroups(list, S) : `<div class="empty"><div class="e-ico">🧾</div>ยังไม่มีรายการ${r.label}</div>`}`;
 }
 
-const TX_FILTERS = [['all', 'ทั้งหมด'], ['personal', 'ส่วนตัว'], ['shared', 'ร่วมกัน'], ['pending', 'รออนุมัติ'], ['review', 'รอตรวจสอบ']];
+const TX_FILTERS = [['all', 'ทั้งหมด'], ['personal', 'ส่วนตัว'], ['shared', 'ร่วมกัน']];
 
 function txFilters() {
-  const list = cloud.partner ? TX_FILTERS : TX_FILTERS.filter(([k]) => k === 'all' || k === 'review');
-  if (!money.txns.some((t) => t.reviewNeeded || t.scope === 'shared') && ui.txFilter === 'all') return '';
-  return `<div class="chips filters">${list.map(([k, l]) =>
-    `<button class="chip ${ui.txFilter === k ? 'on' : ''}" data-txfilter="${k}">${l}</button>`).join('')}</div>`;
+  const list = cloud.partner ? TX_FILTERS : TX_FILTERS.filter(([k]) => k === 'all');
+  const lab = labelById(ui.txLabel);
+  const basic = money.txns.some((t) => t.scope === 'shared') || ui.txFilter !== 'all';
+  if (!basic && !money.labels.length && !lab) return '';
+  const labChip = lab
+    ? `<button class="chip on lab" data-txlabel="">${svgIcon('tag', 'svg-i xs')}${esc(lab.name)} ✕</button>`
+    : money.labels.length ? `<button class="chip lab" data-action="label-filter">${svgIcon('tag', 'svg-i xs')}ป้ายกำกับ</button>` : '';
+  return `<div class="chips filters">${labChip}${basic ? list.map(([k, l]) =>
+    `<button class="chip ${ui.txFilter === k ? 'on' : ''}" data-txfilter="${k}">${l}</button>`).join('') : ''}</div>`;
 }
 
 function txFilterOk(t) {
+  if (ui.txLabel && !(t.labels || []).includes(ui.txLabel)) return false;
   switch (ui.txFilter) {
     case 'personal': return t.scope !== 'shared' && t.type !== 'settle';
     case 'shared': return t.scope === 'shared' || t.type === 'settle';
-    case 'pending': return t.scope === 'shared' && t.status !== 'approved';
-    case 'review': return !!t.reviewNeeded || (t.type === 'expense' && !t.category);
     default: return true;
   }
 }
@@ -739,6 +871,7 @@ function txMenu() {
     <div class="list">
       <button class="item" data-action="report" data-ym="${periodRange(ui.period).ym || ymOf(new Date())}">${circleIco({ icon: '📊', color: '#2f6bff' })}<div class="main"><div class="name">ดูรายงานช่วงนี้</div></div></button>
       <button class="item" data-action="wallets">${circleIco({ icon: '👛', color: '#1a9e5c' })}<div class="main"><div class="name">จัดการกระเป๋าเงิน</div></div></button>
+      <button class="item" data-action="labels">${circleIco({ icon: '🏷️', color: '#7a5af8' })}<div class="main"><div class="name">ป้ายกำกับ</div></div></button>
       <button class="item" data-action="csv">${circleIco({ icon: '⬇️', color: '#8a8f99' })}<div class="main"><div class="name">ส่งออกรายการ (CSV)</div></div></button>
     </div>`);
 }
@@ -746,14 +879,13 @@ function txMenu() {
 function exportCsv() {
   if (!money.txns.length) { toast('ยังไม่มีรายการ'); return; }
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const rows = [['วันที่', 'ประเภท', 'หมวดหมู่', 'กระเป๋าเงิน', 'ไปยัง', 'จำนวนเงิน', 'ร้านค้า', 'บันทึก', 'ขอบเขต', 'ยอดรวมทั้งบิล', 'สถานะ']];
+  const rows = [['วันที่', 'ประเภท', 'หมวดหมู่', 'กระเป๋าเงิน', 'ไปยัง', 'จำนวนเงิน', 'ร้านค้า', 'บันทึก', 'ขอบเขต', 'ยอดรวมทั้งบิล', 'ต้นทุน', 'ป้ายกำกับ']];
   const typeTh = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'โอนเงิน', settle: 'คืนเงินระหว่างคู่' };
-  const statusTh = { draft: 'ร่าง', pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ถูกปฏิเสธ' };
   money.txns.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((t) => rows.push([
     t.date, typeTh[t.type], txCat(t).label, (walletById(t.walletId) || {}).name,
     t.type === 'transfer' ? (walletById(t.toWalletId) || {}).name : '', t.type === 'settle' ? t.sign * t.amount : t.amount,
     t.merchant, t.note, t.scope === 'shared' ? 'ร่วมกัน' : 'ส่วนตัว', t.scope === 'shared' ? t.total : '',
-    t.scope === 'shared' ? statusTh[t.status] : '',
+    t.scope === 'shared' ? (splitOf(t) === 'full' ? 'รับผิดชอบทั้งหมด' : 'หาร 2') : '', txLabels(t).map((l) => l.name).join(', '),
   ]));
   deliverFile(`transactions-${dateStr(new Date())}.csv`, 'text/csv', '﻿' + rows.map((r) => r.map(q).join(',')).join('\r\n'));
 }
@@ -763,23 +895,33 @@ function exportCsv() {
 function reportSheet(ym) {
   ym = ym || ymOf(new Date());
   const S = walletSet(ui.tab === 'txns' ? ui.wallet : 'total');
-  const list = txnsInMonth(ym).filter((t) => t.type !== 'transfer' && counts(t) && inSel(t, S));
+  const lab = ui.tab === 'txns' ? labelById(ui.txLabel) : null;
+  const list = txnsInMonth(ym).filter((t) => t.type !== 'transfer' && counts(t) && inSel(t, S) && (!lab || (t.labels || []).includes(lab.id)));
   const { income, expense } = totalsIn(list, S);
   const bars = (type) => {
-    const by = {};
-    list.filter((t) => t.type === type).forEach((t) => { const k = t.category || '_review'; by[k] = (by[k] || 0) + t.amount; });
+    // Sub-categories roll up into their parent; the split shows under the parent's bar.
+    const by = {}, subs = {};
+    list.filter((t) => t.type === type).forEach((t) => {
+      const k = t.category ? catRootId(t.category, type) : '_review';
+      by[k] = (by[k] || 0) + t.amount;
+      const own = t.category && catById(t.category);
+      if (own && own.id !== k) { subs[k] = subs[k] || {}; subs[k][own.id] = (subs[k][own.id] || 0) + t.amount; }
+    });
     const sum = Object.values(by).reduce((s, v) => s + v, 0);
     const rows = Object.entries(by).sort((a, b) => b[1] - a[1]);
     if (!rows.length) return '<div class="card muted" style="text-align:center">ไม่มีรายการ</div>';
     return `<div class="list">${rows.map(([k, v]) => {
-      const c = k === '_review' ? REVIEW_CAT : TX_CATS[k] || TX_CATS.other_exp;
+      const c = k === '_review' ? NO_CAT : catById(k) || catFallback(type);
       const p = (v / sum) * 100;
-      return `<div class="item rep">${circleIco(c)}<div class="main"><div class="rep-top"><span class="name">${c.label}</span><b>${baht(v)}</b></div>
-        <div class="rep-bar"><div style="width:${p}%;background:${c.color}"></div></div><div class="sub">${p.toFixed(1)}%</div></div></div>`;
+      const split = Object.entries(subs[k] || {}).sort((a, b) => b[1] - a[1])
+        .map(([id, x]) => `<div class="rep-sub"><span>${esc(catById(id).label)}</span><span>${baht(x)}</span></div>`).join('');
+      return `<div class="item rep">${circleIco(c)}<div class="main"><div class="rep-top"><span class="name">${esc(c.label)}</span><b>${baht(v)}</b></div>
+        <div class="rep-bar"><div style="width:${p}%;background:${c.color}"></div></div><div class="sub">${p.toFixed(1)}%</div>${split}</div></div>`;
     }).join('')}</div>`;
   };
   openSheet(`
     <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>รายงาน ${thMonthYear(ym)}</h2><span style="width:40px"></span></div>
+    ${lab ? `<div class="chips"><span class="chip on lab">${svgIcon('tag', 'svg-i xs')}${esc(lab.name)}</span></div>` : ''}
     <div class="card summary">
       <div class="row" style="margin-top:0">
         <div class="stat inc-soft"><span>รายรับ</span><b class="inc">${baht(income)}</b></div>
@@ -812,7 +954,7 @@ function budgetRow(bg, ym) {
   return `
     <button class="card budget" data-budget="${bg.id}">
       <div class="b-top">${circleIco(c)}
-        <div class="main"><div class="name">${c.label} ${bg.scope === 'shared' ? '<span class="badge share">ร่วม</span>' : ''} ${badge}</div>${w ? `<div class="sub">${esc(w.name)}</div>` : ''}</div>
+        <div class="main"><div class="name">${esc(c.label)} ${bg.scope === 'shared' ? '<span class="badge share">ร่วม</span>' : ''} ${badge}</div>${w ? `<div class="sub">${esc(w.name)}</div>` : ''}</div>
         <div class="right"><b>${baht(bg.amount)}</b><div class="sub ${left < 0 ? 'exp' : ''}">${left < 0 ? `เกินงบ ${baht(-left)}` : `เหลือ ${baht(left)}`}</div></div>
       </div>
       ${budgetBar(spent, bg.amount, ym)}
@@ -864,8 +1006,8 @@ function renderBudgets() {
       <button class="btn" data-action="add-budget" style="margin-top:14px">สร้างงบประมาณ</button>
     </div>`}
     ${isCloud() && cloud.partner ? `
-    <div class="section-row"><span>งบร่วมกับ ${esc(partnerName())}</span><button class="link-btn" data-action="add-budget-shared">＋ สร้างงบร่วม</button></div>
-    ${shared.map((bg) => budgetRow(bg, ym)).join('') || '<div class="card muted small">งบร่วมนับยอดรวมทั้งบิลของรายจ่ายร่วมที่อนุมัติแล้ว ทั้งสองคนเห็นงบเดียวกัน</div>'}` : ''}
+    <div class="section-row"><span>งบร่วมกับ ${esc(partnerName())}</span></div>
+    ${shared.map((bg) => budgetRow(bg, ym)).join('') || '<div class="card muted small">งบร่วมนับยอดรวมทั้งบิลของรายจ่ายร่วม ทั้งสองคนเห็นงบเดียวกัน</div>'}` : ''}
   `;
 }
 
@@ -896,7 +1038,7 @@ function budgetDetail(id) {
       { pts: proj, cls: projected > bg.amount ? 'exp' : 'avg', dash: true },
     ],
     hline: { v: bg.amount, cls: 'exp' },
-    xLabels: [[0, `1/${m}/${String(y + 543).slice(2)}`], [dim - 1, `${dim}/${m}/${String(y + 543).slice(2)}`]],
+    xLabels: [[0, `1/${m}/${String(y + BE).slice(2)}`], [dim - 1, `${dim}/${m}/${String(y + BE).slice(2)}`]],
   });
   const list = txnsInMonth(ym).filter(f);
   const S = walletSet(bg.walletId || 'total');
@@ -908,13 +1050,13 @@ function budgetDetail(id) {
       <button class="link-btn" data-action="edit-budget" data-id="${bg.id}">แก้ไข</button>
     </div>
     <div class="card bd">
-      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${c.label}</div></div></div>
+      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(c.label)}</div></div></div>
       <div class="bd-body">
         <div class="bd-amt">${baht(bg.amount)}</div>
         <div class="bd-sl"><div><span class="muted">ใช้ไป</span><b>${baht(spent)}</b></div>
           <div style="text-align:right"><span class="muted">${left < 0 ? 'เกินงบ' : 'เหลือ'}</span><b class="${left < 0 ? 'exp' : ''}">${baht(Math.abs(left))}</b></div></div>
         ${budgetBar(spent, bg.amount, ym)}
-        <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + 543}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
+        <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + BE}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
         <div class="bd-meta"><span${wImg(w) ? ' class="has-img"' : ''}>${bg.scope === 'shared' ? '🤝' : w ? wFace(w) : '🌐'}</span><div>${bg.scope === 'shared' ? `งบร่วมกับ ${esc(partnerName())}` : w ? esc(w.name) : 'ทุกกระเป๋าเงิน'}</div></div>
       </div>
     </div>
@@ -934,10 +1076,10 @@ function budgetForm(bg, preset = {}) {
   const d = bg ? { ...bg } : { category: 'food', amount: '', walletId: ui.wallet === 'total' ? 'total' : ui.wallet, scope: 'personal', ...preset };
   const canShare = isCloud() && !!cloud.partner;
   const chips = [['all', ALL_CAT], ...catsOf('expense')].map(([k, c]) =>
-    `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-bcat="${k}">${circleIco(c, 'ico round')}<span>${c.label}</span></button>`).join('');
+    `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-bcat="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'สร้างงบประมาณ' : 'แก้ไขงบประมาณ'}</h2>
       <button class="link-btn strong" id="saveBudget">บันทึก</button>
     </div>
@@ -991,18 +1133,58 @@ function budgetForm(bg, preset = {}) {
 
 /* ---------- Transaction form ---------- */
 
+// Category picker layered over the open sheet: the top-level grid, and a parent with
+// sub-categories shows its subs underneath. Picking one calls onPick(id) and closes.
+function catPicker(type, current, onPick) {
+  const old = $('#catLayer');
+  if (old) old.remove();
+  const layer = document.createElement('div');
+  layer.id = 'catLayer';
+  layer.innerHTML = `<div class="sheet-backdrop cat-layer-bg"></div><section class="sheet cat-layer" role="dialog" aria-modal="true">
+    <div class="grabber"></div>
+    <div class="sheet-head"><button class="close-x" data-cpclose aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button><h2>หมวดหมู่</h2><span class="sheet-head-pad"></span></div>
+    <div class="cat-grid" id="cpGrid"></div><div class="chips sub-cats" id="cpSubs" hidden></div></section>`;
+  document.body.appendChild(layer);
+  let root = current ? catRootId(current, type) : '';
+  const close = () => layer.remove();
+  const paint = () => {
+    $('#cpGrid').innerHTML = catsOf(type).map(([k, c]) =>
+      `<button type="button" class="cat ${root === k ? 'on' : ''}" data-cp="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
+    const kids = root ? catChildren(root) : [];
+    $('#cpSubs').hidden = !kids.length;
+    $('#cpSubs').innerHTML = kids.length ? [catById(root), ...kids].map((c, i) =>
+      `<button type="button" class="chip sub-pick ${current === c.id ? 'on' : ''}" data-cpsub="${c.id}">${c.icon} ${i ? esc(c.label) : 'ทั่วไป'}</button>`).join('') : '';
+  };
+  paint();
+  layer.addEventListener('click', (e) => {
+    if (e.target.closest('[data-cpclose]') || e.target.classList.contains('cat-layer-bg')) return close();
+    const sub = e.target.closest('[data-cpsub]');
+    if (sub) { onPick(sub.dataset.cpsub); return close(); }
+    const top = e.target.closest('[data-cp]');
+    if (!top) return;
+    // A parent with sub-categories waits for the sub (or ทั่วไป); anything else is picked straight away.
+    if (catChildren(top.dataset.cp).length) {
+      root = top.dataset.cp;
+      paint();
+      $('#cpSubs').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else { onPick(top.dataset.cp); close(); }
+  });
+}
+
 function txnForm(t, preset = {}) {
   const isNew = !t;
   const me = cloud.user ? cloud.user.id : null;
   const canShare = isCloud() && !!cloud.partner;
   const d = t ? { ...t } : {
-    type: 'expense', amount: '', category: 'food', walletId: defaultWalletId(), toWalletId: '',
+    type: 'expense', amount: '', category: '', walletId: defaultWalletId(), toWalletId: '',
     date: dateStr(new Date()), note: '', merchant: '', scope: 'personal', ...preset,
   };
   // The form edits the whole bill; a shared row stores my share in `amount` and the bill in `total`.
-  let shareEdited = false;
-  if (t && t.scope === 'shared') { d.amount = t.total; d.myShare = t.amount; shareEdited = true; }
+  if (t && t.scope === 'shared') { d.amount = t.total; d.split = splitOf(t); }
   if (!d.payerId) d.payerId = me;
+  if (!d.split) d.split = 'half';
+  // Who bears the cost under รับผิดชอบทั้งหมด: the payer, which is me for everything new.
+  const fullLabel = d.payerId === me ? 'รับผิดชอบทั้งหมด' : `${esc(partnerName())} รับผิดชอบทั้งหมด`;
   if (d.scope === 'shared' && !canShare) d.scope = 'personal';
   const receipts = isCloud() && cloud.features.storage;
   const wOpts = (selId, skip) => money.wallets.filter((w) => w.id !== skip)
@@ -1010,60 +1192,54 @@ function txnForm(t, preset = {}) {
 
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'เพิ่มรายการ' : 'แก้ไขรายการ'}</h2>
-      <button class="link-btn strong" id="saveTx">บันทึก</button>
+      <span class="sheet-head-pad"></span>
     </div>
     <div class="seg" id="txType">
       <button type="button" data-ttype="expense">รายจ่าย</button>
       <button type="button" data-ttype="income">รายรับ</button>
       <button type="button" data-ttype="transfer">โอนเงิน</button>
     </div>
-    ${canShare ? `<div class="seg" id="txScope">
+    ${canShare ? `<div class="scope-row" id="txScope">
       <button type="button" data-scope="personal">ส่วนตัว</button>
-      <button type="button" data-scope="shared">ร่วมกับ ${esc(partnerName())}</button>
+      <button type="button" data-scope="shared" class="scope-partner" aria-label="ร่วมกับ ${esc(partnerName())}">${userAvatar({ name: partnerName(), avatar: cloud.partner.avatar }, 'scope-av')}<span>${esc(partnerName())}</span></button>
     </div>` : ''}
     ${receipts ? `<div class="section-title">✨ AI Slips</div>
     <p class="hint">อัปโหลดสลิป แล้ว AI จะกรอกหมวด ยอดเงิน และวันที่โอนให้ ตรวจแก้ได้ก่อนบันทึก</p>
     <div class="receipt-row">
-      <button type="button" class="chip" id="rcCam">📷 ถ่ายสลิป</button>
-      <button type="button" class="chip" id="rcPick">🖼️ เลือกรูปสลิป</button>
+      <button type="button" class="scan-btn" id="rcScan">${SCAN_ICON}<span class="scan-text">สแกนสลิป</span></button>
       ${d.receiptKey ? '<button type="button" class="chip" id="rcView">🧾 ดูสลิป</button>' : ''}
-      <input type="file" id="rcCamIn" accept="image/*" capture="environment" hidden>
-      <input type="file" id="rcPickIn" accept="image/jpeg,image/png,image/webp,image/*" hidden>
+      <!-- No capture attribute: iOS then offers camera or photo library from one button. -->
+      <input type="file" id="rcIn" accept="image/*" hidden>
     </div><div id="rcStatus"></div>` : ''}
     <div class="amount-input" id="tAmtWrap"><span>฿</span><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
-    <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่ รายการจะถูกบันทึกเป็น "รอตรวจสอบ" จนกว่าจะเลือก</p></div>
+    <div id="tCatWrap"><button type="button" class="cat-pick-btn" id="tCatOpen"></button></div>
     <div class="form">
       <div class="field" id="tMerchRow"><label for="tMerchant">ร้านค้า / ผู้รับ</label><input id="tMerchant" placeholder="เช่น 7-Eleven" value="${esc(d.merchant || '')}" autocomplete="off"></div>
       <div id="tShareRows">
-        <div class="field"><label for="tPayer">ใครจ่าย</label><select id="tPayer">
-          <option value="${me}" ${d.payerId === me ? 'selected' : ''}>ฉัน</option>
-          ${canShare ? `<option value="${cloud.partner.id}" ${d.payerId === cloud.partner.id ? 'selected' : ''}>${esc(partnerName())}</option>` : ''}
-        </select></div>
-        <div class="field"><label for="tMine">ส่วนของฉัน (฿)</label><input id="tMine" inputmode="decimal" value="${d.myShare ?? ''}"></div>
-        <div class="kv"><span>ส่วนของ ${esc(partnerName())}</span><b id="tTheirs">-</b></div>
+        <div class="field col"><label>ต้นทุน</label>
+          <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel}</button><button type="button" data-split="half">หาร 2</button></div></div>
+        <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div>
       </div>
       <div class="field" id="tWalletRow"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select></div>
       <div class="field" id="tToRow"><label for="tTo">ไปยัง</label><select id="tTo"></select></div>
       <div class="field"><label for="tDate">วันที่</label><input type="date" id="tDate" value="${d.date}"></div>
       <div class="field"><label for="tNote">บันทึก</label><input id="tNote" placeholder="เช่น ข้าวกลางวัน" value="${esc(d.note || '')}" autocomplete="off"></div>
-      <div class="field" id="tReviewRow"><label for="tReview">รอตรวจสอบ</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="tReview" ${d.reviewNeeded ? 'checked' : ''}><span></span></label></div>
+      <div class="field col labels-field"><label>ป้ายกำกับ</label><div class="chips lab-pick" id="tLabels"></div></div>
     </div>
-    <p class="hint" id="tShareHint">ใส่ยอดรวมทั้งบิล ค่าเริ่มต้นแบ่งครึ่ง แก้ส่วนของแต่ละคนได้ รายการจะนับเป็นรายจ่ายเมื่อ ${esc(partnerName())} อนุมัติแล้วเท่านั้น</p>
-    ${d.status === 'rejected' ? `<p class="hint bad-text">ถูกปฏิเสธ${d.rejectReason ? `: ${esc(d.rejectReason)}` : ''} — แก้ไขแล้วกดบันทึกเพื่อส่งใหม่</p>` : ''}
+    <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
     ${d.billId ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
-    <button class="btn ghost" id="draftTx" hidden>บันทึกเป็นร่าง (ยังไม่ส่ง)</button>
     ${isNew ? '' : '<button class="btn danger" id="delTx">ลบรายการ</button>'}
+    <div class="save-bar"><button type="button" class="save-pill" id="saveTx">${isNew ? 'เพิ่มรายการ' : 'บันทึก'}</button></div>
   `);
 
   const shared = () => d.scope === 'shared' && d.type === 'expense';
+  const myShare = (total) => (d.split === 'full' ? (d.payerId === me ? total : 0) : Math.round((total / 2) * 100) / 100);
   const updateShares = () => {
     if (!shared()) return;
-    const total = num($('#tAmount').value) || 0;
-    if (!shareEdited) $('#tMine').value = total ? Math.round((total / 2) * 100) / 100 : '';
-    const mine = num($('#tMine').value) || 0;
-    $('#tTheirs').textContent = baht(Math.max(0, Math.round((total - mine) * 100) / 100));
+    document.querySelectorAll('#tSplit button').forEach((x) => x.classList.toggle('on', x.dataset.split === d.split));
+    $('#tMine').textContent = baht(myShare(num($('#tAmount').value) || 0));
   };
   const renderType = () => {
     document.querySelectorAll('#txType button').forEach((x) => x.classList.toggle('on', x.dataset.ttype === d.type));
@@ -1074,14 +1250,11 @@ function txnForm(t, preset = {}) {
     const sh = shared();
     $('#tCatWrap').hidden = transfer;
     $('#tMerchRow').hidden = transfer;
-    $('#tReviewRow').hidden = transfer;
     $('#tToRow').hidden = !transfer;
     $('#tShareRows').hidden = !sh;
     $('#tShareHint').hidden = !sh;
-    $('#draftTx').hidden = !sh;
-    $('#saveTx').textContent = sh ? 'ส่งขออนุมัติ' : 'บันทึก';
     // The wallet only matters when I am the one paying.
-    $('#tWalletRow').hidden = sh && $('#tPayer').value !== me;
+    $('#tWalletRow').hidden = sh && d.payerId !== me;
     $('#tWalletLab').textContent = transfer ? 'จาก' : sh ? 'จ่ายจาก' : 'กระเป๋าเงิน';
     updateShares();
     if (transfer) {
@@ -1090,12 +1263,25 @@ function txnForm(t, preset = {}) {
       $('#tTo').innerHTML = wOpts(d.toWalletId, from);
       return;
     }
-    if (d.category && (!TX_CATS[d.category] || TX_CATS[d.category].type !== d.type)) d.category = catsOf(d.type)[0][0];
-    $('#tCatHint').hidden = !!d.category;
-    $('#tCats').innerHTML = catsOf(d.type).map(([k, c]) =>
-      `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-tcat="${k}">${circleIco(c, 'ico round')}<span>${c.label}</span></button>`).join('');
+    if (d.category) {
+      const c = catById(d.category);
+      d.category = c && c.type === d.type ? c.id : catsOf(d.type)[0][0];
+    }
+    paintCats();
+  };
+  // The form shows one round button: "?" until a category is picked, then its icon and name.
+  // Tapping it opens the category picker on top of this sheet.
+  const paintCats = () => {
+    const c = d.category ? catById(d.category) : null;
+    const root = c ? catRootId(c.id, d.type) : '';
+    const parent = c && root !== c.id ? catById(root) : null;
+    $('#tCatOpen').classList.toggle('on', !!c);
+    $('#tCatOpen').innerHTML = (c ? circleIco(c, 'ico round') : '<span class="ico round q">?</span>')
+      + `<span class="cp-name">${parent ? `<small>${esc(parent.label)}</small>` : ''}<b>${c ? esc(c.label) : 'หมวดหมู่'}</b></span><span class="chev">›</span>`;
   };
   renderType();
+  const pickedLabels = new Set(d.labels || []);
+  const repaintLabels = labelPicker($('#tLabels'), pickedLabels);
 
   $('#txType').addEventListener('click', (e) => {
     const b = e.target.closest('[data-ttype]');
@@ -1109,16 +1295,14 @@ function txnForm(t, preset = {}) {
     d.scope = b.dataset.scope;
     renderType();
   });
-  $('#tCats').addEventListener('click', (e) => {
-    const c = e.target.closest('[data-tcat]');
-    if (!c) return;
-    d.category = c.dataset.tcat;
-    $('#tCatHint').hidden = true;
-    document.querySelectorAll('#tCats .cat').forEach((x) => x.classList.toggle('on', x === c));
-  });
+  $('#tCatOpen').addEventListener('click', () => catPicker(d.type, d.category, (id) => { d.category = id; paintCats(); }));
   $('#tAmount').addEventListener('input', updateShares);
-  $('#tMine').addEventListener('input', () => { shareEdited = true; updateShares(); });
-  $('#tPayer').addEventListener('change', renderType);
+  $('#tSplit').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-split]');
+    if (!b) return;
+    d.split = b.dataset.split;
+    updateShares();
+  });
   $('#tWallet').addEventListener('change', () => { if (d.type === 'transfer') renderType(); });
   $('#tTo').addEventListener('change', (e) => { d.toWalletId = e.target.value; });
 
@@ -1128,7 +1312,7 @@ function txnForm(t, preset = {}) {
       if (!file) return;
       status('⏳ กำลังอัปโหลดและอ่านสลิป…');
       try {
-        const r = await uploadReceipt(file);
+        const r = await uploadReceipt(file, money.labels.map((l) => l.name), slipCats());
         d.receiptKey = r.key;
         const x = r.result;
         if (x) {
@@ -1137,11 +1321,13 @@ function txnForm(t, preset = {}) {
           if (x.merchant) $('#tMerchant').value = x.merchant;
           if (x.note && !$('#tNote').value) $('#tNote').value = x.note;
           if (x.reference) d.slipRef = x.reference;
+          // AI Slips suggests existing labels by name; they are added, never removed.
+          (x.labels || []).forEach((n) => { const l = money.labels.find((y) => y.name === n); if (l) pickedLabels.add(l.id); });
+          repaintLabels();
           d.type = 'expense';
           d.category = x.category || null;
           renderType();
         }
-        $('#tReview').checked = r.status !== 'ok';
         status({
           ok: '✅ อ่านสลิปแล้ว ตรวจสอบข้อมูลอีกครั้งก่อนบันทึก',
           needs_review: '⚠️ อ่านได้ไม่ครบหรือไม่ทราบวัตถุประสงค์ของการโอน กรุณาตรวจสอบและเลือกหมวดหมู่',
@@ -1152,21 +1338,19 @@ function txnForm(t, preset = {}) {
         status('❌ อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
       }
     };
-    $('#rcCam').addEventListener('click', () => $('#rcCamIn').click());
-    $('#rcPick').addEventListener('click', () => $('#rcPickIn').click());
-    $('#rcCamIn').addEventListener('change', (e) => onFile(e.target.files[0]));
-    $('#rcPickIn').addEventListener('change', (e) => onFile(e.target.files[0]));
+    $('#rcScan').addEventListener('click', () => $('#rcIn').click());
+    $('#rcIn').addEventListener('change', (e) => { onFile(e.target.files[0]); e.target.value = ''; });
     if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
   }
 
-  const save = (submit) => {
+  const save = () => {
     const total = num($('#tAmount').value);
     if (!(total > 0)) { toast('กรุณาใส่จำนวนเงิน'); $('#tAmount').focus(); return; }
     const date = $('#tDate').value;
     if (!date) { toast('กรุณาเลือกวันที่'); return; }
     const out = {
       id: d.id || newId(), type: d.type, amount: total, walletId: $('#tWallet').value, date, note: $('#tNote').value.trim(),
-      scope: 'personal',
+      scope: 'personal', labels: money.labels.filter((l) => pickedLabels.has(l.id)).map((l) => l.id),
     };
     if (d.type === 'transfer') {
       out.toWalletId = $('#tTo').value;
@@ -1174,30 +1358,27 @@ function txnForm(t, preset = {}) {
     } else {
       out.category = d.category || null;
       out.merchant = $('#tMerchant').value.trim();
-      out.reviewNeeded = $('#tReview').checked || !out.category;
+      out.reviewNeeded = false;
       if (d.receiptKey) out.receiptKey = d.receiptKey;
       if (d.slipRef) out.slipRef = d.slipRef;
     }
     if (d.billId) { out.billId = d.billId; out.billYm = d.billYm; }
     if (shared()) {
-      const mine = num($('#tMine').value) || 0;
-      if (mine < 0 || mine > total) { toast('ส่วนของฉันต้องไม่เกินยอดรวม'); $('#tMine').focus(); return; }
-      const payer = $('#tPayer').value;
-      const payerMe = payer === me;
+      // A record for my partner to see, counted straight away; the split only sets each person's cost.
+      const mine = myShare(total);
+      const payerMe = d.payerId === me;
       Object.assign(out, {
-        scope: 'shared', total, amount: mine, payerId: payer, ownerId: me, walletId: payerMe ? out.walletId : null,
-        walletAmount: payerMe ? total : 0, counted: false, status: submit ? 'pending' : 'draft',
+        scope: 'shared', total, amount: mine, payerId: d.payerId, ownerId: me, walletId: payerMe ? out.walletId : null,
+        walletAmount: payerMe ? total : 0, counted: true, status: 'approved',
         shares: { [me]: mine, [cloud.partner.id]: Math.round((total - mine) * 100) / 100 },
-        events: d.events || [], revision: d.revision || 1,
       });
     }
-    saveTxn(out, { submit: !!submit });
+    saveTxn(out);
     if (out.walletId && money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
     closeSheet(); render(); if (isNew) popIn();
-    toast(out.scope === 'shared' ? (submit ? `ส่งให้ ${partnerName()} อนุมัติแล้ว` : 'บันทึกร่างแล้ว') : isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว');
+    toast(out.scope === 'shared' ? `บันทึกแล้ว ${partnerName()} จะเห็นรายการนี้` : isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว');
   };
-  $('#saveTx').addEventListener('click', () => save(true));
-  $('#draftTx').addEventListener('click', () => save(false));
+  $('#saveTx').addEventListener('click', save);
   const del = $('#delTx');
   if (del) del.addEventListener('click', () => {
     confirmDelete('ลบรายการนี้?', '', () => {
@@ -1267,7 +1448,7 @@ function walletForm(w) {
   const used = w && money.txns.some((t) => t.walletId === w.id || t.toWalletId === w.id);
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'เพิ่มกระเป๋าเงิน' : 'แก้ไขกระเป๋าเงิน'}</h2>
       <button class="link-btn strong" id="saveWallet">บันทึก</button>
     </div>
@@ -1344,6 +1525,335 @@ function walletForm(w) {
   if (isNew) setTimeout(() => $('#wName') && $('#wName').focus(), 300);
 }
 
+/* ---------- Labels ---------- */
+
+// Toggleable label chips plus a "new label" box, drawn into `box`. `picked` is a Set
+// of label ids that the chips change in place; onChange runs after each change.
+// Returns a function that redraws.
+function labelPicker(box, picked, onChange = () => {}) {
+  const paint = () => {
+    box.innerHTML = money.labels.map((l) =>
+      `<button type="button" class="chip lab ${picked.has(l.id) ? 'on' : ''}" data-lpick="${esc(l.id)}">${svgIcon('tag', 'svg-i xs')}${esc(l.name)}</button>`).join('')
+      + '<input class="chip lab-new" placeholder="＋ ป้ายใหม่" maxlength="60" autocomplete="off" enterkeyhint="done">';
+    const input = box.querySelector('.lab-new');
+    const add = () => {
+      const name = input.value.trim();
+      input.value = '';
+      if (!name) return;
+      let l = money.labels.find((x) => x.name.toLowerCase() === name.toLowerCase());
+      if (!l) { l = { id: newId(), name }; saveLabel(l); }
+      picked.add(l.id);
+      paint();
+      onChange();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    input.addEventListener('blur', add);
+  };
+  box.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-lpick]');
+    if (!c) return;
+    const id = c.dataset.lpick;
+    if (picked.has(id)) picked.delete(id); else picked.add(id);
+    c.classList.toggle('on', picked.has(id));
+    onChange();
+  });
+  paint();
+  return paint;
+}
+
+// How a label is used: like "15 รายการ ใน 2 กระเป๋า".
+function labelUse(l) {
+  const list = money.txns.filter((t) => (t.labels || []).includes(l.id));
+  const wallets = new Set(list.map((t) => t.walletId).filter(Boolean));
+  return { list, n: list.length, wallets: wallets.size };
+}
+
+function labelsSheet() {
+  const rows = money.labels.map((l) => {
+    const u = labelUse(l);
+    return `
+      <div class="item lab-row">
+        <button class="lab-open" data-label-open="${esc(l.id)}">
+          <span class="lab-tag">${svgIcon('tag')}</span>
+          <div class="main"><div class="name">${esc(l.name)}</div>${u.n ? `<div class="sub">${u.n} รายการ ใน ${u.wallets || 1} กระเป๋า</div>` : ''}</div>
+        </button>
+        <button class="round-btn sm" data-label-menu="${esc(l.id)}" aria-label="ตัวเลือก">${svgIcon('more')}</button>
+      </div>`;
+  }).join('');
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>ป้ายกำกับ</h2><button class="link-btn strong" data-action="add-label">เพิ่ม</button></div>
+    ${money.labels.length ? `<div class="list">${rows}</div>` : `<div class="empty"><div class="e-ico">🏷️</div>ยังไม่มีป้ายกำกับ<br><span class="muted small">ใช้จัดกลุ่มรายการข้ามหมวดหมู่ เช่น Grabfood, Shopee, ทริปเชียงใหม่</span></div>`}
+    <div class="list" style="margin-top:18px">
+      <button class="item add-row" data-action="add-label"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มป้ายกำกับ</div></div></button>
+    </div>
+    <p class="hint">ติดป้ายได้หลายป้ายต่อรายการ ในหน้าเพิ่ม/แก้ไขรายการ${isCloud() ? ' ป้ายกำกับซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+  `);
+}
+
+function labelMenu(id) {
+  const l = labelById(id);
+  if (!l) return;
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="labels">กลับ</button><h2>${esc(l.name)}</h2><span style="width:40px"></span></div>
+    <div class="list">
+      <button class="item" data-label-open="${esc(l.id)}">${circleIco({ icon: '📋', color: '#2f6bff' })}<div class="main"><div class="name">ดูรายการ</div></div></button>
+      <button class="item" data-txlabel="${esc(l.id)}">${circleIco({ icon: '🔎', color: '#1a9e5c' })}<div class="main"><div class="name">กรองในหน้ารายการ</div></div></button>
+      <button class="item" id="lbRename">${circleIco({ icon: '✏️', color: '#8a8f99' })}<div class="main"><div class="name">เปลี่ยนชื่อ</div></div></button>
+      <button class="item" id="lbDelete">${circleIco({ icon: '🗑️', color: '#e5484d' })}<div class="main"><div class="name exp">ลบป้ายกำกับ</div></div></button>
+    </div>`);
+  $('#lbRename').addEventListener('click', () => labelForm(l));
+  $('#lbDelete').addEventListener('click', () => labelDelete(l));
+}
+
+function labelDelete(l) {
+  const n = labelUse(l).n;
+  confirmDelete(`ลบป้าย "${l.name}"?`, n ? `ป้ายนี้จะถูกนำออกจาก ${n} รายการ (รายการยังอยู่)` : '', () => {
+    deleteLabel(l);
+    render(); labelsSheet(); toast('ลบแล้ว');
+  });
+}
+
+function labelForm(l) {
+  const isNew = !l;
+  openSheet(`
+    <div class="sheet-head">
+      <button class="close-x" data-action="labels" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <h2>${isNew ? 'เพิ่มป้ายกำกับ' : 'เปลี่ยนชื่อป้าย'}</h2>
+      <button class="link-btn strong" id="saveLabel">บันทึก</button>
+    </div>
+    <form class="form" id="lbForm"><div class="field"><label for="lbName">ชื่อ</label><input id="lbName" maxlength="60" placeholder="เช่น Grabfood" value="${esc(l ? l.name : '')}" autocomplete="off"></div></form>
+    ${isNew ? '' : '<button class="btn danger" id="lbDel">ลบป้ายกำกับ</button>'}
+  `);
+  const save = (e) => {
+    if (e) e.preventDefault();
+    const name = $('#lbName').value.trim();
+    if (!name) { toast('กรุณาใส่ชื่อป้าย'); $('#lbName').focus(); return; }
+    if (money.labels.some((x) => x.name.toLowerCase() === name.toLowerCase() && (!l || x.id !== l.id))) { toast('มีป้ายชื่อนี้แล้ว'); return; }
+    saveLabel({ ...(l || { id: newId() }), name });
+    render(); labelsSheet(); if (isNew) popIn();
+    toast(isNew ? 'เพิ่มป้ายกำกับแล้ว' : 'บันทึกแล้ว');
+  };
+  $('#saveLabel').addEventListener('click', save);
+  $('#lbForm').addEventListener('submit', save);
+  if ($('#lbDel')) $('#lbDel').addEventListener('click', () => labelDelete(l));
+  setTimeout(() => $('#lbName') && $('#lbName').focus(), 300);
+}
+
+// All transactions with one label, with totals and a per-month summary.
+function labelDetail(id) {
+  const l = labelById(id);
+  if (!l) return;
+  const S = walletSet('total');
+  const { list } = labelUse(l);
+  const counted = list.filter((t) => t.type !== 'transfer' && counts(t));
+  const { income, expense } = totalsIn(counted, S);
+  const ym = ymOf(new Date());
+  const month = totalsIn(counted.filter((t) => t.date.slice(0, 7) === ym), S);
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="labels">กลับ</button><h2>${esc(l.name)}</h2><button class="round-btn sm" data-label-menu="${esc(l.id)}" aria-label="ตัวเลือก">${svgIcon('more')}</button></div>
+    <div class="card summary">
+      <div class="row" style="margin-top:0">
+        <div class="stat exp-soft"><span>รายจ่ายทั้งหมด</span><b class="exp">${baht(expense)}</b></div>
+        <div class="stat inc-soft"><span>รายรับทั้งหมด</span><b class="inc">${baht(income)}</b></div>
+      </div>
+      <div class="kv" style="padding:12px 2px 0"><span>เดือนนี้</span><b>${month.expense ? `จ่าย ${baht(month.expense)}` : ''}${month.expense && month.income ? ' · ' : ''}${month.income ? `รับ ${baht(month.income)}` : ''}${month.expense || month.income ? '' : '-'}</b></div>
+      <div class="kv" style="padding:6px 2px 0"><span>จำนวน</span><span>${list.length} รายการ</span></div>
+    </div>
+    ${list.length ? `<button class="btn ghost" data-txlabel="${esc(l.id)}" style="margin-bottom:12px">กรองในหน้ารายการ</button>${dayGroups(list, S)}`
+    : '<div class="empty"><div class="e-ico">🏷️</div>ยังไม่มีรายการที่ติดป้ายนี้</div>'}
+  `);
+}
+
+function labelFilterSheet() {
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>กรองตามป้ายกำกับ</h2><button class="link-btn" data-action="labels">แก้ไข</button></div>
+    <div class="list">
+      <button class="item" data-txlabel=""><span class="lab-tag">${svgIcon('tag')}</span><div class="main"><div class="name">ทุกรายการ</div></div>${ui.txLabel ? '' : '<span class="tick">✓</span>'}</button>
+      ${money.labels.map((l) => `<button class="item" data-txlabel="${esc(l.id)}"><span class="lab-tag">${svgIcon('tag')}</span>
+        <div class="main"><div class="name">${esc(l.name)}</div><div class="sub">${labelUse(l).n} รายการ</div></div>${ui.txLabel === l.id ? '<span class="tick">✓</span>' : ''}</button>`).join('')}
+    </div>`);
+}
+
+/* ---------- Categories (settings) ---------- */
+
+const CAT_ICONS = ['🍴', '🍜', '☕', '🧋', '🍺', '🍸', '🛒', '👕', '👟', '👜', '💄', '✂️', '🏠', '🛏️', '🧹', '💡', '💧', '🔥', '📞', '🌐', '📺',
+  '💳', '🚗', '⛽', '🚕', '🚇', '✈️', '🏨', '🩺', '💊', '🏋️', '⚽', '🎮', '🎬', '🎵', '📚', '🎓', '🐶', '🐱', '🐾', '🧸', '👶', '🎁', '🧡', '🙏',
+  '📱', '💻', '🏛️', '🛡️', '🏦', '📈', '💰', '💵', '🎉', '📦', '🤝', '🧾', '🏷️'];
+const CAT_COLORS = ['#a8844f', '#d98a2b', '#f0a92e', '#b8a12a', '#3fae8c', '#4fb3ad', '#3d8fe0', '#2f6bff', '#5b6a8f',
+  '#7d7aa8', '#9b59b6', '#d0507f', '#d9534f', '#c97a2b', '#7a7f88', '#1a9e5c'];
+
+function setCats(list) {
+  money.prefs.cats = list;
+  savePrefs();
+}
+function newCatId() { return `c_${Math.random().toString(36).slice(2, 10)}`; }
+// How many transactions sit in a category itself (not its subs).
+function catUseCount(id) { return money.txns.filter((t) => t.category && t.type !== 'transfer' && catResolve(t.category) === id).length; }
+
+function catsSheet() {
+  const type = ui.catType || 'expense';
+  const row = (c, kid) => {
+    const n = catUseCount(c.id);
+    return `<div class="item cat-row ${kid ? 'kid' : ''}" data-sort="${c.id}">
+      <button class="cat-open" data-cat-edit="${c.id}">${circleIco(c)}<div class="main"><div class="name">${esc(c.label)}</div>${n ? `<div class="sub">${n} รายการ</div>` : ''}</div></button>
+      <span class="drag-h" aria-label="ลากเพื่อเรียง">${svgIcon('menu')}</span></div>`;
+  };
+  const groups = catsOf(type).map(([id, c]) => {
+    const kids = catChildren(id);
+    return `<div class="list cat-group" data-sort="${id}">${row(c, false)}${kids.length ? `<div class="cat-kids">${kids.map((k) => row(k, true)).join('')}</div>` : ''}</div>`;
+  }).join('');
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>หมวดหมู่</h2><button class="link-btn strong" data-action="add-cat">เพิ่ม</button></div>
+    <div class="seg" id="catType"><button type="button" data-ctype="expense" class="${type === 'expense' ? 'on' : ''}">รายจ่าย</button><button type="button" data-ctype="income" class="${type === 'income' ? 'on' : ''}">รายรับ</button></div>
+    <div class="cat-tree" id="catTree">${groups}</div>
+    <div class="list" style="margin-top:14px">
+      <button class="item add-row" data-action="add-cat"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มหมวดหมู่</div></div></button>
+    </div>
+    <p class="hint">ลาก ☰ เพื่อเรียงลำดับ แตะหมวดเพื่อแก้ชื่อ ไอคอน สี หรือเพิ่มหมวดย่อย${isCloud() ? ' หมวดหมู่ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+  `);
+  $('#catType').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ctype]');
+    if (!b || b.dataset.ctype === type) return;
+    ui.catType = b.dataset.ctype;
+    catsSheet();
+  });
+  sortable($('#catTree'), () => {
+    // The page order is the new order for this type; the other type keeps its own.
+    const ids = [...$('#catTree').querySelectorAll('.cat-row[data-sort]')].map((x) => x.dataset.sort);
+    setCats([...catList().filter((c) => c.type !== type), ...ids.map((id) => catMap().get(id))]);
+    render();
+  });
+}
+
+// Drag rows by their .drag-h handle among their siblings (the [data-sort] children of one parent).
+function sortable(box, onDone) {
+  box.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('.drag-h');
+    if (!h) return;
+    // A handle belongs to its row; a top-level row drags its whole group.
+    let el = h.closest('[data-sort]');
+    if (el.parentElement.classList.contains('cat-group')) el = el.parentElement;
+    const list = el.parentElement;
+    e.preventDefault();
+    h.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    const base = el.getBoundingClientRect().top;
+    el.classList.add('dragging');
+    const move = (ev) => {
+      const y = ev.clientY;
+      const sibs = [...list.children].filter((x) => x !== el && x.matches('[data-sort]'));
+      for (const o of sibs) {
+        const r = o.getBoundingClientRect();
+        const mid = r.top + r.height / 2;
+        const before = o.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
+        if (before && y < mid) { list.insertBefore(el, o); break; }
+        if (!before && y > mid) { list.insertBefore(el, o.nextSibling); break; }
+      }
+      el.style.transform = '';
+      const now = el.getBoundingClientRect().top;
+      el.style.transform = `translateY(${y - startY - (now - base)}px)`;
+    };
+    const up = () => {
+      h.removeEventListener('pointermove', move);
+      h.removeEventListener('pointerup', up);
+      h.removeEventListener('pointercancel', up);
+      el.style.transform = '';
+      el.classList.remove('dragging');
+      onDone();
+    };
+    h.addEventListener('pointermove', move);
+    h.addEventListener('pointerup', up);
+    h.addEventListener('pointercancel', up);
+  });
+}
+
+function catForm(c, preset = {}) {
+  const isNew = !c;
+  const d = c ? { ...c } : { id: newCatId(), type: preset.type || ui.catType || 'expense', label: '', icon: '🏷️', color: CAT_COLORS[0], parent: preset.parent };
+  const fixed = Object.values(CAT_FALLBACK).includes(d.id);
+  const kids = isNew ? [] : catChildren(d.id);
+  const parents = catsOf(d.type).filter(([id]) => id !== d.id && !Object.values(CAT_FALLBACK).includes(id));
+  const back = d.parent && preset.parent ? `data-cat-edit="${d.parent}"` : 'data-action="categories"';
+  openSheet(`
+    <div class="sheet-head">
+      <button class="close-x" ${back} aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <h2>${isNew ? (d.parent ? 'เพิ่มหมวดย่อย' : 'เพิ่มหมวดหมู่') : 'แก้ไขหมวดหมู่'}</h2>
+      <button class="link-btn strong" id="saveCat">บันทึก</button>
+    </div>
+    <div class="cat-preview" id="cfPreview"></div>
+    <form class="form" id="cfForm">
+      <div class="field"><label for="cfName">ชื่อ</label><input id="cfName" maxlength="40" placeholder="เช่น Water Bill" value="${esc(d.label)}" autocomplete="off"></div>
+      <div class="field"><label for="cfIcon">ไอคอน</label><input id="cfIcon" maxlength="16" value="${esc(d.icon)}" autocomplete="off" style="text-align:right"></div>
+      ${fixed || kids.length ? '' : `<div class="field"><label for="cfParent">อยู่ใต้หมวด</label><select id="cfParent">
+        <option value="">ไม่มี (เป็นหมวดหลัก)</option>
+        ${parents.map(([id, p]) => `<option value="${id}" ${d.parent === id ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
+      </select></div>`}
+    </form>
+    <div class="section-title">เลือกไอคอน</div>
+    <div class="emoji-grid" id="cfIcons">${CAT_ICONS.map((x) => `<button type="button" data-icon="${x}">${x}</button>`).join('')}</div>
+    <div class="section-title">สี</div>
+    <div class="swatches" id="cfColors">${CAT_COLORS.map((x) => `<button type="button" data-color="${x}" style="background:${x}" aria-label="${x}"></button>`).join('')}</div>
+    ${isNew || d.parent ? '' : `
+      <div class="section-title">หมวดย่อย</div>
+      <div class="list">
+        ${kids.map((k) => `<button class="item" data-cat-edit="${k.id}">${circleIco(k)}<div class="main"><div class="name">${esc(k.label)}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>`).join('')}
+        ${fixed ? '' : `<button class="item add-row" id="cfAddSub"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มหมวดย่อย</div></div></button>`}
+      </div>`}
+    ${isNew || fixed ? '' : '<button class="btn danger" id="cfDel" style="margin-top:18px">ลบหมวดหมู่</button>'}
+    ${fixed ? '<p class="hint">หมวดนี้ลบไม่ได้ เพราะเป็นที่รวมรายการจากหมวดที่ถูกลบ</p>' : ''}
+  `);
+  const paint = () => {
+    $('#cfPreview').innerHTML = `${circleIco(d, 'ico round big')}<b>${esc($('#cfName').value.trim() || 'ชื่อหมวดหมู่')}</b>`;
+    document.querySelectorAll('#cfColors button').forEach((x) => x.classList.toggle('on', x.dataset.color === d.color));
+    document.querySelectorAll('#cfIcons button').forEach((x) => x.classList.toggle('on', x.dataset.icon === d.icon));
+  };
+  paint();
+  $('#cfName').addEventListener('input', paint);
+  $('#cfIcon').addEventListener('input', (e) => { const v = e.target.value.trim(); if (v && !/[<>&"']/.test(v)) { d.icon = v; paint(); } });
+  $('#cfIcons').addEventListener('click', (e) => { const b = e.target.closest('[data-icon]'); if (b) { d.icon = b.dataset.icon; $('#cfIcon').value = d.icon; paint(); } });
+  $('#cfColors').addEventListener('click', (e) => { const b = e.target.closest('[data-color]'); if (b) { d.color = b.dataset.color; paint(); } });
+  const save = (e, then) => {
+    if (e) e.preventDefault();
+    const label = $('#cfName').value.trim();
+    if (!label) { toast('กรุณาใส่ชื่อหมวดหมู่'); $('#cfName').focus(); return false; }
+    const out = { id: d.id, type: d.type, label, icon: d.icon, color: d.color };
+    const parent = $('#cfParent') ? $('#cfParent').value : d.parent;
+    if (parent) out.parent = parent;
+    const list = catList();
+    setCats(isNew ? [...list, out] : list.map((x) => (x.id === out.id ? out : x)));
+    render();
+    if (then) then(); else if (out.parent && preset.parent) catForm(catById(out.parent)); else catsSheet();
+    toast(isNew ? 'เพิ่มหมวดหมู่แล้ว' : 'บันทึกแล้ว');
+    return true;
+  };
+  $('#saveCat').addEventListener('click', (e) => save(e));
+  $('#cfForm').addEventListener('submit', (e) => save(e));
+  if ($('#cfAddSub')) $('#cfAddSub').addEventListener('click', () => catForm(null, { type: d.type, parent: d.id }));
+  if ($('#cfDel')) $('#cfDel').addEventListener('click', () => catDelete(catById(d.id)));
+  if (isNew) setTimeout(() => $('#cfName') && $('#cfName').focus(), 300);
+}
+
+// Transactions keep their key; catMoved sends them to the parent (for a sub) or to Others.
+function catDelete(c) {
+  const target = c.parent || CAT_FALLBACK[c.type];
+  const gone = [c.id, ...catChildren(c.id).map((k) => k.id)];
+  const n = gone.reduce((s, id) => s + catUseCount(id), 0);
+  const budgets = money.budgets.filter((bg) => gone.includes(catResolve(bg.category)));
+  const kids = gone.length - 1;
+  const text = [
+    kids ? `หมวดย่อย ${kids} หมวดจะถูกลบด้วย` : '',
+    n ? `${n} รายการจะย้ายไปอยู่ "${catById(target).label}"` : '',
+    budgets.length ? `งบประมาณของหมวดนี้ ${budgets.length} รายการจะถูกลบ` : '',
+  ].filter(Boolean).join(' · ');
+  confirmDelete(`ลบหมวด "${c.label}"?`, text, () => {
+    money.prefs.catMoved = { ...(money.prefs.catMoved || {}) };
+    gone.forEach((id) => { money.prefs.catMoved[id] = target; });
+    budgets.forEach(deleteBudget);
+    setCats(catList().filter((x) => !gone.includes(x.id)));
+    render(); catsSheet(); toast('ลบแล้ว');
+  });
+}
+
 /* ---------- Account ---------- */
 
 function accountTop() {
@@ -1361,6 +1871,13 @@ function accountTop() {
     <div class="list">
       ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
       <button class="item add-row" data-action="add-wallet"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มกระเป๋าเงิน</div></div></button>
+    </div>
+    <div class="section-title">หมวดหมู่และป้ายกำกับ</div>
+    <div class="list">
+      <button class="item" data-action="categories">${circleIco({ icon: '🗂️', color: '#2f6bff' })}<div class="main"><div class="name">หมวดหมู่</div>
+        <div class="sub">แก้ไข เรียงลำดับ และหมวดย่อย</div></div><span class="muted">${catList().filter((c) => c.type === 'expense' && !c.parent).length}</span>${svgIcon('chev', 'svg-i sm muted')}</button>
+      <button class="item" data-action="labels"><div class="ico round lab-ico">${svgIcon('tag')}</div><div class="main"><div class="name">ป้ายกำกับ</div>
+        <div class="sub">${money.labels.length ? money.labels.slice(0, 4).map((l) => esc(l.name)).join(', ') + (money.labels.length > 4 ? ` และอีก ${money.labels.length - 4}` : '') : 'ติดป้ายให้รายการ เช่น Grabfood, Shopee'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
     </div>
     <div class="section-title">การจ่ายบิล</div>
     <div class="form">
@@ -1389,17 +1906,17 @@ function sampleMoney() {
     txns.push({ id: uid(), date, type, amount, category, walletId, note, ...extra });
   const t = today();
   const start = new Date(t.getFullYear(), t.getMonth() - 3, 1);
-  const foods = [['ข้าวมันไก่', 50], ['กาแฟ', 65], ['ก๋วยเตี๋ยว', 60], ['ข้าวกล่องเซเว่น', 45], ['ชานมไข่มุก', 55], ['ส้มตำ', 80]];
+  const foods = [['ข้าวมันไก่', 50], ['กาแฟ', 65, 'coffee'], ['ก๋วยเตี๋ยว', 60], ['ข้าวกล่องเซเว่น', 45], ['ชานมไข่มุก', 55, 'coffee'], ['ส้มตำ', 80]];
   for (let d = new Date(start); d <= t; d.setDate(d.getDate() + 1)) {
     const ds = dateStr(d);
     const n = 1 + Math.floor(rnd() * 3);
     for (let i = 0; i < n; i++) {
-      const [note, base] = pick(foods);
-      add(ds, 'expense', base + Math.round(rnd() * 4) * 10, 'food', pick([cash, cash, ew]), note);
+      const [note, base, cat = 'food'] = pick(foods);
+      add(ds, 'expense', base + Math.round(rnd() * 4) * 10, cat, pick([cash, cash, ew]), note);
     }
     if (rnd() < 0.3) add(ds, 'expense', 30 + Math.round(rnd() * 8) * 5, 'transport', pick([ew, cash]), pick(['BTS', 'MRT', 'Grab', 'วินมอไซค์']));
-    if (rnd() < 0.12) add(ds, 'expense', 300 + Math.round(rnd() * 30) * 50, 'shopping', bank, pick(['Shopee', 'Lazada', 'เสื้อผ้า', 'ของใช้ในบ้าน']));
-    if (rnd() < 0.05) add(ds, 'expense', 200 + Math.round(rnd() * 10) * 50, 'entertainment', bank, pick(['ดูหนัง', 'คอนเสิร์ต', 'เกม']));
+    if (rnd() < 0.12) add(ds, 'expense', 300 + Math.round(rnd() * 30) * 50, 'apparel', bank, pick(['Shopee', 'Lazada', 'เสื้อผ้า', 'รองเท้า']));
+    if (rnd() < 0.05) add(ds, 'expense', 200 + Math.round(rnd() * 10) * 50, 'hangout', bank, pick(['ดูหนัง', 'คอนเสิร์ต', 'เกม']));
     if (rnd() < 0.04) add(ds, 'expense', 150 + Math.round(rnd() * 10) * 30, 'health', cash, pick(['ร้านยา', 'คลินิก']));
     if (d.getDate() === 25) add(ds, 'income', 38000, 'salary', bank, 'เงินเดือน');
     if (d.getDay() === 1) add(ds, 'transfer', 1500, undefined, bank, 'กดเงินสด', { toWalletId: cash });
@@ -1408,15 +1925,17 @@ function sampleMoney() {
   }
   const f1 = new Date(t); f1.setDate(f1.getDate() + 3);
   const f2 = new Date(t); f2.setDate(f2.getDate() + 9);
-  add(dateStr(f1), 'expense', 1500, 'family', bank, 'ค่าเทอมพิเศษลูก');
+  add(dateStr(f1), 'expense', 1500, 'baby', bank, 'ของใช้ลูก');
   add(dateStr(f2), 'expense', 890, 'gift', bank, 'ของขวัญวันเกิดเพื่อน');
   const budgets = [
     { id: uid(), category: 'all', amount: 30000, walletId: 'total' },
     { id: uid(), category: 'food', amount: 5000, walletId: 'total' },
-    { id: uid(), category: 'shopping', amount: 3000, walletId: 'total' },
+    { id: uid(), category: 'apparel', amount: 3000, walletId: 'total' },
     { id: uid(), category: 'transport', amount: 1200, walletId: 'total' },
   ];
-  money = { wallets, txns, budgets, prefs: { ...money.prefs, billWallet: bank } };
+  wallets.forEach((w) => { w.name = tr(w.name); });
+  txns.forEach((x) => { x.note = tr(x.note); });
+  money = { wallets, txns, budgets, labels: money.labels || [], prefs: { ...money.prefs, billWallet: bank } };
   // Bills already paid in the sample show up as expenses from the bank account.
   const ym = ymOf(t);
   occurrences(ym).filter((o) => o.paid).forEach((o) => recordBillTxn(o.bill, ym, o.amount, bank, dateStr(o.due)));
@@ -1434,6 +1953,14 @@ function moneyClick(t) {
     else txnForm(x);
     return true;
   }
+  const tl = t.closest('[data-txlabel]');
+  if (tl) { ui.txLabel = tl.dataset.txlabel; closeSheet(); if (ui.tab !== 'txns') setTab('txns'); else render(); return true; }
+  const ce = t.closest('[data-cat-edit]');
+  if (ce) { const c = catById(ce.dataset.catEdit); if (c) catForm(c); return true; }
+  const lm = t.closest('[data-label-menu]');
+  if (lm) { labelMenu(lm.dataset.labelMenu); return true; }
+  const lo = t.closest('[data-label-open]');
+  if (lo) { labelDetail(lo.dataset.labelOpen); return true; }
   const tf = t.closest('[data-txfilter]');
   if (tf) { ui.txFilter = tf.dataset.txfilter; render(); return true; }
   const bud = t.closest('[data-budget]');
@@ -1468,6 +1995,11 @@ function moneyAction(action, el) {
       break;
     case 'search-close': ui.searchOpen = false; ui.search = ''; render(); break;
     case 'tx-menu': txMenu(); break;
+    case 'labels': labelsSheet(); break;
+    case 'categories': catsSheet(); break;
+    case 'add-cat': catForm(null, { type: ui.catType }); break;
+    case 'add-label': labelForm(); break;
+    case 'label-filter': labelFilterSheet(); break;
     case 'csv': closeSheet(); exportCsv(); break;
     case 'report': reportSheet(el.dataset.ym); break;
     case 'add-budget': budgetForm(); break;

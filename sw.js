@@ -1,20 +1,23 @@
 // Bump CACHE when shipping changes so installed apps pick up the new files.
-const CACHE = 'billplanner-v12';
+const CACHE = 'billplanner-v40';
 const ASSETS = [
   './',
   'index.html',
   'styles.css',
+  'i18n.js',
+  'theme.js',
   'glass.js',
   'cloud.js',
   'money.js',
   'app.js',
   'billfiles.js',
   'gmail.js',
+  'schedule.js',
   'calfeed.js',
   'manifest.webmanifest',
-  'icons/icon-192.png',
-  'icons/icon-512.png',
-  'icons/apple-touch-icon.png',
+  'icons/centel-192.png',
+  'icons/centel-512.png',
+  'icons/centel-180.png',
 ];
 
 self.addEventListener('install', (e) => {
