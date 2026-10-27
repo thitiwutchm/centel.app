@@ -190,7 +190,7 @@ const I18N_EN = {
   'ร้านค้า / ผู้รับ': 'Merchant / payee', 'ใครจ่าย': 'Who paid', 'ฉัน': 'Me', 'ส่วนของฉัน (฿)': 'My share (฿)', 'ส่วนของ {0}': '{0}’s share',
   'ใส่ยอดรวมทั้งบิล ค่าเริ่มต้นแบ่งครึ่ง แก้ส่วนของแต่ละคนได้ รายการจะนับเป็นรายจ่ายเมื่อ {0} อนุมัติแล้วเท่านั้น':
     'Enter the full bill total. It is split in half by default and you can change each share. It counts as spending only after {0} approves.',
-  'บันทึกเป็นร่าง (ยังไม่ส่ง)': 'Save as draft (don’t send yet)', 'จาก': 'From', 'ทั่วไป': 'General', 'เปลี่ยน': 'Change',
+  'บันทึกเป็นร่าง (ยังไม่ส่ง)': 'Save as draft (don’t send yet)', 'จาก': 'From', 'ทั่วไป': 'General',
   '⏳ กำลังอัปโหลดและอ่านสลิป…': '⏳ Uploading and reading the slip…', '✅ อ่านสลิปแล้ว ตรวจสอบข้อมูลอีกครั้งก่อนบันทึก': '✅ Slip read. Check the details before saving.',
   '⚠️ อ่านได้ไม่ครบหรือไม่ทราบวัตถุประสงค์ของการโอน กรุณาตรวจสอบและเลือกหมวดหมู่': '⚠️ Some details or the purpose could not be read. Please check and pick a category.',
   '⚠️ อ่านสลิปไม่สำเร็จ แนบรูปไว้แล้ว กรุณากรอกข้อมูลเอง': '⚠️ Could not read the slip. The image is attached; please fill in the details.',

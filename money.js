@@ -1111,12 +1111,50 @@ function budgetForm(bg, preset = {}) {
 
 /* ---------- Transaction form ---------- */
 
+// Category picker layered over the open sheet: the top-level grid, and a parent with
+// sub-categories shows its subs underneath. Picking one calls onPick(id) and closes.
+function catPicker(type, current, onPick) {
+  const old = $('#catLayer');
+  if (old) old.remove();
+  const layer = document.createElement('div');
+  layer.id = 'catLayer';
+  layer.innerHTML = `<div class="sheet-backdrop cat-layer-bg"></div><section class="sheet cat-layer" role="dialog" aria-modal="true">
+    <div class="grabber"></div>
+    <div class="sheet-head"><button class="link-btn" data-cpclose>ยกเลิก</button><h2>หมวดหมู่</h2><span class="sheet-head-pad"></span></div>
+    <div class="cat-grid" id="cpGrid"></div><div class="chips sub-cats" id="cpSubs" hidden></div></section>`;
+  document.body.appendChild(layer);
+  let root = current ? catRootId(current, type) : '';
+  const close = () => layer.remove();
+  const paint = () => {
+    $('#cpGrid').innerHTML = catsOf(type).map(([k, c]) =>
+      `<button type="button" class="cat ${root === k ? 'on' : ''}" data-cp="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
+    const kids = root ? catChildren(root) : [];
+    $('#cpSubs').hidden = !kids.length;
+    $('#cpSubs').innerHTML = kids.length ? [catById(root), ...kids].map((c, i) =>
+      `<button type="button" class="chip sub-pick ${current === c.id ? 'on' : ''}" data-cpsub="${c.id}">${c.icon} ${i ? esc(c.label) : 'ทั่วไป'}</button>`).join('') : '';
+  };
+  paint();
+  layer.addEventListener('click', (e) => {
+    if (e.target.closest('[data-cpclose]') || e.target.classList.contains('cat-layer-bg')) return close();
+    const sub = e.target.closest('[data-cpsub]');
+    if (sub) { onPick(sub.dataset.cpsub); return close(); }
+    const top = e.target.closest('[data-cp]');
+    if (!top) return;
+    // A parent with sub-categories waits for the sub (or ทั่วไป); anything else is picked straight away.
+    if (catChildren(top.dataset.cp).length) {
+      root = top.dataset.cp;
+      paint();
+      $('#cpSubs').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else { onPick(top.dataset.cp); close(); }
+  });
+}
+
 function txnForm(t, preset = {}) {
   const isNew = !t;
   const me = cloud.user ? cloud.user.id : null;
   const canShare = isCloud() && !!cloud.partner;
   const d = t ? { ...t } : {
-    type: 'expense', amount: '', category: 'food', walletId: defaultWalletId(), toWalletId: '',
+    type: 'expense', amount: '', category: '', walletId: defaultWalletId(), toWalletId: '',
     date: dateStr(new Date()), note: '', merchant: '', scope: 'personal', ...preset,
   };
   // The form edits the whole bill; a shared row stores my share in `amount` and the bill in `total`.
@@ -1154,7 +1192,7 @@ function txnForm(t, preset = {}) {
       <input type="file" id="rcIn" accept="image/*" hidden>
     </div><div id="rcStatus"></div>` : ''}
     <div class="amount-input" id="tAmtWrap"><span>฿</span><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
-    <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><div class="chips sub-cats" id="tSubCats" hidden></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่</p></div>
+    <div id="tCatWrap"><button type="button" class="cat-pick-btn" id="tCatOpen"></button></div>
     <div class="form">
       <div class="field" id="tMerchRow"><label for="tMerchant">ร้านค้า / ผู้รับ</label><input id="tMerchant" placeholder="เช่น 7-Eleven" value="${esc(d.merchant || '')}" autocomplete="off"></div>
       <div id="tShareRows">
@@ -1206,31 +1244,17 @@ function txnForm(t, preset = {}) {
       const c = catById(d.category);
       d.category = c && c.type === d.type ? c.id : catsOf(d.type)[0][0];
     }
-    $('#tCatHint').hidden = !!d.category;
     paintCats();
   };
-  // A saved transaction shows only its category; tapping that row opens the full grid to change it.
-  let catOpen = isNew || !d.category;
-  // Top-level grid; a parent with sub-categories opens a row of its subs under the grid.
+  // The form shows one round button: "?" until a category is picked, then its icon and name.
+  // Tapping it opens the category picker on top of this sheet.
   const paintCats = () => {
-    const root = d.category ? catRootId(d.category, d.type) : '';
-    if (!catOpen && d.category) {
-      const c = catById(d.category);
-      const parent = root !== c.id ? catById(root) : null;
-      $('#tCats').className = 'cat-picked-wrap';
-      $('#tCats').innerHTML = `<button type="button" class="cat-picked" id="tCatOpen">${circleIco(c, 'ico round')}
-        <span class="cp-name">${parent ? `<small>${esc(parent.label)}</small>` : ''}<b>${esc(c.label)}</b></span>
-        <span class="cp-change">เปลี่ยน</span><span class="chev">›</span></button>`;
-      $('#tSubCats').hidden = true;
-      return;
-    }
-    $('#tCats').className = 'cat-grid';
-    $('#tCats').innerHTML = catsOf(d.type).map(([k, c]) =>
-      `<button type="button" class="cat ${root === k ? 'on' : ''}" data-tcat="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
-    const kids = root ? catChildren(root) : [];
-    $('#tSubCats').hidden = !kids.length;
-    $('#tSubCats').innerHTML = kids.length ? [catById(root), ...kids].map((c, i) =>
-      `<button type="button" class="chip sub-pick ${d.category === c.id ? 'on' : ''}" data-tcat="${c.id}">${c.icon} ${i ? esc(c.label) : 'ทั่วไป'}</button>`).join('') : '';
+    const c = d.category ? catById(d.category) : null;
+    const root = c ? catRootId(c.id, d.type) : '';
+    const parent = c && root !== c.id ? catById(root) : null;
+    $('#tCatOpen').classList.toggle('on', !!c);
+    $('#tCatOpen').innerHTML = (c ? circleIco(c, 'ico round') : '<span class="ico round q">?</span>')
+      + `<span class="cp-name">${parent ? `<small>${esc(parent.label)}</small>` : ''}<b>${c ? esc(c.label) : 'หมวดหมู่'}</b></span><span class="chev">›</span>`;
   };
   renderType();
   const pickedLabels = new Set(d.labels || []);
@@ -1248,14 +1272,7 @@ function txnForm(t, preset = {}) {
     d.scope = b.dataset.scope;
     renderType();
   });
-  $('#tCatWrap').addEventListener('click', (e) => {
-    if (e.target.closest('#tCatOpen')) { catOpen = true; paintCats(); return; }
-    const c = e.target.closest('[data-tcat]');
-    if (!c) return;
-    d.category = c.dataset.tcat;
-    $('#tCatHint').hidden = true;
-    paintCats();
-  });
+  $('#tCatOpen').addEventListener('click', () => catPicker(d.type, d.category, (id) => { d.category = id; paintCats(); }));
   $('#tAmount').addEventListener('input', updateShares);
   $('#tSplit').addEventListener('click', (e) => {
     const b = e.target.closest('[data-split]');
@@ -1286,7 +1303,6 @@ function txnForm(t, preset = {}) {
           repaintLabels();
           d.type = 'expense';
           d.category = x.category || null;
-          if (!d.category) catOpen = true;
           renderType();
         }
         status({
