@@ -45,7 +45,7 @@ const TX_CATS = {
 };
 const TRANSFER_CAT = { label: 'โอนเงิน', icon: '🔁', color: '#8a8f99' };
 const SETTLE_CAT = { label: 'คืนเงินระหว่างคู่', icon: '🤝', color: '#00b3a4' };
-const REVIEW_CAT = { label: 'รอตรวจสอบ', icon: '❔', color: '#d98a00' };
+const NO_CAT = { label: 'ไม่มีหมวดหมู่', icon: '❔', color: '#8a8f99' };
 const ALL_CAT = { label: 'ทุกหมวดหมู่', icon: '🌐', color: '#2f6bff' };
 const TOTAL_WALLET = { name: 'ทั้งหมด', icon: '🌐', color: '#2f6bff' };
 
@@ -118,7 +118,7 @@ function wFace(w) { const img = wImg(w); return img ? `<img src="${img}" alt="">
 function txCat(t) {
   if (t.type === 'transfer') return TRANSFER_CAT;
   if (t.type === 'settle') return SETTLE_CAT;
-  if (!t.category) return REVIEW_CAT;
+  if (!t.category) return NO_CAT;
   return catById(t.category) || catFallback(t.type);
 }
 function labelById(id) { return money.labels.find((l) => l.id === id); }
@@ -541,7 +541,6 @@ function txItem(t, S) {
   ].filter(Boolean).join(' · ') || (w ? esc(w.name) : '');
   const badges = [
     shared ? '<span class="badge share">ร่วม</span>' : '',
-    t.reviewNeeded || (!t.category && t.type === 'expense') ? '<span class="badge warn">รอตรวจสอบ</span>' : '',
     t.billId ? '<span class="badge muted">บิล</span>' : '',
     t.receiptKey ? '<span class="badge muted">🧾</span>' : '',
     ...txLabels(t).map((l) => `<span class="badge label">${svgIcon('tag', 'svg-i xs')}${esc(l.name)}</span>`),
@@ -821,12 +820,12 @@ function txListHtml(sel) {
     ${list.length ? dayGroups(list, S) : `<div class="empty"><div class="e-ico">🧾</div>ยังไม่มีรายการ${r.label}</div>`}`;
 }
 
-const TX_FILTERS = [['all', 'ทั้งหมด'], ['personal', 'ส่วนตัว'], ['shared', 'ร่วมกัน'], ['review', 'รอตรวจสอบ']];
+const TX_FILTERS = [['all', 'ทั้งหมด'], ['personal', 'ส่วนตัว'], ['shared', 'ร่วมกัน']];
 
 function txFilters() {
-  const list = cloud.partner ? TX_FILTERS : TX_FILTERS.filter(([k]) => k === 'all' || k === 'review');
+  const list = cloud.partner ? TX_FILTERS : TX_FILTERS.filter(([k]) => k === 'all');
   const lab = labelById(ui.txLabel);
-  const basic = money.txns.some((t) => t.reviewNeeded || t.scope === 'shared') || ui.txFilter !== 'all';
+  const basic = money.txns.some((t) => t.scope === 'shared') || ui.txFilter !== 'all';
   if (!basic && !money.labels.length && !lab) return '';
   const labChip = lab
     ? `<button class="chip on lab" data-txlabel="">${svgIcon('tag', 'svg-i xs')}${esc(lab.name)} ✕</button>`
@@ -840,7 +839,6 @@ function txFilterOk(t) {
   switch (ui.txFilter) {
     case 'personal': return t.scope !== 'shared' && t.type !== 'settle';
     case 'shared': return t.scope === 'shared' || t.type === 'settle';
-    case 'review': return !!t.reviewNeeded || (t.type === 'expense' && !t.category);
     default: return true;
   }
 }
@@ -891,7 +889,7 @@ function reportSheet(ym) {
     const rows = Object.entries(by).sort((a, b) => b[1] - a[1]);
     if (!rows.length) return '<div class="card muted" style="text-align:center">ไม่มีรายการ</div>';
     return `<div class="list">${rows.map(([k, v]) => {
-      const c = k === '_review' ? REVIEW_CAT : catById(k) || catFallback(type);
+      const c = k === '_review' ? NO_CAT : catById(k) || catFallback(type);
       const p = (v / sum) * 100;
       const split = Object.entries(subs[k] || {}).sort((a, b) => b[1] - a[1])
         .map(([id, x]) => `<div class="rep-sub"><span>${esc(catById(id).label)}</span><span>${baht(x)}</span></div>`).join('');
@@ -1156,7 +1154,7 @@ function txnForm(t, preset = {}) {
       <input type="file" id="rcIn" accept="image/*" hidden>
     </div><div id="rcStatus"></div>` : ''}
     <div class="amount-input" id="tAmtWrap"><span>฿</span><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
-    <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><div class="chips sub-cats" id="tSubCats" hidden></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่ รายการจะถูกบันทึกเป็น "รอตรวจสอบ" จนกว่าจะเลือก</p></div>
+    <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><div class="chips sub-cats" id="tSubCats" hidden></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่</p></div>
     <div class="form">
       <div class="field" id="tMerchRow"><label for="tMerchant">ร้านค้า / ผู้รับ</label><input id="tMerchant" placeholder="เช่น 7-Eleven" value="${esc(d.merchant || '')}" autocomplete="off"></div>
       <div id="tShareRows">
@@ -1169,7 +1167,6 @@ function txnForm(t, preset = {}) {
       <div class="field"><label for="tDate">วันที่</label><input type="date" id="tDate" value="${d.date}"></div>
       <div class="field"><label for="tNote">บันทึก</label><input id="tNote" placeholder="เช่น ข้าวกลางวัน" value="${esc(d.note || '')}" autocomplete="off"></div>
       <div class="field col labels-field"><label>ป้ายกำกับ</label><div class="chips lab-pick" id="tLabels"></div></div>
-      <div class="field" id="tReviewRow"><label for="tReview">รอตรวจสอบ</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="tReview" ${d.reviewNeeded ? 'checked' : ''}><span></span></label></div>
     </div>
     <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
     ${d.billId ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
@@ -1192,7 +1189,6 @@ function txnForm(t, preset = {}) {
     const sh = shared();
     $('#tCatWrap').hidden = transfer;
     $('#tMerchRow').hidden = transfer;
-    $('#tReviewRow').hidden = transfer;
     $('#tToRow').hidden = !transfer;
     $('#tShareRows').hidden = !sh;
     $('#tShareHint').hidden = !sh;
@@ -1323,8 +1319,7 @@ function txnForm(t, preset = {}) {
     } else {
       out.category = d.category || null;
       out.merchant = $('#tMerchant').value.trim();
-      // Off by default: a missing category already shows as รอตรวจสอบ on its own.
-      out.reviewNeeded = $('#tReview').checked;
+      out.reviewNeeded = false;
       if (d.receiptKey) out.receiptKey = d.receiptKey;
       if (d.slipRef) out.slipRef = d.slipRef;
     }

@@ -344,7 +344,7 @@ function sharedSheet(t) {
         <div class="sub">${esc(c.label)} · ${thDate(t.date)}</div></div></div>
       <div class="bd-body">
         <div class="bd-amt">${baht(t.total)}</div>
-        <div class="badges"><span class="badge share">ร่วม</span> ${t.reviewNeeded || !t.category ? '<span class="badge warn">รอตรวจสอบ</span>' : ''}</div>
+        <div class="badges"><span class="badge share">ร่วม</span></div>
         <div class="kv"><span>ผู้จ่าย</span><b>${esc(nameOf(t.payerId))}</b></div>
         <div class="kv"><span>ต้นทุน</span><b>${splitOf(t) === 'full' ? 'รับผิดชอบทั้งหมด' : 'หาร 2'}</b></div>
         <div class="kv"><span>ส่วนของฉัน</span><b>${baht(t.amount)}</b></div>
