@@ -185,6 +185,13 @@ function catRootId(id, type = 'expense') {
   const c = catById(id) || catFallback(type);
   return c.parent && catMap().has(c.parent) ? c.parent : c.id;
 }
+// Camera-with-sparkle icon for the AI Slips scan button; stroked with the rainbow gradient's first stop.
+const SCAN_ICON = `<svg class="scan-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M13.5 5H9.6L8.2 7H5.5A2.5 2.5 0 0 0 3 9.5v8A2.5 2.5 0 0 0 5.5 20h11a2.5 2.5 0 0 0 2.5-2.5V13"/>
+  <circle cx="11" cy="13.5" r="3.2"/>
+  <path d="M18.5 2.5c.3 1.9 1 2.6 2.9 2.9-1.9.3-2.6 1-2.9 2.9-.3-1.9-1-2.6-2.9-2.9 1.9-.3 2.6-1 2.9-2.9z"/>
+</svg>`;
+
 // Expense categories for AI Slips to choose from (the server falls back to the built-in list).
 function slipCats() {
   return catList().filter((c) => c.type === 'expense').map((c) => ({ id: c.id, name: c.label, parent: c.parent ? catById(c.parent).label : undefined }));
@@ -1153,11 +1160,10 @@ function txnForm(t, preset = {}) {
     ${receipts ? `<div class="section-title">✨ AI Slips</div>
     <p class="hint">อัปโหลดสลิป แล้ว AI จะกรอกหมวด ยอดเงิน และวันที่โอนให้ ตรวจแก้ได้ก่อนบันทึก</p>
     <div class="receipt-row">
-      <button type="button" class="chip" id="rcCam">📷 ถ่ายสลิป</button>
-      <button type="button" class="chip" id="rcPick">🖼️ เลือกรูปสลิป</button>
+      <button type="button" class="scan-btn" id="rcScan">${SCAN_ICON}<span class="scan-text">สแกนสลิป</span></button>
       ${d.receiptKey ? '<button type="button" class="chip" id="rcView">🧾 ดูสลิป</button>' : ''}
-      <input type="file" id="rcCamIn" accept="image/*" capture="environment" hidden>
-      <input type="file" id="rcPickIn" accept="image/jpeg,image/png,image/webp,image/*" hidden>
+      <!-- No capture attribute: iOS then offers camera or photo library from one button. -->
+      <input type="file" id="rcIn" accept="image/*" hidden>
     </div><div id="rcStatus"></div>` : ''}
     <div class="amount-input" id="tAmtWrap"><span>฿</span><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
     <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><div class="chips sub-cats" id="tSubCats" hidden></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่ รายการจะถูกบันทึกเป็น "รอตรวจสอบ" จนกว่าจะเลือก</p></div>
@@ -1296,10 +1302,8 @@ function txnForm(t, preset = {}) {
         status('❌ อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
       }
     };
-    $('#rcCam').addEventListener('click', () => $('#rcCamIn').click());
-    $('#rcPick').addEventListener('click', () => $('#rcPickIn').click());
-    $('#rcCamIn').addEventListener('change', (e) => onFile(e.target.files[0]));
-    $('#rcPickIn').addEventListener('change', (e) => onFile(e.target.files[0]));
+    $('#rcScan').addEventListener('click', () => $('#rcIn').click());
+    $('#rcIn').addEventListener('change', (e) => { onFile(e.target.files[0]); e.target.value = ''; });
     if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
   }
 

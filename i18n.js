@@ -181,7 +181,7 @@ const I18N_EN = {
   // Transaction form
   'แก้ไขรายการ': 'Edit transaction', 'ร่วมกับ {0}': 'Shared with {0}', '🧾 ดูสลิป': '🧾 View slip',
   'อัปโหลดสลิป แล้ว AI จะกรอกหมวด ยอดเงิน และวันที่โอนให้ ตรวจแก้ได้ก่อนบันทึก': 'Upload a slip and AI fills in the category, amount and date. You can check it before saving.',
-  '📷 ถ่ายสลิป': '📷 Take photo', '🖼️ เลือกรูปสลิป': '🖼️ Choose slip image',
+  'สแกนสลิป': 'Scan receipt',
   'ถูกปฏิเสธ — แก้ไขแล้วกดบันทึกเพื่อส่งใหม่': 'Rejected — edit and save to send again',
   'ถูกปฏิเสธ: {0} — แก้ไขแล้วกดบันทึกเพื่อส่งใหม่': 'Rejected: {0} — edit and save to send again',
   'รายการนี้สร้างจากการจ่ายบิล': 'This transaction was created by paying a bill', 'ลบรายการ': 'Delete transaction',
