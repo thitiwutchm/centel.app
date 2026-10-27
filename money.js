@@ -512,8 +512,8 @@ function gauge(ratio, cls) {
   const arc = `M${cx - r},${cy} A${r},${r} 0 0 1 ${cx + r},${cy}`;
   return `<svg class="gauge" viewBox="0 0 240 128" aria-hidden="true">
     <path class="g-bg" d="${arc}"/>
-    <path class="g-fg ${cls}" d="${arc}" stroke-dasharray="${(len * f).toFixed(1)} ${len.toFixed(1)}"/>
-    ${f > 0 ? `<circle class="g-knob ${cls}" cx="${kx.toFixed(1)}" cy="${ky.toFixed(1)}" r="7"/>` : ''}
+    ${f > 0 ? `<path class="g-fg ${cls}" d="${arc}" stroke-dasharray="${(len * f).toFixed(1)} ${len.toFixed(1)}"/>
+    <circle class="g-knob ${cls}" cx="${kx.toFixed(1)}" cy="${ky.toFixed(1)}" r="7"/>` : ''}
   </svg>`;
 }
 
@@ -961,31 +961,25 @@ function budgetRow(bg, ym) {
     </button>`;
 }
 
-function renderBudgets() {
-  const ym = budgetYm();
-  const list = visibleBudgets();
-  const shared = sharedBudgets();
+// Summary card at the top of Budgets: my budgets, or the shared ones when I only have those.
+function budgetSummary(ym, list) {
   const allBg = list.find((bg) => bg.category === 'all');
   const catBgs = list.filter((bg) => bg.category !== 'all');
+  const shared = list.length > 0 && list.every((bg) => bg.scope === 'shared');
   const totalBudget = allBg ? allBg.amount : catBgs.reduce((s, bg) => s + bg.amount, 0);
   const totalSpent = allBg ? budgetSpent(allBg, ym) : catBgs.reduce((s, bg) => s + budgetSpent(bg, ym), 0);
   const can = totalBudget - totalSpent;
-  const pace = monthPace(ym);
-  const cls = paceCls(totalSpent, totalBudget, pace);
+  const cls = paceCls(totalSpent, totalBudget, monthPace(ym));
   const dim = daysInMonth(ym);
   const cur = ymOf(new Date());
   const daysTxt = ym === cur ? `${dim - new Date().getDate()} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : `${dim} วัน`;
-
-  view.innerHTML = `
-    <div class="page-head">
-      <div class="ph-row"><h1>งบประมาณ</h1>${walletPill()}</div>
-      <div class="ptabs fixed">${[[-1, 'เดือนก่อน'], [0, 'เดือนนี้'], [1, 'เดือนหน้า']].map(([o, l]) =>
-        `<button data-boff="${o}" class="${ui.budgetOff === o ? 'on' : ''}">${l}</button>`).join('')}</div>
-    </div>
-    ${list.length ? `
-    <div class="card gauge-card">
-      <button class="gc-head" ${allBg ? `data-budget="${allBg.id}"` : 'data-action="add-budget-all"'}>
-        ${circleIco(ALL_CAT, 'pill-ico')}<span>${allBg ? 'ทุกหมวดหมู่' : 'รวมทุกงบ'}</span>${svgIcon('chev', 'svg-i sm')}
+  const head = !list.length ? 'ทุกหมวดหมู่' : shared ? 'งบร่วมทั้งหมด' : allBg ? 'ทุกหมวดหมู่' : 'รวมทุกงบ';
+  const headAttr = allBg ? `data-budget="${allBg.id}"`
+    : shared ? 'data-action="add-budget-shared"' : 'data-action="add-budget-all"';
+  return `
+    <div class="card gauge-card${list.length ? '' : ' empty'}">
+      <button class="gc-head" ${headAttr}>
+        ${circleIco(ALL_CAT, 'pill-ico')}<span>${head}</span>${svgIcon('chev', 'svg-i sm')}
       </button>
       <div class="gauge-wrap">${gauge(totalBudget ? totalSpent / totalBudget : 0, cls)}
         <div class="g-center"><div class="muted">${can < 0 ? 'ใช้เกินงบแล้ว' : 'จำนวนที่ใช้ได้'}</div><div class="g-amt ${can < 0 ? 'exp' : 'okc'}">${baht(Math.abs(can))}</div></div>
@@ -995,16 +989,25 @@ function renderBudgets() {
         <div><b>${kbaht(totalSpent)}</b><span>ใช้ไปแล้ว</span></div>
         <div><b>${daysTxt}</b><span>ถึงสิ้นเดือน</span></div>
       </div>
+      ${list.length ? '' : '<div class="muted small gc-hint">ตั้งงบรายเดือนสำหรับแต่ละหมวด แล้วดูว่าใช้ไปเท่าไร เหลือเท่าไร และควรใช้วันละเท่าไร</div>'}
       <button class="btn pillbtn" data-action="add-budget">สร้างงบประมาณ</button>
+    </div>`;
+}
+
+function renderBudgets() {
+  const ym = budgetYm();
+  const list = visibleBudgets();
+  const shared = sharedBudgets();
+  const catBgs = list.filter((bg) => bg.category !== 'all');
+
+  view.innerHTML = `
+    <div class="page-head">
+      <div class="ph-row"><h1>งบประมาณ</h1>${walletPill()}</div>
+      <div class="ptabs fixed">${[[-1, 'เดือนก่อน'], [0, 'เดือนนี้'], [1, 'เดือนหน้า']].map(([o, l]) =>
+        `<button data-boff="${o}" class="${ui.budgetOff === o ? 'on' : ''}">${l}</button>`).join('')}</div>
     </div>
+    ${budgetSummary(ym, list.length ? list : shared)}
     ${catBgs.map((bg) => budgetRow(bg, ym)).join('')}
-    ` : shared.length ? '' : `
-    <div class="card empty-card">
-      <div class="e-ico">🎯</div>
-      <b>ยังไม่มีงบประมาณ</b>
-      <div class="muted small">ตั้งงบรายเดือนสำหรับแต่ละหมวด แล้วดูว่าใช้ไปเท่าไร เหลือเท่าไร และควรใช้วันละเท่าไร</div>
-      <button class="btn" data-action="add-budget" style="margin-top:14px">สร้างงบประมาณ</button>
-    </div>`}
     ${isCloud() && cloud.partner ? `
     <div class="section-row"><span>งบร่วมกับ ${esc(partnerName())}</span></div>
     ${shared.map((bg) => budgetRow(bg, ym)).join('') || '<div class="card muted small">งบร่วมนับยอดรวมทั้งบิลของรายจ่ายร่วม ทั้งสองคนเห็นงบเดียวกัน</div>'}` : ''}

@@ -209,7 +209,7 @@ const I18N_EN = {
   'รายงาน {0}': 'Report {0}', 'คงเหลือสุทธิ': 'Net', 'รายจ่ายตามหมวดหมู่': 'Spending by category', 'รายรับตามหมวดหมู่': 'Income by category',
 
   // Budgets
-  'เกินงบ {0}': 'Over by {0}', 'เหลือ {0}': '{0} left', 'สิ้นสุดแล้ว': 'Ended', 'เดือนหน้า': 'Next month', 'รวมทุกงบ': 'All budgets',
+  'เกินงบ {0}': 'Over by {0}', 'เหลือ {0}': '{0} left', 'สิ้นสุดแล้ว': 'Ended', 'เดือนหน้า': 'Next month', 'รวมทุกงบ': 'All budgets', 'งบร่วมทั้งหมด': 'All shared budgets',
   'ใช้เกินงบแล้ว': 'Over budget', 'จำนวนที่ใช้ได้': 'Available', 'งบทั้งหมด': 'Total budget', 'ใช้ไปแล้ว': 'Spent', 'ถึงสิ้นเดือน': 'Until month end',
   'สร้างงบประมาณ': 'Create budget', 'ยังไม่มีงบประมาณ': 'No budgets yet',
   'ตั้งงบรายเดือนสำหรับแต่ละหมวด แล้วดูว่าใช้ไปเท่าไร เหลือเท่าไร และควรใช้วันละเท่าไร': 'Set a monthly budget per category and see what you spent, what is left and how much you can spend per day',
