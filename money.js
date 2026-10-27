@@ -1230,9 +1230,22 @@ function txnForm(t, preset = {}) {
     $('#tCatHint').hidden = !!d.category;
     paintCats();
   };
+  // A saved transaction shows only its category; tapping that row opens the full grid to change it.
+  let catOpen = isNew || !d.category;
   // Top-level grid; a parent with sub-categories opens a row of its subs under the grid.
   const paintCats = () => {
     const root = d.category ? catRootId(d.category, d.type) : '';
+    if (!catOpen && d.category) {
+      const c = catById(d.category);
+      const parent = root !== c.id ? catById(root) : null;
+      $('#tCats').className = 'cat-picked-wrap';
+      $('#tCats').innerHTML = `<button type="button" class="cat-picked" id="tCatOpen">${circleIco(c, 'ico round')}
+        <span class="cp-name">${parent ? `<small>${esc(parent.label)}</small>` : ''}<b>${esc(c.label)}</b></span>
+        <span class="cp-change">เปลี่ยน</span><span class="chev">›</span></button>`;
+      $('#tSubCats').hidden = true;
+      return;
+    }
+    $('#tCats').className = 'cat-grid';
     $('#tCats').innerHTML = catsOf(d.type).map(([k, c]) =>
       `<button type="button" class="cat ${root === k ? 'on' : ''}" data-tcat="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
     const kids = root ? catChildren(root) : [];
@@ -1257,6 +1270,7 @@ function txnForm(t, preset = {}) {
     renderType();
   });
   $('#tCatWrap').addEventListener('click', (e) => {
+    if (e.target.closest('#tCatOpen')) { catOpen = true; paintCats(); return; }
     const c = e.target.closest('[data-tcat]');
     if (!c) return;
     d.category = c.dataset.tcat;
@@ -1289,6 +1303,7 @@ function txnForm(t, preset = {}) {
           repaintLabels();
           d.type = 'expense';
           d.category = x.category || null;
+          if (!d.category) catOpen = true;
           renderType();
         }
         status({
