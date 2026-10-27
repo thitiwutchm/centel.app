@@ -559,6 +559,43 @@ function applyPeaRows(billId, rows) {
   return n;
 }
 
+// Day of the month a PEA bill fetches itself: 'due' (the default) follows the bill's
+// due day, 0 means only when the user taps fetch.
+function peaFetchDay(b, ym) {
+  const d = b.pea && (b.pea.day === undefined ? 'due' : b.pea.day);
+  if (!d) return 0;
+  return Math.min(d === 'due' ? (b.dueDay || 1) : Number(d), daysInMonth(ym));
+}
+
+// On app open: from each PEA bill's fetch day, pull this month's amount until PEA has it.
+// At most one try per bill per day, so a bill PEA hasn't issued yet is retried tomorrow.
+function peaDayOptions(day) {
+  const cur = day === undefined ? 'due' : day;
+  return `<option value="due" ${cur === 'due' ? 'selected' : ''}>ตามวันครบกำหนด</option>`
+    + `<option value="0" ${cur === 0 ? 'selected' : ''}>ไม่ดึงเอง</option>`
+    + Array.from({ length: 31 }, (_, i) => i + 1).map((d) => `<option value="${d}" ${cur === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
+}
+
+async function peaAutoTry() {
+  const ym = ymOf(new Date());
+  const dayNow = today().getDate();
+  const ds = dateStr(today());
+  const due = state.bills.filter((b) => b.pea && b.pea.ca && b.pea.peano && billAppliesTo(b, ym)
+    && peaFetchDay(b, ym) && dayNow >= peaFetchDay(b, ym)
+    && b.pea.tried !== ds && record(ym, b.id).amount == null && !record(ym, b.id).paid);
+  if (!due.length) return;
+  for (const b of due) {
+    b.pea.tried = ds;
+    try {
+      const rows = await fetchPeaBills(b.pea.ca, b.pea.peano);
+      applyPeaRows(b.id, rows);
+      const hit = rows.find((r) => r.ym === ym && r.amount != null);
+      if (hit) toast(`ดึงค่าไฟ ${b.name}: ${baht(hit.amount)}`);
+    } catch (e) { /* offline or PEA down: the bill still offers a manual fetch */ }
+  }
+  save(); saveMoney(); render();
+}
+
 function billForm(b, opts = {}) {
   const isNew = !b;
   b = b || {
@@ -671,7 +708,10 @@ function billForm(b, opts = {}) {
     if ($('#fStart')) draft.startMonth = $('#fStart').value || ui.ym;
     if ($('#fMonths')) draft.months = parseInt($('#fMonths').value, 10) || 1;
     if ($('#fOnce')) draft.onceDate = $('#fOnce').value;
-    if ($('#fPeaCa')) draft.pea = { ca: $('#fPeaCa').value.trim(), peano: $('#fPeaNo') ? $('#fPeaNo').value.trim() : '' };
+    if ($('#fPeaCa')) {
+      const dv = $('#fPeaDay') ? $('#fPeaDay').value : 'due';
+      draft.pea = { ...(draft.pea || {}), ca: $('#fPeaCa').value.trim(), peano: $('#fPeaNo') ? $('#fPeaNo').value.trim() : '', day: dv === 'due' ? 'due' : Number(dv) };
+    }
     if ($('#fGSender')) {
       draft.gmail = {
         ...draft.gmail,
@@ -731,6 +771,7 @@ function billForm(b, opts = {}) {
       <div class="form">
         <div class="field"><label for="fPeaCa">หมายเลขผู้ใช้ไฟฟ้า</label><input id="fPeaCa" inputmode="numeric" placeholder="เลข 12 หลักบนใบแจ้งค่าไฟ" value="${esc(p.ca || '')}" autocomplete="off"></div>
         <div class="field"><label for="fPeaNo">รหัสเครื่องวัด</label><input id="fPeaNo" inputmode="numeric" placeholder="เลขมิเตอร์บนใบแจ้งค่าไฟ" value="${esc(p.peano || '')}" autocomplete="off"></div>
+        <div class="field"><label for="fPeaDay">ดึงอัตโนมัติ</label><select id="fPeaDay">${peaDayOptions(p.day)}</select></div>
       </div>
       <button class="btn" id="peaFetch" type="button">⚡ ดึงยอดค่าไฟจาก PEA</button>
       <div id="peaResult"></div>
@@ -838,7 +879,12 @@ function billForm(b, opts = {}) {
       out.startMonth = draft.startMonth || ui.ym;
       if (draft.type === 'installment') out.months = Math.max(1, draft.months || 1);
     }
-    if (draft.auto && draft.source === 'pea') out.pea = { ca: draft.pea.ca, peano: draft.pea.peano };
+    if (draft.auto && draft.source === 'pea') {
+      const prev = (b && b.pea) || {};
+      out.pea = { ca: draft.pea.ca, peano: draft.pea.peano, day: draft.pea.day === undefined ? 'due' : draft.pea.day };
+      // A changed account or fetch day should try again today.
+      if (prev.ca === out.pea.ca && prev.peano === out.pea.peano && prev.day === out.pea.day && prev.tried) out.pea.tried = prev.tried;
+    }
     if (draft.auto && draft.source === 'gmail') out.gmail = { ...draft.gmail };
     const i = state.bills.findIndex((x) => x.id === out.id);
     if (i >= 0) state.bills[i] = out; else state.bills.push(out);
@@ -929,6 +975,7 @@ function occurrenceSheet(id, ym) {
     </div>
     ${peaNeeded ? `<div class="alert warn">⚡<div>บิลนี้ผูกกับ PEA ต้องดึงยอด${thMonthYear(ym)}ก่อนจึงจะกดจ่ายได้</div></div>` : ''}
     ${b.pea ? `<button class="btn ${peaNeeded ? '' : 'ghost'}" id="oPea" type="button">⚡ ดึงยอด${peaNeeded ? 'เดือนนี้' : ''}จาก PEA</button>` : ''}
+    ${peaNeeded && peaFetchDay(b, ym) ? `<p class="hint">แอปจะดึงยอดให้เองตั้งแต่วันที่ ${peaFetchDay(b, ym)} เมื่อเปิดแอป</p>` : ''}
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
       : `${peaNeeded ? '' : '<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button>'}<button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
@@ -1278,7 +1325,7 @@ document.addEventListener('keydown', (e) => {
 
 // Re-render when returning to the app so "today" and statuses stay current.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) scheduleRefresh(); }
+  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) scheduleRefresh(); peaAutoTry(); }
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -1288,3 +1335,4 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 render();
 updateBadge();
 cloudStart();
+setTimeout(peaAutoTry, 1500);
