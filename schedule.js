@@ -157,6 +157,11 @@ function billDetail(id) {
       ? pick('สิ้นสุด', `${thMonthYear(end)} · ${b.months} งวด`, `<select data-bset="months">${months}</select>`)
       : pick('สิ้นสุด', 'ไม่มีวันสิ้นสุด');
   }
+  if (b.pea) {
+    const fd = b.pea.day === undefined ? 'due' : b.pea.day;
+    rows += pick('ดึงค่าไฟอัตโนมัติ', fd === 'due' ? `ตามวันครบกำหนด (วันที่ ${b.dueDay})` : fd ? `ทุกวันที่ ${fd}` : 'ไม่ดึงเอง',
+      `<select data-bset="peaDay">${peaDayOptions(fd)}</select>`);
+  }
   rows += pick('เตือน', `${svgIcon('bell', 'svg-i xs')} ${remindLab(remindOf(b))}`, `<select data-bset="remind">${remindOpts(b.remind)}</select>`);
   rows += pick('ตัดบัญชีอัตโนมัติ', b.autopay ? 'ใช่' : 'ไม่',
     `<select data-bset="autopay"><option value="">ไม่</option><option value="1" ${b.autopay ? 'selected' : ''}>ใช่</option></select>`);
@@ -186,6 +191,7 @@ function billDetail(id) {
     if (k === 'dueDay' || k === 'months') b[k] = Number(v);
     else if (k === 'remind') { if (v === '') delete b.remind; else b.remind = Number(v); }
     else if (k === 'autopay') b.autopay = !!v;
+    else if (k === 'peaDay') { b.pea.day = v === 'due' ? 'due' : Number(v); delete b.pea.tried; setTimeout(peaAutoTry, 0); }
     else if (k === 'startMonth' || k === 'onceDate') { if (!v) return; b[k] = v; }
     else b[k] = v;
     save();
