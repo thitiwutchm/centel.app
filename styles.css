@@ -616,6 +616,8 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .p-avatar-in { background: var(--accent-soft); font-weight: 600; }
 .gphoto { margin: -4px 2px 14px; }
 .halves + .section-title { margin-top: 22px; }
+/* Lists have no bottom margin; give actions/forms that follow one room to breathe. */
+.list + .btn, .list + .halves, .list + .form { margin-top: 14px; }
 .field[hidden] { display: none; }
 
 /* ---------- Couple / shared expenses ---------- */
