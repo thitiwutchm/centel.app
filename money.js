@@ -394,13 +394,76 @@ function billTxn(billId, ym) { return money.txns.find((t) => t.billId === billId
 
 function sbaht(n) { return (n < 0 ? '-' : '') + baht(Math.abs(n)); }
 
-// Currencies a transaction can be entered in ([code, symbol]). THB is the default and the
-// one totals are shown in; other codes are only labels, nothing is converted.
+// Currencies a transaction can be entered in. THB is the default and the one totals are shown in;
+// other codes are only labels, nothing is converted. These come first in the picker; the rest of
+// the ISO list (from Intl) follows alphabetically.
 const CURRENCIES = [
-  ['THB', '฿'], ['USD', '$'], ['EUR', '€'], ['JPY', '¥'], ['GBP', '£'], ['CNY', '¥'], ['KRW', '₩'], ['SGD', 'S$'],
-  ['HKD', 'HK$'], ['TWD', 'NT$'], ['MYR', 'RM'], ['VND', '₫'], ['LAK', '₭'], ['AUD', 'A$'], ['CHF', 'CHF'],
+  ['THB', '฿'], ['USD', '$'], ['GBP', '£'], ['EUR', '€'], ['JPY', '¥'], ['CNY', '¥'], ['VND', '₫'], ['KRW', '₩'],
+  ['SGD', 'S$'], ['HKD', 'HK$'], ['TWD', 'NT$'], ['MYR', 'RM'], ['LAK', '₭'], ['AUD', 'A$'], ['CHF', 'CHF'],
 ];
-function curSym(code) { const c = CURRENCIES.find((x) => x[0] === code); return c ? c[1] : code; }
+function curSym(code) {
+  const c = CURRENCIES.find((x) => x[0] === code);
+  if (c) return c[1];
+  try {
+    const part = new Intl.NumberFormat('en', { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })
+      .formatToParts(0).find((x) => x.type === 'currency');
+    return part ? part.value : code;
+  } catch (e) { return code; }
+}
+// A currency's flag: the regional-indicator emoji of the first two letters of its code
+// (THB → 🇹🇭, EUR → 🇪🇺). X-codes (XOF, XAU…) belong to no one country and get a "?".
+function curFlag(code) {
+  if (code[0] === 'X') return '';
+  return String.fromCodePoint(...[...code.slice(0, 2)].map((ch) => 0x1F1A5 + ch.charCodeAt(0)));
+}
+let curListCache = null;
+function curList() {
+  if (curListCache) return curListCache;
+  let names = null;
+  try { names = new Intl.DisplayNames([LANG === 'en' ? 'en' : 'th'], { type: 'currency' }); } catch (e) { /* old Safari */ }
+  // English names are searchable too, so "yen" finds เยนญี่ปุ่น in Thai mode.
+  let en = null;
+  try { en = new Intl.DisplayNames(['en'], { type: 'currency' }); } catch (e) { /* old Safari */ }
+  let codes = [];
+  try { codes = Intl.supportedValuesOf('currency'); } catch (e) { /* old Safari: pinned list only */ }
+  const pinned = CURRENCIES.map((c) => c[0]);
+  const row = (code) => ({ code, sym: curSym(code), name: (names && names.of(code)) || code, flag: curFlag(code),
+    key: `${code} ${(names && names.of(code)) || ''} ${(en && en.of(code)) || ''}`.toLowerCase() });
+  const rest = codes.filter((c) => !pinned.includes(c)).map(row).sort((a, b) => a.name.localeCompare(b.name, LANG));
+  curListCache = [...pinned.map(row), ...rest];
+  return curListCache;
+}
+
+// Full-height layer over the transaction sheet: search box and every currency, picked one ticked.
+function currencyPicker(current, onPick) {
+  const old = $('#catLayer');
+  if (old) old.remove();
+  const layer = document.createElement('div');
+  layer.id = 'catLayer';
+  layer.innerHTML = `<div class="sheet-backdrop cat-layer-bg"></div><section class="sheet cat-layer cur-layer" role="dialog" aria-modal="true">
+    <div class="sheet-head"><button class="close-x" data-cpclose aria-label="ย้อนกลับ"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><h2>สกุลเงิน</h2><span class="sheet-head-pad"></span></div>
+    <div class="searchbar cur-search">${svgIcon('search', 'svg-i sm')}<input id="curQ" type="search" placeholder="ค้นหาสกุลเงิน" autocomplete="off"></div>
+    <div class="list cur-list" id="curList"></div></section>`;
+  document.body.appendChild(layer);
+  const close = () => layer.remove();
+  const paint = () => {
+    const q = $('#curQ').value.trim().toLowerCase();
+    const rows = curList().filter((c) => !q || c.key.includes(q) || c.sym.toLowerCase() === q);
+    $('#curList').innerHTML = rows.map((c) => `
+      <button type="button" class="item cur-item" data-cur="${c.code}">
+        <span class="cur-flag${c.flag ? '' : ' none'}">${c.flag || '?'}</span>
+        <div class="main"><div class="name">${esc(c.name)}</div><div class="sub">${c.code} - ${esc(c.sym)}</div></div>
+        ${c.code === current ? '<span class="tick">✓</span>' : ''}
+      </button>`).join('') || '<div class="muted pad">ไม่พบสกุลเงิน</div>';
+  };
+  paint();
+  $('#curQ').addEventListener('input', paint);
+  layer.addEventListener('click', (e) => {
+    if (e.target.closest('[data-cpclose]') || e.target.classList.contains('cat-layer-bg')) return close();
+    const b = e.target.closest('[data-cur]');
+    if (b) { onPick(b.dataset.cur); close(); }
+  });
+}
 // An amount in its own currency: ฿ for THB as before, otherwise the symbol plus the code.
 function curAmt(n, code) {
   if (!code || code === 'THB') return baht(n);
@@ -1239,8 +1302,7 @@ function txnForm(t, preset = {}) {
     <!-- Rows: icon column on the left, content on the right with a divider under each. -->
     <div class="form tx-rows">
       <div class="tr tr-amt" id="tAmtWrap">
-        <div class="tr-ico"><label class="cur-chip"><span id="tCurCode">${esc(d.currency || 'THB')}</span><select id="tCur" aria-label="สกุลเงิน">${CURRENCIES.map(([c, sym]) =>
-          `<option value="${c}" ${(d.currency || 'THB') === c ? 'selected' : ''}>${c}${sym === c ? '' : ` (${sym})`}</option>`).join('')}</select></label></div>
+        <div class="tr-ico"><button type="button" class="cur-chip" id="tCur" aria-label="สกุลเงิน">${esc(d.currency || 'THB')}</button></div>
         <div class="tr-body"><label class="tr-lab" for="tAmount">จำนวนเงิน</label><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
       </div>
       <button type="button" class="tr tr-cat" id="tCatOpen"></button>
@@ -1329,7 +1391,7 @@ function txnForm(t, preset = {}) {
     $('#tDate').value = dateStr(x);
     paintDate();
   }));
-  $('#tCur').addEventListener('change', (e) => { d.currency = e.target.value; $('#tCurCode').textContent = d.currency; });
+  $('#tCur').addEventListener('click', () => currencyPicker(d.currency || 'THB', (code) => { d.currency = code; $('#tCur').textContent = code; }));
   renderType();
   const pickedLabels = new Set(d.labels || []);
   const repaintLabels = labelPicker($('#tLabels'), pickedLabels);
