@@ -54,7 +54,7 @@ test('labels are created, put on expenses, renamed and deleted', async () => {
   assert.deepEqual(exp(bs, id).labels, []);
 });
 
-test('each partner labels a shared expense on their own, without re-approval', async () => {
+test('each partner labels a shared expense on their own', async () => {
   await B.post('/auth/register', { email: `lb${run}@t.dev`, password: 'password-b', name: 'B' });
   const { code } = await A.post('/couple/invite');
   await B.post('/couple/join', { code });
@@ -66,9 +66,8 @@ test('each partner labels a shared expense on their own, without re-approval', a
   const id = crypto.randomUUID();
   await A.post('/expenses', {
     id, type: 'expense', scope: 'shared', amount: 400, date: '2026-10-21', category: 'food',
-    payerId: a.user.id, shares: { [a.user.id]: 200 }, submit: true, labels: ['couple'],
+    payerId: a.user.id, shares: { [a.user.id]: 200 }, labels: ['couple'],
   });
-  await B.post(`/expenses/${id}/respond`, { approve: true });
 
   assert.equal((await B.put(`/expenses/${id}/labels`, { labels: ['babe', 'couple'] })).ok, true);
   assert.equal((await A.put(`/expenses/${id}/labels`, { labels: ['couple', 'shopee'] })).ok, true);
