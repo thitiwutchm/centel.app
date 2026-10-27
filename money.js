@@ -1057,7 +1057,7 @@ function budgetForm(bg, preset = {}) {
     `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-bcat="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'สร้างงบประมาณ' : 'แก้ไขงบประมาณ'}</h2>
       <button class="link-btn strong" id="saveBudget">บันทึก</button>
     </div>
@@ -1120,7 +1120,7 @@ function catPicker(type, current, onPick) {
   layer.id = 'catLayer';
   layer.innerHTML = `<div class="sheet-backdrop cat-layer-bg"></div><section class="sheet cat-layer" role="dialog" aria-modal="true">
     <div class="grabber"></div>
-    <div class="sheet-head"><button class="link-btn" data-cpclose>ยกเลิก</button><h2>หมวดหมู่</h2><span class="sheet-head-pad"></span></div>
+    <div class="sheet-head"><button class="close-x" data-cpclose aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button><h2>หมวดหมู่</h2><span class="sheet-head-pad"></span></div>
     <div class="cat-grid" id="cpGrid"></div><div class="chips sub-cats" id="cpSubs" hidden></div></section>`;
   document.body.appendChild(layer);
   let root = current ? catRootId(current, type) : '';
@@ -1170,9 +1170,9 @@ function txnForm(t, preset = {}) {
 
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'เพิ่มรายการ' : 'แก้ไขรายการ'}</h2>
-      <button class="link-btn strong" id="saveTx">บันทึก</button>
+      <span class="sheet-head-pad"></span>
     </div>
     <div class="seg" id="txType">
       <button type="button" data-ttype="expense">รายจ่าย</button>
@@ -1209,6 +1209,7 @@ function txnForm(t, preset = {}) {
     <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
     ${d.billId ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
     ${isNew ? '' : '<button class="btn danger" id="delTx">ลบรายการ</button>'}
+    <div class="save-bar"><button type="button" class="save-pill" id="saveTx">${isNew ? 'เพิ่มรายการ' : 'บันทึก'}</button></div>
   `);
 
   const shared = () => d.scope === 'shared' && d.type === 'expense';
@@ -1425,7 +1426,7 @@ function walletForm(w) {
   const used = w && money.txns.some((t) => t.walletId === w.id || t.toWalletId === w.id);
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'เพิ่มกระเป๋าเงิน' : 'แก้ไขกระเป๋าเงิน'}</h2>
       <button class="link-btn strong" id="saveWallet">บันทึก</button>
     </div>
@@ -1594,7 +1595,7 @@ function labelForm(l) {
   const isNew = !l;
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="labels">ยกเลิก</button>
+      <button class="close-x" data-action="labels" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'เพิ่มป้ายกำกับ' : 'เปลี่ยนชื่อป้าย'}</h2>
       <button class="link-btn strong" id="saveLabel">บันทึก</button>
     </div>
@@ -1753,7 +1754,7 @@ function catForm(c, preset = {}) {
   const back = d.parent && preset.parent ? `data-cat-edit="${d.parent}"` : 'data-action="categories"';
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" ${back}>ยกเลิก</button>
+      <button class="close-x" ${back} aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? (d.parent ? 'เพิ่มหมวดย่อย' : 'เพิ่มหมวดหมู่') : 'แก้ไขหมวดหมู่'}</h2>
       <button class="link-btn strong" id="saveCat">บันทึก</button>
     </div>

@@ -584,7 +584,7 @@ function billForm(b, opts = {}) {
   // Clean layout: hero (icon, name, amount) on top, then one grouped list of value pickers.
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>${isNew ? 'เพิ่มบิล' : 'แก้ไขบิล'}</h2>
       <button class="link-btn strong" id="saveBill">บันทึก</button>
     </div>
