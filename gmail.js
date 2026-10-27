@@ -376,7 +376,7 @@ async function gmailAttachPdf(r, billId, ym) {
 function gmailRow(r, i) {
   const b = r.rule;
   const done = gmailImported(r);
-  const dueTxt = r.due ? `ครบกำหนด ${thShortDate(new Date(r.due + 'T00:00'))} ${Number(r.due.slice(0, 4)) + 543}` : 'ไม่พบวันครบกำหนด';
+  const dueTxt = r.due ? `ครบกำหนด ${thShortDate(new Date(r.due + 'T00:00'))} ${Number(r.due.slice(0, 4)) + BE}` : 'ไม่พบวันครบกำหนด';
   const meta = [b.name, r.account ? gmailShortAccount(r.account) : '', r.ym ? thMonthYear(r.ym) : ''].filter(Boolean).join(' · ');
   const action = done ? '<span class="badge ok">นำเข้าแล้ว</span>'
     : `<button class="btn small pillbtn" data-gmail-import="${i}">นำเข้า</button>`;
