@@ -355,13 +355,31 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 
 .switch { position: relative; width: 51px; height: 31px; flex: 0 0 51px; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-.switch span { position: absolute; inset: 0; border-radius: 16px; background: var(--line); transition: .2s; }
+/* Crystal-clear glass switch, matching the ✕ button: a see-through track with a white rim that
+   fills with a clear tint of the theme accent when on, and a glass bead for the knob. */
+.switch span {
+  position: absolute; inset: 0; border-radius: 16px; transition: background .25s, box-shadow .25s;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, .35), rgba(255, 255, 255, .08)), rgba(3, 14, 30, .06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .8), inset 0 1px 3px rgba(3, 14, 30, .14), 0 0 0 0.5px rgba(3, 14, 30, .1);
+  -webkit-backdrop-filter: blur(4px) saturate(180%); backdrop-filter: blur(4px) saturate(180%);
+}
 .switch span::after {
   content: ""; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px;
-  background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, .2); transition: .2s;
+  background:
+    radial-gradient(70% 45% at 50% 10%, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0) 75%),
+    radial-gradient(80% 60% at 50% 100%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+    rgba(255, 255, 255, .78);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .95), 0 0 0 0.5px rgba(3, 14, 30, .12), 0 3px 8px rgba(3, 14, 30, .2);
+  transition: transform .25s cubic-bezier(.3, 1.4, .5, 1);
 }
-.switch input:checked + span { background: var(--ok); }
+.switch input:checked + span {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, .4), rgba(255, 255, 255, 0) 60%), color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7), inset 0 -2px 6px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 0 0.5px rgba(3, 14, 30, .1);
+}
 .switch input:checked + span::after { transform: translateX(20px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+:root[data-backdrop="dark"] .switch input:not(:checked) + span { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25), inset 0 1px 3px rgba(0, 0, 0, .4); }
+@media (prefers-color-scheme: dark) { :root:not([data-backdrop]) .switch input:not(:checked) + span { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25), inset 0 1px 3px rgba(0, 0, 0, .4); } }
 
 .btn {
   display: block; width: 100%; border: 0; border-radius: 14px; padding: 14px; font-size: 17px; font-weight: 600;
@@ -992,6 +1010,11 @@ body::before {
 .detail-bar .round-btn.sm .svg-i { width: 19px; height: 19px; }
 .pill-btn { height: 36px; padding: 0 16px; border-radius: 18px; border: 0; background: var(--c-fill); color: var(--c-text); font: inherit; font-weight: 600; }
 .hero-ico { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-size: 38px; margin: 0 auto 8px; }
+.hero-ico.hero-edit { position: relative; border: 0; padding: 0; font: inherit; font-size: 38px; color: inherit; overflow: visible; }
+.hero-ico.hero-edit.has-img > img { border-radius: 50%; }
+.hero-ico.hero-edit .w-cam { right: 0; bottom: 0; }
+.bf-pic { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.bf-pic .w-pic-actions, .bf-pic .w-emojis { justify-content: center; }
 .bd-hero { text-align: center; margin: 0 0 18px; }
 .bd-name { font-size: 17px; font-weight: 700; color: var(--c-text); }
 .bd-cat { font-size: 13px; color: var(--c-muted); opacity: .8; }

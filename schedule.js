@@ -170,7 +170,7 @@ function billDetail(id) {
       <button class="round-btn sm" id="bdDel" aria-label="ลบบิล">${svgIcon('trash')}</button>
     </div>
     <div class="bd-hero">
-      <div class="hero-ico" style="background:${c.color}2e">${c.icon}</div>
+      <div class="hero-ico${billImg(b) ? ' has-img' : ''}" style="background:${c.color}2e">${billFace(b)}</div>
       <div class="bd-name">${esc(b.name)}</div>
       <div class="bd-cat">${c.label}${b.variable && b.amount ? ' · ยอดประมาณ' : ''}</div>
       <div class="bd-amt">${amount}</div>
