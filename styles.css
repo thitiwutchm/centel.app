@@ -226,7 +226,8 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 /* The selected pill hugs the icon + label (not the whole slot), tinted with the accent. */
 .tabbar .tab-in {
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  flex: none; padding: 6px 12px 5px; border-radius: 20px; min-width: 60px;
+  /* Same width on every tab (slot width, capped so wide screens stay snug), so the pill never changes size. */
+  width: min(100%, 84px); padding: 6px 0 5px; border-radius: 20px;
   transition: background .25s, box-shadow .25s, color .25s;
 }
 .tabbar .ti { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
