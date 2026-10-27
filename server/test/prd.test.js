@@ -62,68 +62,47 @@ test('A cannot see B personal expenses, even querying the database directly', as
   }
 });
 
-test('approver can only approve or reject, never edit amount or shares', async () => {
+test('a shared expense is recorded for both straight away, with no approval and no debt', async () => {
   const id = crypto.randomUUID();
   const r = await A.post('/expenses', {
     id, scope: 'shared', type: 'expense', amount: 1000, date: '2026-10-21', merchant: 'ซูชิ', category: 'food',
-    payerId: a.user.id, shares: { [a.user.id]: 500 }, submit: true,
+    payerId: a.user.id, shares: { [a.user.id]: 500 },
   });
   assert.equal(r.id, id);
-  // Pending: not a debt yet.
-  assert.equal((await B.get('/bootstrap')).settlements.length, 0);
-  // B tries to edit: refused.
+  const boot = await B.get('/bootstrap');
+  const e = boot.expenses.find((x) => x.id === id);
+  assert.equal(e.status, 'approved');
+  assert.deepEqual(e.shares, { [a.user.id]: 500, [b.user.id]: 500 });
+  assert.equal(boot.settlements.length, 0);
+  // Only the creator can change it.
   const edit = await B.put(`/expenses/${id}`, { scope: 'shared', type: 'expense', amount: 10, date: '2026-10-21', payerId: a.user.id });
   assert.equal(edit.status, 404);
-  // A cannot approve own request.
-  assert.equal((await A.post(`/expenses/${id}/respond`, { approve: true })).status, 409);
-  // A cannot edit while pending either.
-  assert.equal((await A.put(`/expenses/${id}`, { scope: 'shared', type: 'expense', amount: 10, date: '2026-10-21', payerId: a.user.id })).status, 409);
+  assert.equal((await B.del(`/expenses/${id}`)).status, 409);
 });
 
-test('rejected request creates no debt and the creator can resubmit', async () => {
+test('รับผิดชอบทั้งหมด puts the whole cost on the creator; edits stay recorded', async () => {
   const id = crypto.randomUUID();
   await A.post('/expenses', {
     id, scope: 'shared', type: 'expense', amount: 400, date: '2026-10-22', category: 'food',
-    payerId: a.user.id, shares: { [a.user.id]: 200 }, submit: true,
+    payerId: a.user.id, shares: { [a.user.id]: 400 },
   });
-  assert.equal((await B.post(`/expenses/${id}/respond`, { approve: false, reason: 'ยอดผิด' })).ok, true);
-  let boot = await A.get('/bootstrap');
-  assert.equal(boot.expenses.find((e) => e.id === id).status, 'rejected');
-  assert.ok(!boot.settlements.some((s) => s.expenseId === id));
-  const re = await A.put(`/expenses/${id}`, {
+  let e = (await B.get('/bootstrap')).expenses.find((x) => x.id === id);
+  assert.deepEqual(e.shares, { [a.user.id]: 400, [b.user.id]: 0 });
+  // Switch to หาร 2.
+  assert.equal((await A.put(`/expenses/${id}`, {
     scope: 'shared', type: 'expense', amount: 300, date: '2026-10-22', category: 'food',
-    payerId: a.user.id, shares: { [a.user.id]: 150 }, submit: true,
-  });
-  assert.equal(re.id, id);
-  boot = await B.get('/bootstrap');
-  const e = boot.expenses.find((x) => x.id === id);
-  assert.equal(e.status, 'pending');
-  assert.equal(e.revision, 2);
-  assert.deepEqual(e.events.map((x) => x.action), ['submitted', 'rejected', 'resubmitted']);
-});
-
-test('approving 1,000 paid by A split 50/50 shows B owes A 500; repayment adds no spending', async () => {
-  const boot0 = await B.get('/bootstrap');
-  const sushi = boot0.expenses.find((e) => e.merchant === 'ซูชิ');
-  assert.equal((await B.post(`/expenses/${sushi.id}/respond`, { approve: true })).ok, true);
+    payerId: a.user.id, shares: { [a.user.id]: 150 },
+  })).id, id);
   const boot = await B.get('/bootstrap');
-  const st = boot.settlements.filter((s) => s.expenseId === sushi.id);
-  assert.equal(st.length, 1);
-  assert.equal(st[0].debtorId, b.user.id);
-  assert.equal(st[0].creditorId, a.user.id);
-  assert.equal(st[0].amount, 500);
-  assert.equal(st[0].status, 'unpaid');
-
-  const sharedTotal = () => B.get('/bootstrap').then((x) => x.expenses
-    .filter((e) => e.scope === 'shared' && e.status === 'approved').reduce((s, e) => s + e.amount, 0));
-  const before = await sharedTotal();
-  assert.equal(before, 1000); // counted once, not 1,000 + 500
-  assert.equal((await B.post(`/settlements/${st[0].id}`, { paid: true })).ok, true);
-  assert.equal(await sharedTotal(), before);
-  const after = (await A.get('/bootstrap')).settlements.find((s) => s.id === st[0].id);
-  assert.equal(after.status, 'paid');
-  // Approved shared expenses are locked.
-  assert.equal((await A.del(`/expenses/${sushi.id}`)).status, 409);
+  e = boot.expenses.find((x) => x.id === id);
+  assert.equal(e.status, 'approved');
+  assert.equal(e.amount, 300);
+  assert.deepEqual(e.shares, { [a.user.id]: 150, [b.user.id]: 150 });
+  assert.equal(boot.settlements.length, 0);
+  // The creator can make it personal again, or delete it.
+  assert.equal((await A.put(`/expenses/${id}`, { scope: 'personal', type: 'expense', amount: 300, date: '2026-10-22', category: 'food' })).id, id);
+  assert.ok(!(await B.get('/bootstrap')).expenses.some((x) => x.id === id));
+  assert.equal((await A.del(`/expenses/${id}`)).ok, true);
 });
 
 test('duplicate slip reference is flagged before saving', async () => {

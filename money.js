@@ -282,7 +282,7 @@ function cumDaily(ym, type, filter = () => true, value = (t) => t.amount) {
 }
 
 // A personal budget counts my spending (my share of shared bills); a shared budget
-// counts whole approved shared bills, once, for the couple.
+// counts whole shared bills, once, for the couple.
 function budgetFilter(bg) {
   const target = catById(bg.category) ? catById(bg.category).id : bg.category;
   const cat = (t) => bg.category === 'all' || catIn(t.category, target);
@@ -341,9 +341,9 @@ function upsert(list, item) {
   if (i >= 0) list[i] = item; else list.push(item);
 }
 
-function saveTxn(t, extra) {
+function saveTxn(t) {
   upsert(money.txns, t);
-  if (isCloud()) cloudSaveTxn(t, extra); else saveMoney();
+  if (isCloud()) cloudSaveTxn(t); else saveMoney();
 }
 function deleteTxn(t) {
   money.txns = money.txns.filter((x) => x.id !== t.id);
@@ -379,7 +379,7 @@ function deleteLabel(l) {
   if (ui.txLabel === l.id) ui.txLabel = '';
   if (isCloud()) cloudCall('DELETE', `/labels/${encodeURIComponent(l.id)}`); else saveMoney();
 }
-// Labels only (no other change): also works on a partner's or an approved shared expense.
+// Labels only (no other change): also works on a partner's shared expense.
 function setTxnLabels(t, ids) {
   t.labels = ids;
   if (isCloud()) cloudCall('PUT', `/expenses/${t.id}/labels`, { labels: ids }); else saveMoney();
@@ -526,12 +526,6 @@ function budgetBar(spent, amount, ym) {
 
 /* ---------- Shared list pieces ---------- */
 
-const STATUS_BADGE = {
-  draft: '<span class="badge muted">ร่าง</span>',
-  pending: '<span class="badge warn">รออนุมัติ</span>',
-  rejected: '<span class="badge bad">ถูกปฏิเสธ</span>',
-};
-
 function txItem(t, S) {
   const c = txCat(t);
   const w = walletById(t.walletId);
@@ -543,11 +537,10 @@ function txItem(t, S) {
     t.type === 'transfer' ? c.label : '',
     esc(t.merchant || ''),
     esc(t.note || ''),
-    shared ? `ส่วนของฉัน ${baht(t.amount)}` : '',
+    shared ? splitLine(t) : '',
   ].filter(Boolean).join(' · ') || (w ? esc(w.name) : '');
   const badges = [
     shared ? '<span class="badge share">ร่วม</span>' : '',
-    shared ? STATUS_BADGE[t.status] || '' : '',
     t.reviewNeeded || (!t.category && t.type === 'expense') ? '<span class="badge warn">รอตรวจสอบ</span>' : '',
     t.billId ? '<span class="badge muted">บิล</span>' : '',
     t.receiptKey ? '<span class="badge muted">🧾</span>' : '',
@@ -728,22 +721,19 @@ function alertList() {
     ? occurrences(ym).filter((o) => !o.paid && !o.bill.autopay && (o.status === 'overdue' || o.status === 'soon')) : [];
   // PRD: warn from 80% of a budget, and again once it is over 100%.
   const over = money.budgets.filter((bg) => budgetSpent(bg, ym) >= bg.amount * 0.8);
-  const approvals = toApprove();
-  return { bills, over, approvals };
+  return { bills, over };
 }
-function alertCount() { const a = alertList(); return a.bills.length + a.over.length + a.approvals.length + (gmailAutoDue() ? 1 : 0); }
+function alertCount() { const a = alertList(); return a.bills.length + a.over.length + (gmailAutoDue() ? 1 : 0); }
 
 function alertsSheet() {
-  const { bills, over, approvals } = alertList();
+  const { bills, over } = alertList();
   const ym = ymOf(new Date());
-  const S = walletSet('total');
   openSheet(`
     <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>การแจ้งเตือน</h2><span style="width:40px"></span></div>
     ${gmailAutoDue() ? gmailAutoAlert() : ''}
-    ${approvals.length ? `<div class="section-title">รอคุณอนุมัติ</div><div class="list">${approvals.map((t) => txItem(t, S)).join('')}</div>` : ''}
     ${bills.length ? `<div class="section-title">บิลใกล้ครบกำหนด / เลยกำหนด</div><div class="list">${bills.map(occItem).join('')}</div>` : ''}
     ${over.length ? `<div class="section-title">งบประมาณใช้ไปแล้ว 80% ขึ้นไป</div>${over.map((bg) => budgetRow(bg, ym)).join('')}` : ''}
-    ${bills.length || over.length || approvals.length || gmailAutoDue() ? '' : '<div class="empty"><div class="e-ico">🔔</div>ไม่มีการแจ้งเตือน</div>'}
+    ${bills.length || over.length || gmailAutoDue() ? '' : '<div class="empty"><div class="e-ico">🔔</div>ไม่มีการแจ้งเตือน</div>'}
   `);
 }
 
@@ -831,7 +821,7 @@ function txListHtml(sel) {
     ${list.length ? dayGroups(list, S) : `<div class="empty"><div class="e-ico">🧾</div>ยังไม่มีรายการ${r.label}</div>`}`;
 }
 
-const TX_FILTERS = [['all', 'ทั้งหมด'], ['personal', 'ส่วนตัว'], ['shared', 'ร่วมกัน'], ['pending', 'รออนุมัติ'], ['review', 'รอตรวจสอบ']];
+const TX_FILTERS = [['all', 'ทั้งหมด'], ['personal', 'ส่วนตัว'], ['shared', 'ร่วมกัน'], ['review', 'รอตรวจสอบ']];
 
 function txFilters() {
   const list = cloud.partner ? TX_FILTERS : TX_FILTERS.filter(([k]) => k === 'all' || k === 'review');
@@ -850,7 +840,6 @@ function txFilterOk(t) {
   switch (ui.txFilter) {
     case 'personal': return t.scope !== 'shared' && t.type !== 'settle';
     case 'shared': return t.scope === 'shared' || t.type === 'settle';
-    case 'pending': return t.scope === 'shared' && t.status !== 'approved';
     case 'review': return !!t.reviewNeeded || (t.type === 'expense' && !t.category);
     default: return true;
   }
@@ -870,14 +859,13 @@ function txMenu() {
 function exportCsv() {
   if (!money.txns.length) { toast('ยังไม่มีรายการ'); return; }
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const rows = [['วันที่', 'ประเภท', 'หมวดหมู่', 'กระเป๋าเงิน', 'ไปยัง', 'จำนวนเงิน', 'ร้านค้า', 'บันทึก', 'ขอบเขต', 'ยอดรวมทั้งบิล', 'สถานะ', 'ป้ายกำกับ']];
+  const rows = [['วันที่', 'ประเภท', 'หมวดหมู่', 'กระเป๋าเงิน', 'ไปยัง', 'จำนวนเงิน', 'ร้านค้า', 'บันทึก', 'ขอบเขต', 'ยอดรวมทั้งบิล', 'ต้นทุน', 'ป้ายกำกับ']];
   const typeTh = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'โอนเงิน', settle: 'คืนเงินระหว่างคู่' };
-  const statusTh = { draft: 'ร่าง', pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ถูกปฏิเสธ' };
   money.txns.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach((t) => rows.push([
     t.date, typeTh[t.type], txCat(t).label, (walletById(t.walletId) || {}).name,
     t.type === 'transfer' ? (walletById(t.toWalletId) || {}).name : '', t.type === 'settle' ? t.sign * t.amount : t.amount,
     t.merchant, t.note, t.scope === 'shared' ? 'ร่วมกัน' : 'ส่วนตัว', t.scope === 'shared' ? t.total : '',
-    t.scope === 'shared' ? statusTh[t.status] : '', txLabels(t).map((l) => l.name).join(', '),
+    t.scope === 'shared' ? (splitOf(t) === 'full' ? 'รับผิดชอบทั้งหมด' : 'หาร 2') : '', txLabels(t).map((l) => l.name).join(', '),
   ]));
   deliverFile(`transactions-${dateStr(new Date())}.csv`, 'text/csv', '﻿' + rows.map((r) => r.map(q).join(',')).join('\r\n'));
 }
@@ -999,7 +987,7 @@ function renderBudgets() {
     </div>`}
     ${isCloud() && cloud.partner ? `
     <div class="section-row"><span>งบร่วมกับ ${esc(partnerName())}</span><button class="link-btn" data-action="add-budget-shared">＋ สร้างงบร่วม</button></div>
-    ${shared.map((bg) => budgetRow(bg, ym)).join('') || '<div class="card muted small">งบร่วมนับยอดรวมทั้งบิลของรายจ่ายร่วมที่อนุมัติแล้ว ทั้งสองคนเห็นงบเดียวกัน</div>'}` : ''}
+    ${shared.map((bg) => budgetRow(bg, ym)).join('') || '<div class="card muted small">งบร่วมนับยอดรวมทั้งบิลของรายจ่ายร่วม ทั้งสองคนเห็นงบเดียวกัน</div>'}` : ''}
   `;
 }
 
@@ -1134,9 +1122,11 @@ function txnForm(t, preset = {}) {
     date: dateStr(new Date()), note: '', merchant: '', scope: 'personal', ...preset,
   };
   // The form edits the whole bill; a shared row stores my share in `amount` and the bill in `total`.
-  let shareEdited = false;
-  if (t && t.scope === 'shared') { d.amount = t.total; d.myShare = t.amount; shareEdited = true; }
+  if (t && t.scope === 'shared') { d.amount = t.total; d.split = splitOf(t); }
   if (!d.payerId) d.payerId = me;
+  if (!d.split) d.split = 'half';
+  // Who bears the cost under รับผิดชอบทั้งหมด: the payer, which is me for everything new.
+  const fullLabel = d.payerId === me ? 'รับผิดชอบทั้งหมด' : `${esc(partnerName())} รับผิดชอบทั้งหมด`;
   if (d.scope === 'shared' && !canShare) d.scope = 'personal';
   const receipts = isCloud() && cloud.features.storage;
   const wOpts = (selId, skip) => money.wallets.filter((w) => w.id !== skip)
@@ -1170,12 +1160,9 @@ function txnForm(t, preset = {}) {
     <div class="form">
       <div class="field" id="tMerchRow"><label for="tMerchant">ร้านค้า / ผู้รับ</label><input id="tMerchant" placeholder="เช่น 7-Eleven" value="${esc(d.merchant || '')}" autocomplete="off"></div>
       <div id="tShareRows">
-        <div class="field"><label for="tPayer">ใครจ่าย</label><select id="tPayer">
-          <option value="${me}" ${d.payerId === me ? 'selected' : ''}>ฉัน</option>
-          ${canShare ? `<option value="${cloud.partner.id}" ${d.payerId === cloud.partner.id ? 'selected' : ''}>${esc(partnerName())}</option>` : ''}
-        </select></div>
-        <div class="field"><label for="tMine">ส่วนของฉัน (฿)</label><input id="tMine" inputmode="decimal" value="${d.myShare ?? ''}"></div>
-        <div class="kv"><span>ส่วนของ ${esc(partnerName())}</span><b id="tTheirs">-</b></div>
+        <div class="field col"><label>ต้นทุน</label>
+          <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel}</button><button type="button" data-split="half">หาร 2</button></div></div>
+        <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div>
       </div>
       <div class="field" id="tWalletRow"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select></div>
       <div class="field" id="tToRow"><label for="tTo">ไปยัง</label><select id="tTo"></select></div>
@@ -1184,20 +1171,17 @@ function txnForm(t, preset = {}) {
       <div class="field col labels-field"><label>ป้ายกำกับ</label><div class="chips lab-pick" id="tLabels"></div></div>
       <div class="field" id="tReviewRow"><label for="tReview">รอตรวจสอบ</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="tReview" ${d.reviewNeeded ? 'checked' : ''}><span></span></label></div>
     </div>
-    <p class="hint" id="tShareHint">ใส่ยอดรวมทั้งบิล ค่าเริ่มต้นแบ่งครึ่ง แก้ส่วนของแต่ละคนได้ รายการจะนับเป็นรายจ่ายเมื่อ ${esc(partnerName())} อนุมัติแล้วเท่านั้น</p>
-    ${d.status === 'rejected' ? `<p class="hint bad-text">ถูกปฏิเสธ${d.rejectReason ? `: ${esc(d.rejectReason)}` : ''} — แก้ไขแล้วกดบันทึกเพื่อส่งใหม่</p>` : ''}
+    <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
     ${d.billId ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
-    <button class="btn ghost" id="draftTx" hidden>บันทึกเป็นร่าง (ยังไม่ส่ง)</button>
     ${isNew ? '' : '<button class="btn danger" id="delTx">ลบรายการ</button>'}
   `);
 
   const shared = () => d.scope === 'shared' && d.type === 'expense';
+  const myShare = (total) => (d.split === 'full' ? (d.payerId === me ? total : 0) : Math.round((total / 2) * 100) / 100);
   const updateShares = () => {
     if (!shared()) return;
-    const total = num($('#tAmount').value) || 0;
-    if (!shareEdited) $('#tMine').value = total ? Math.round((total / 2) * 100) / 100 : '';
-    const mine = num($('#tMine').value) || 0;
-    $('#tTheirs').textContent = baht(Math.max(0, Math.round((total - mine) * 100) / 100));
+    document.querySelectorAll('#tSplit button').forEach((x) => x.classList.toggle('on', x.dataset.split === d.split));
+    $('#tMine').textContent = baht(myShare(num($('#tAmount').value) || 0));
   };
   const renderType = () => {
     document.querySelectorAll('#txType button').forEach((x) => x.classList.toggle('on', x.dataset.ttype === d.type));
@@ -1212,9 +1196,8 @@ function txnForm(t, preset = {}) {
     $('#tToRow').hidden = !transfer;
     $('#tShareRows').hidden = !sh;
     $('#tShareHint').hidden = !sh;
-    $('#draftTx').hidden = !sh;
     // The wallet only matters when I am the one paying.
-    $('#tWalletRow').hidden = sh && $('#tPayer').value !== me;
+    $('#tWalletRow').hidden = sh && d.payerId !== me;
     $('#tWalletLab').textContent = transfer ? 'จาก' : sh ? 'จ่ายจาก' : 'กระเป๋าเงิน';
     updateShares();
     if (transfer) {
@@ -1278,8 +1261,12 @@ function txnForm(t, preset = {}) {
     paintCats();
   });
   $('#tAmount').addEventListener('input', updateShares);
-  $('#tMine').addEventListener('input', () => { shareEdited = true; updateShares(); });
-  $('#tPayer').addEventListener('change', renderType);
+  $('#tSplit').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-split]');
+    if (!b) return;
+    d.split = b.dataset.split;
+    updateShares();
+  });
   $('#tWallet').addEventListener('change', () => { if (d.type === 'transfer') renderType(); });
   $('#tTo').addEventListener('change', (e) => { d.toWalletId = e.target.value; });
 
@@ -1321,7 +1308,7 @@ function txnForm(t, preset = {}) {
     if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
   }
 
-  const save = (submit) => {
+  const save = () => {
     const total = num($('#tAmount').value);
     if (!(total > 0)) { toast('กรุณาใส่จำนวนเงิน'); $('#tAmount').focus(); return; }
     const date = $('#tDate').value;
@@ -1343,24 +1330,21 @@ function txnForm(t, preset = {}) {
     }
     if (d.billId) { out.billId = d.billId; out.billYm = d.billYm; }
     if (shared()) {
-      const mine = num($('#tMine').value) || 0;
-      if (mine < 0 || mine > total) { toast('ส่วนของฉันต้องไม่เกินยอดรวม'); $('#tMine').focus(); return; }
-      const payer = $('#tPayer').value;
-      const payerMe = payer === me;
+      // A record for my partner to see, counted straight away; the split only sets each person's cost.
+      const mine = myShare(total);
+      const payerMe = d.payerId === me;
       Object.assign(out, {
-        scope: 'shared', total, amount: mine, payerId: payer, ownerId: me, walletId: payerMe ? out.walletId : null,
-        walletAmount: payerMe ? total : 0, counted: false, status: submit ? 'pending' : 'draft',
+        scope: 'shared', total, amount: mine, payerId: d.payerId, ownerId: me, walletId: payerMe ? out.walletId : null,
+        walletAmount: payerMe ? total : 0, counted: true, status: 'approved',
         shares: { [me]: mine, [cloud.partner.id]: Math.round((total - mine) * 100) / 100 },
-        events: d.events || [], revision: d.revision || 1,
       });
     }
-    saveTxn(out, { submit: !!submit });
+    saveTxn(out);
     if (out.walletId && money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
     closeSheet(); render(); if (isNew) popIn();
-    toast(out.scope === 'shared' ? (submit ? `ส่งให้ ${partnerName()} อนุมัติแล้ว` : 'บันทึกร่างแล้ว') : isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว');
+    toast(out.scope === 'shared' ? `บันทึกแล้ว ${partnerName()} จะเห็นรายการนี้` : isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว');
   };
-  $('#saveTx').addEventListener('click', () => save(true));
-  $('#draftTx').addEventListener('click', () => save(false));
+  $('#saveTx').addEventListener('click', save);
   const del = $('#delTx');
   if (del) del.addEventListener('click', () => {
     confirmDelete('ลบรายการนี้?', '', () => {

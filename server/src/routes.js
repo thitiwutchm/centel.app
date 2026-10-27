@@ -136,7 +136,8 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const expenses = (await db.query('select * from expenses order by date, created_at')).rows;
     const shares = (await db.query('select * from expense_shares')).rows;
     const events = (await db.query('select expense_id, actor_id, action, revision, note, created_at from approval_events order by id')).rows;
-    const settlements = (await db.query('select * from settlements order by created_at')).rows;
+    // Only repayments already made: shared expenses no longer create debts.
+    const settlements = (await db.query("select * from settlements where status = 'paid' order by created_at")).rows;
     const budgets = (await db.query('select * from budgets order by created_at')).rows;
     const prefs = (await db.query('select data from prefs where user_id = app_uid()')).rows[0];
     const labels = (await db.query('select id, name, sort from labels order by sort, name')).rows;
@@ -271,6 +272,8 @@ async function findDuplicate(db, x, selfId) {
   return r.rows[0] ? r.rows[0].id : null;
 }
 
+// Shared rows are records, not debts: the shares only say whose cost it is
+// (the payer's alone, or half each) for each person's own totals.
 async function writeShares(db, id, x, me) {
   const partner = (await db.query('select my_partner() as p')).rows[0].p;
   if (!partner) throw bad('no_partner', 409);
@@ -302,7 +305,7 @@ router.post('/expenses', wrap(async (req, res) => {
         shared ? 'draft' : 'approved', x.reviewNeeded, x.receiptKey, x.slipRef, x.billId, x.billYm]);
     if (shared) {
       await writeShares(db, id, x, me);
-      if (req.body.submit) await db.query('select submit_expense($1)', [id]);
+      await db.query('select submit_expense($1)', [id]);
     }
     if (x.labels) await writeLabels(db, id, x.labels);
     return { id };
@@ -319,7 +322,6 @@ router.put('/expenses/:id', wrap(async (req, res) => {
   const out = await asUser(me, async (db) => {
     const cur = (await db.query('select scope, status from expenses where id = $1 and owner_id = app_uid()', [id])).rows[0];
     if (!cur) throw bad('not_found', 404);
-    if (cur.scope !== x.scope && cur.status !== 'draft' && cur.scope === 'shared') throw bad('locked', 409);
     if (!req.body.force) {
       const dup = await findDuplicate(db, x, id);
       if (dup) return { duplicate: dup };
@@ -337,7 +339,7 @@ router.put('/expenses/:id', wrap(async (req, res) => {
     if (!r.rowCount) throw bad('locked', 409);
     if (shared) {
       await writeShares(db, id, x, me);
-      if (req.body.submit) await db.query('select submit_expense($1)', [id]);
+      await db.query('select submit_expense($1)', [id]);
     } else {
       await db.query('delete from expense_shares where expense_id = $1', [id]);
     }

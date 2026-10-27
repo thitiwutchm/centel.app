@@ -252,6 +252,16 @@ const I18N_EN = {
   'บัญชี Google นี้ไม่มีรูปโปรไฟล์': 'This Google account has no profile picture', 'บัญชี Google นี้ไม่ใช่บัญชีที่เข้าสู่ระบบอยู่': 'This Google account is not the signed-in account',
   'ทำรายการไม่สำเร็จ': 'Something went wrong', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้': 'Can’t reach the server',
   'สลิปนี้อาจซ้ำกับรายการที่บันทึกไว้แล้ว ต้องการบันทึกซ้ำหรือไม่?': 'This slip may duplicate a saved transaction. Save it anyway?',
+  'หาร 2': 'Split in half', 'รับผิดชอบทั้งหมด': 'I cover it all', '{0} รับผิดชอบทั้งหมด': '{0} covers it all', 'ต้นทุน': 'Cost',
+  'ลงโดย': 'Logged by', 'การคืนเงินที่ผ่านมา': 'Past settle-ups', 'รายจ่ายร่วมเดือนนี้ {0}': 'Shared spending this month {0}',
+  'บันทึกแล้ว {0} จะเห็นรายการนี้': 'Saved. {0} will see it',
+  'บันทึกให้ {0} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน':
+    'Logged so {0} can see it, not a request for money. The cost choice sets my share in totals and reports.',
+  'บันทึกไว้ให้ทั้งสองคนเห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ส่วนของแต่ละคนใช้คำนวณต้นทุนในรายงาน':
+    'Logged for both of you to see, not a request for money. Each share is used for cost in reports.',
+  'เชิญคู่เข้าบัญชี แยกรายจ่ายส่วนตัว และลงรายจ่ายร่วมให้อีกฝ่ายเห็น': 'Invite your partner, keep personal spending private and log shared expenses for each other to see',
+  'งบร่วมนับยอดรวมทั้งบิลของรายจ่ายร่วม ทั้งสองคนเห็นงบเดียวกัน': 'Shared budgets count the full total of shared expenses. You both see the same budget.',
+  '{0} เห็นเฉพาะรายจ่ายร่วมและงบร่วมของคุณทั้งสอง รายจ่ายส่วนตัวของแต่ละคนมองไม่เห็น': '{0} only sees your shared expenses and shared budgets. Personal spending stays private.',
   'ไม่มียอดค้างคืน': 'All settled', '{0} ต้องคืนคุณ': '{0} owes you', 'คุณต้องคืน {0}': 'You owe {0}',
   'ใช้ร่วมกับคู่ของคุณ': 'Use it with your partner', 'เชิญคู่เข้าบัญชี แยกรายจ่ายส่วนตัว และส่งรายจ่ายร่วมให้อีกฝ่ายอนุมัติ': 'Invite your partner, keep personal spending private and send shared expenses for approval',
   'เชื่อมบัญชีคู่': 'Link partner', 'รอ {0} อนุมัติ': 'Waiting for {0}', 'ถูกปฏิเสธ / ร่างที่ยังไม่ส่ง': 'Rejected / unsent drafts',
