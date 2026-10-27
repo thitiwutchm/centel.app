@@ -5,16 +5,16 @@
 const STORAGE_KEY = 'billplanner.v1';
 
 const CATEGORIES = {
-  credit:    { label: 'บัตรเครดิต', icon: '💳', color: '#7c5cff' },
-  electric:  { label: 'ค่าไฟ',      icon: '⚡', color: '#f5a623' },
-  water:     { label: 'ค่าน้ำ',      icon: '💧', color: '#2fa8ff' },
-  internet:  { label: 'อินเทอร์เน็ต', icon: '📶', color: '#00b3a4' },
-  phone:     { label: 'ค่าโทรศัพท์', icon: '📱', color: '#4f6bed' },
-  loan:      { label: 'ผ่อนชำระ',   icon: '🏦', color: '#e0552b' },
-  insurance: { label: 'ประกัน',     icon: '🛡️', color: '#1a9e5c' },
-  rent:      { label: 'ค่าเช่า/ส่วนกลาง', icon: '🏠', color: '#b26a3c' },
-  subscription: { label: 'สมาชิกรายเดือน', icon: '🎬', color: '#e83e8c' },
-  other:     { label: 'อื่นๆ',      icon: '🧾', color: '#8a8f99' },
+  credit:    { label: 'บัตรเครดิต', icon: '💳', color: '#7c5cff', svg: 'card' },
+  electric:  { label: 'ค่าไฟ',      icon: '⚡', color: '#f5a623', svg: 'bolt' },
+  water:     { label: 'ค่าน้ำ',      icon: '💧', color: '#2fa8ff', svg: 'drop' },
+  internet:  { label: 'อินเทอร์เน็ต', icon: '📶', color: '#00b3a4', svg: 'wifi' },
+  phone:     { label: 'ค่าโทรศัพท์', icon: '📱', color: '#4f6bed', svg: 'phone' },
+  loan:      { label: 'ผ่อนชำระ',   icon: '🏦', color: '#e0552b', svg: 'bank' },
+  insurance: { label: 'ประกัน',     icon: '🛡️', color: '#1a9e5c', svg: 'shield' },
+  rent:      { label: 'ค่าเช่า/ส่วนกลาง', icon: '🏠', color: '#b26a3c', svg: 'home' },
+  subscription: { label: 'สมาชิกรายเดือน', icon: '🎬', color: '#e83e8c', svg: 'play' },
+  other:     { label: 'อื่นๆ',      icon: '🧾', color: '#8a8f99', svg: 'receipt' },
 };
 
 const TH_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -193,6 +193,12 @@ const BILL_EMOJIS = ['💳', '⚡', '💧', '🌐', '📱', '🏠', '🚗', '�
 function billImg(b) { return b && WALLET_IMG.test(b.icon || '') ? b.icon : ''; }
 function billFace(b) { const img = billImg(b); return img ? `<img src="${img}" alt="">` : esc((b && b.icon) || cat(b).icon); }
 
+// Small muted line under a bill's name naming its type with a line icon, e.g. card + "บัตรเครดิต".
+function billTypeLine(b) {
+  const c = cat(b);
+  return `<div class="type-line">${svgIcon(c.svg || 'receipt', 'svg-i')}<span>${c.label}</span></div>`;
+}
+
 function icoHtml(b, cls = 'ico') {
   const c = cat(b);
   return `<div class="${cls}${billImg(b) ? ' has-img' : ''}" style="background:${c.color}22">${billFace(b)}</div>`;
@@ -244,6 +250,7 @@ function occItem(o) {
       ${icoHtml(b)}
       <div class="main">
         <div class="name">${esc(b.name)}</div>
+        ${billTypeLine(b)}
         <div class="sub">${dueTxt}${extra ? ' · ' + extra : ''}</div>
         ${statusBadge(o)}
       </div>
