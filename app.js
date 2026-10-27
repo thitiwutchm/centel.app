@@ -88,7 +88,7 @@ function daysInMonth(ym) { const { y, m } = parseYm(ym); return new Date(y, m, 0
 function monthDiff(a, b) { const A = parseYm(a), B = parseYm(b); return (B.y - A.y) * 12 + (B.m - A.m); }
 function today() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
 function dateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
-function thMonthYear(ym) { const { y, m } = parseYm(ym); return `${TH_MONTHS[m - 1]} ${y + 543}`; }
+function thMonthYear(ym) { const { y, m } = parseYm(ym); return `${TH_MONTHS[m - 1]} ${y + BE}`; }
 function thShortDate(d) { return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]}`; }
 function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
 
@@ -348,7 +348,7 @@ function renderCalendar() {
         <span><i class="dot over"></i>เลยกำหนด</span><span><i class="dot paid"></i>จ่ายแล้ว</span>
       </div>
     </div>
-    <div class="section-title">${thShortDate(selDate)} ${y + 543}${sel.length ? ` · ${baht(selTotal)}` : ''}</div>
+    <div class="section-title">${thShortDate(selDate)} ${y + BE}${sel.length ? ` · ${baht(selTotal)}` : ''}</div>
     ${sel.length ? `<div class="list">${sel.map(occItem).join('')}</div>` : `<div class="card muted" style="text-align:center">ไม่มีบิลครบกำหนดวันนี้</div>`}
   `;
 }
@@ -383,12 +383,12 @@ function renderBills() {
 function billScheduleText(b) {
   if (b.type === 'once') {
     const [y, m, d] = b.onceDate.split('-').map(Number);
-    return `ครั้งเดียว ${d} ${TH_MONTHS_SHORT[m - 1]} ${y + 543}`;
+    return `ครั้งเดียว ${d} ${TH_MONTHS_SHORT[m - 1]} ${y + BE}`;
   }
   let s = `ทุกวันที่ ${b.dueDay}`;
   if (b.type === 'installment') {
     const end = parseYm(billEndMonth(b));
-    s += ` · ${b.months} งวด ถึง ${TH_MONTHS_SHORT[end.m - 1]} ${String(end.y + 543).slice(2)}`;
+    s += ` · ${b.months} งวด ถึง ${TH_MONTHS_SHORT[end.m - 1]} ${String(end.y + BE).slice(2)}`;
   }
   if (b.variable) s += ' · ยอดไม่แน่นอน';
   return s;
@@ -417,6 +417,9 @@ function renderSettings() {
     <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
       <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
     <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>
+    <div class="section-title">ภาษา · Language</div>
+    <div class="seg lang-seg">${[['th', 'ไทย'], ['en', 'English']]
+      .map(([k, l]) => `<button type="button" data-lang="${k}" class="${LANG === k ? 'on' : ''}" aria-pressed="${LANG === k}">${l}</button>`).join('')}</div>
     <div class="section-title">การแจ้งเตือน</div>
     <div class="form">
       <div class="field"><label for="remindDays">เตือนล่วงหน้า</label>
@@ -456,6 +459,9 @@ function renderSettings() {
     const y = window.scrollY;
     renderSettings();
     window.scrollTo(0, y);
+  }));
+  view.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.lang !== LANG) setLang(b.dataset.lang);
   }));
 }
 
@@ -904,14 +910,14 @@ function occurrenceSheet(id, ym) {
     <div class="detail-head">
       <div class="hero-ico" style="background:${c.color}2e">${c.icon}</div>
       <h3>${esc(b.name)}</h3>
-      <div class="sub">${c.label} · ครบกำหนด ${thShortDate(o.due)} ${o.due.getFullYear() + 543}</div>
+      <div class="sub">${c.label} · ครบกำหนด ${thShortDate(o.due)} ${o.due.getFullYear() + BE}</div>
       <div style="margin-top:6px">${statusBadge(o)}</div>
     </div>
     <div class="form rows">
       <div class="field"><label for="oAmount">ยอดเดือนนี้ (฿)</label>
         <input id="oAmount" inputmode="decimal" value="${rec.amount != null ? rec.amount : (b.amount || '')}" placeholder="0"></div>
       ${o.inst ? `<div class="kv"><span>งวดที่</span><span>${o.inst.n} / ${o.inst.of}</span></div>` : ''}
-      ${o.paid && o.paidAt ? `<div class="kv"><span>จ่ายเมื่อ</span><span>${thShortDate(new Date(o.paidAt))} ${new Date(o.paidAt).getFullYear() + 543}</span></div>` : ''}
+      ${o.paid && o.paidAt ? `<div class="kv"><span>จ่ายเมื่อ</span><span>${thShortDate(new Date(o.paidAt))} ${new Date(o.paidAt).getFullYear() + BE}</span></div>` : ''}
       ${b.note ? `<div class="kv"><span>บันทึก</span><span style="text-align:right;max-width:65%">${esc(b.note)}</span></div>` : ''}
       ${o.paid ? '' : `<div class="field"><label for="oWallet">จ่ายจาก</label><select id="oWallet">
         <option value="">ไม่บันทึกเป็นรายการ</option>
@@ -1105,8 +1111,8 @@ function icsFold(line) {
 function buildIcs() {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//centel.app//Bill Planner//TH', 'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH', 'X-WR-CALNAME:วางแผนจ่ายบิล'];
-  const alarm = (trigger, desc) => ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEscape(desc)}`, `TRIGGER:${trigger}`, 'END:VALARM'];
+    'METHOD:PUBLISH', `X-WR-CALNAME:${tr('วางแผนจ่ายบิล')}`];
+  const alarm = (trigger, desc) => ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEscape(tr(desc))}`, `TRIGGER:${trigger}`, 'END:VALARM'];
   let count = 0;
   state.bills.forEach((b) => {
     if (b.autopay) return;
@@ -1126,7 +1132,7 @@ function buildIcs() {
     }
     const end = new Date(start); end.setDate(end.getDate() + 1);
     ev.push(`DTSTART;VALUE=DATE:${icsDate(start)}`, `DTEND;VALUE=DATE:${icsDate(end)}`,
-      `SUMMARY:${icsEscape(summary)}`, `DESCRIPTION:${icsEscape([c.label, b.note].filter(Boolean).join('\n'))}`,
+      `SUMMARY:${icsEscape(tr(summary))}`, `DESCRIPTION:${icsEscape([tr(c.label), b.note].filter(Boolean).join('\n'))}`,
       'TRANSP:TRANSPARENT');
     // All-day events start at midnight; fire reminders at 09:00.
     if (remind > 0) ev.push(...alarm(`-P${remind - 1}DT15H`, `อีก ${remind} วันครบกำหนด ${b.name}`));
@@ -1166,6 +1172,7 @@ function loadSample() {
   occurrences(ym).filter((o) => o.daysLeft < 0 && o.bill.name !== 'ค่าน้ำ (MWA)').forEach((o) => {
     setRecord(ym, o.bill.id, { amount: o.bill.variable ? Math.round(o.bill.amount * 0.9) : undefined, paid: true, paidAt: new Date().toISOString() });
   });
+  state.bills.forEach((b) => { b.name = tr(b.name); if (b.note) b.note = tr(b.note); });
   sampleMoney();
   save();
   saveMoney();

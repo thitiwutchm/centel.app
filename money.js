@@ -185,6 +185,13 @@ function catRootId(id, type = 'expense') {
   const c = catById(id) || catFallback(type);
   return c.parent && catMap().has(c.parent) ? c.parent : c.id;
 }
+// Camera-with-sparkle icon for the AI Slips scan button; stroked with the rainbow gradient's first stop.
+const SCAN_ICON = `<svg class="scan-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M13.5 5H9.6L8.2 7H5.5A2.5 2.5 0 0 0 3 9.5v8A2.5 2.5 0 0 0 5.5 20h11a2.5 2.5 0 0 0 2.5-2.5V13"/>
+  <circle cx="11" cy="13.5" r="3.2"/>
+  <path d="M18.5 2.5c.3 1.9 1 2.6 2.9 2.9-1.9.3-2.6 1-2.9 2.9-.3-1.9-1-2.6-2.9-2.9 1.9-.3 2.6-1 2.9-2.9z"/>
+</svg>`;
+
 // Expense categories for AI Slips to choose from (the server falls back to the built-in list).
 function slipCats() {
   return catList().filter((c) => c.type === 'expense').map((c) => ({ id: c.id, name: c.label, parent: c.parent ? catById(c.parent).label : undefined }));
@@ -319,7 +326,7 @@ function recordBillTxn(b, ym, amount, walletId, date = dateStr(new Date())) {
   if (!walletId || !walletById(walletId) || !(amount > 0)) return;
   saveTxn({
     id: newId(), type: 'expense', amount, category: BILL_TX_CAT[b.category] || 'other_exp',
-    walletId, date, note: `จ่าย${b.name}`, billId: b.id, billYm: ym,
+    walletId, date, note: tr(`จ่าย${b.name}`), billId: b.id, billYm: ym,
   });
 }
 
@@ -392,7 +399,7 @@ function kbaht(n) {
   return `${n < 0 ? '-' : ''}฿${s}`;
 }
 function masked(s) { return money.prefs.hideBalance ? '฿ ••••••' : s; }
-function thDate(ds) { const d = parseDs(ds); return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + 543).slice(2)}`; }
+function thDate(ds) { const d = parseDs(ds); return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + BE).slice(2)}`; }
 function dayLabel(ds) {
   const diff = daysBetween(today(), parseDs(ds));
   if (diff === 0) return 'วันนี้';
@@ -569,7 +576,7 @@ function dayGroups(list, S, newestFirst = true) {
       <div class="day-card">
         <div class="day-head">
           <div class="dnum">${d.getDate()}</div>
-          <div class="dmeta"><div>${dayLabel(ds)}</div><div>${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}</div></div>
+          <div class="dmeta"><div>${dayLabel(ds)}</div><div>${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + BE}</div></div>
           <div class="dtotal">${net > 0 ? '+' : ''}${sbaht(net)}</div>
         </div>
         ${items.map((t) => txItem(t, S)).join('')}
@@ -680,7 +687,7 @@ function homeReport(ym, S) {
       <button class="${type === 'expense' ? 'on exp' : ''}" data-rtype="expense"><span>ใช้จ่ายทั้งหมด</span><b class="exp">${kbaht(expense)}</b></button>
       <button class="${type === 'income' ? 'on inc' : ''}" data-rtype="income"><span>รายรับทั้งหมด</span><b class="inc">${kbaht(income)}</b></button>
     </div>
-    <div class="tip"><span class="muted">${day}/${m}/${parseYm(ym).y + 543}:</span> <b class="${cls}">${kbaht(now)}</b>
+    <div class="tip"><span class="muted">${day}/${m}/${parseYm(ym).y + BE}:</span> <b class="${cls}">${kbaht(now)}</b>
       ${avg.length ? `<div class="muted small">เฉลี่ย ${prev.length} เดือนก่อน ณ วันเดียวกัน: <b>${kbaht(avg[day - 1])}</b></div>` : ''}</div>
     ${chart}
     <div class="legend"><span><i class="dot ${cls}"></i>เดือนนี้</span>${avg.length ? `<span><i class="dot avg"></i>เฉลี่ย ${prev.length} เดือนก่อน</span>` : ''}</div>`;
@@ -757,7 +764,7 @@ function periodTabs() {
   const tabs = [];
   for (let ym = earliest; ym < addMonths(cur, -1); ym = addMonths(ym, 1)) {
     const { y, m } = parseYm(ym);
-    tabs.push([ym, `${TH_MONTHS_SHORT[m - 1]} ${String(y + 543).slice(2)}`]);
+    tabs.push([ym, `${TH_MONTHS_SHORT[m - 1]} ${String(y + BE).slice(2)}`]);
   }
   tabs.push(['last', 'เดือนก่อน'], ['this', 'เดือนนี้'], ['future', 'อนาคต']);
   return tabs;
@@ -1023,7 +1030,7 @@ function budgetDetail(id) {
       { pts: proj, cls: projected > bg.amount ? 'exp' : 'avg', dash: true },
     ],
     hline: { v: bg.amount, cls: 'exp' },
-    xLabels: [[0, `1/${m}/${String(y + 543).slice(2)}`], [dim - 1, `${dim}/${m}/${String(y + 543).slice(2)}`]],
+    xLabels: [[0, `1/${m}/${String(y + BE).slice(2)}`], [dim - 1, `${dim}/${m}/${String(y + BE).slice(2)}`]],
   });
   const list = txnsInMonth(ym).filter(f);
   const S = walletSet(bg.walletId || 'total');
@@ -1041,7 +1048,7 @@ function budgetDetail(id) {
         <div class="bd-sl"><div><span class="muted">ใช้ไป</span><b>${baht(spent)}</b></div>
           <div style="text-align:right"><span class="muted">${left < 0 ? 'เกินงบ' : 'เหลือ'}</span><b class="${left < 0 ? 'exp' : ''}">${baht(Math.abs(left))}</b></div></div>
         ${budgetBar(spent, bg.amount, ym)}
-        <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + 543}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
+        <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + BE}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
         <div class="bd-meta"><span${wImg(w) ? ' class="has-img"' : ''}>${bg.scope === 'shared' ? '🤝' : w ? wFace(w) : '🌐'}</span><div>${bg.scope === 'shared' ? `งบร่วมกับ ${esc(partnerName())}` : w ? esc(w.name) : 'ทุกกระเป๋าเงิน'}</div></div>
       </div>
     </div>
@@ -1153,11 +1160,10 @@ function txnForm(t, preset = {}) {
     ${receipts ? `<div class="section-title">✨ AI Slips</div>
     <p class="hint">อัปโหลดสลิป แล้ว AI จะกรอกหมวด ยอดเงิน และวันที่โอนให้ ตรวจแก้ได้ก่อนบันทึก</p>
     <div class="receipt-row">
-      <button type="button" class="chip" id="rcCam">📷 ถ่ายสลิป</button>
-      <button type="button" class="chip" id="rcPick">🖼️ เลือกรูปสลิป</button>
+      <button type="button" class="scan-btn" id="rcScan">${SCAN_ICON}<span class="scan-text">สแกนสลิป</span></button>
       ${d.receiptKey ? '<button type="button" class="chip" id="rcView">🧾 ดูสลิป</button>' : ''}
-      <input type="file" id="rcCamIn" accept="image/*" capture="environment" hidden>
-      <input type="file" id="rcPickIn" accept="image/jpeg,image/png,image/webp,image/*" hidden>
+      <!-- No capture attribute: iOS then offers camera or photo library from one button. -->
+      <input type="file" id="rcIn" accept="image/*" hidden>
     </div><div id="rcStatus"></div>` : ''}
     <div class="amount-input" id="tAmtWrap"><span>฿</span><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
     <div id="tCatWrap"><div class="section-title">หมวดหมู่</div><div class="cat-grid" id="tCats"></div><div class="chips sub-cats" id="tSubCats" hidden></div><p class="hint" id="tCatHint" hidden>ยังไม่ได้เลือกหมวดหมู่ รายการจะถูกบันทึกเป็น "รอตรวจสอบ" จนกว่าจะเลือก</p></div>
@@ -1295,10 +1301,8 @@ function txnForm(t, preset = {}) {
         status('❌ อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
       }
     };
-    $('#rcCam').addEventListener('click', () => $('#rcCamIn').click());
-    $('#rcPick').addEventListener('click', () => $('#rcPickIn').click());
-    $('#rcCamIn').addEventListener('change', (e) => onFile(e.target.files[0]));
-    $('#rcPickIn').addEventListener('change', (e) => onFile(e.target.files[0]));
+    $('#rcScan').addEventListener('click', () => $('#rcIn').click());
+    $('#rcIn').addEventListener('change', (e) => { onFile(e.target.files[0]); e.target.value = ''; });
     if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
   }
 
@@ -1896,6 +1900,8 @@ function sampleMoney() {
     { id: uid(), category: 'apparel', amount: 3000, walletId: 'total' },
     { id: uid(), category: 'transport', amount: 1200, walletId: 'total' },
   ];
+  wallets.forEach((w) => { w.name = tr(w.name); });
+  txns.forEach((x) => { x.note = tr(x.note); });
   money = { wallets, txns, budgets, labels: money.labels || [], prefs: { ...money.prefs, billWallet: bank } };
   // Bills already paid in the sample show up as expenses from the bank account.
   const ym = ymOf(t);

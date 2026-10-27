@@ -335,7 +335,7 @@ const STATUS_TH = { draft: 'ร่าง (ยังไม่ส่ง)', pending
 
 function thTime(iso) {
   const d = new Date(iso);
-  return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + 543).slice(2)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear() + BE).slice(2)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function walletSelect(id, label) {
@@ -538,7 +538,7 @@ async function googleButton(box, mode) {
   box.hidden = false;
   google.accounts.id.renderButton(box.querySelector('.gbtn'), {
     theme: themeIsDark() ? 'filled_black' : 'outline',
-    size: 'large', shape: 'pill', locale: 'th',
+    size: 'large', shape: 'pill', locale: LANG,
     text: mode === 'login' ? 'signin_with' : 'signup_with',
     width: Math.min(400, box.clientWidth || 320),
   });
@@ -816,7 +816,7 @@ async function googlePhotoButton(box, done) {
   box.hidden = false;
   google.accounts.id.renderButton(box.querySelector('.gbtn'), {
     theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'filled_black' : 'outline',
-    size: 'medium', shape: 'pill', locale: 'th', text: 'continue_with',
+    size: 'medium', shape: 'pill', locale: LANG, text: 'continue_with',
     width: Math.min(400, box.clientWidth || 320),
   });
 }

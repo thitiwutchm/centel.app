@@ -616,6 +616,8 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .p-avatar-in { background: var(--accent-soft); font-weight: 600; }
 .gphoto { margin: -4px 2px 14px; }
 .halves + .section-title { margin-top: 22px; }
+/* Lists have no bottom margin; give actions/forms that follow one room to breathe. */
+.list + .btn, .list + .halves, .list + .form { margin-top: 14px; }
 .field[hidden] { display: none; }
 
 /* ---------- Couple / shared expenses ---------- */
@@ -627,6 +629,19 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .chips.filters .chip { flex: none; }
 .receipt-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .receipt-row .chip { cursor: pointer; }
+.scan-btn {
+  flex: 1 0 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 56px; padding: 0 22px; border-radius: 999px; cursor: pointer;
+  border: 0.5px solid var(--glass-edge); background: var(--card); box-shadow: var(--shadow);
+  font: inherit; font-size: 18px; font-weight: 600; -webkit-tap-highlight-color: transparent;
+  transition: transform .12s ease;
+}
+.scan-btn:active { transform: scale(.97); }
+.scan-ico { width: 26px; height: 26px; flex: none; stroke: #ef7a6a; }
+.scan-text {
+  background: linear-gradient(90deg, #f59e6b, #f2c94c, #6cc04a, #3fa3d9, #5b6cf0, #b25fd6, #d65fa8);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
 .rc-status { margin: 0 0 10px; }
 .bad-text { color: var(--bad); }
 .card.couple .cp-top { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }

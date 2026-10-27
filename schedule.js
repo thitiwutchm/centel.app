@@ -49,7 +49,7 @@ function renderSchedule() {
   const months = Array.from({ length: 12 }, (_, i) => addMonths(thisYm, i));
   const chip = (k) => {
     const p = parseYm(k);
-    const label = k === thisYm ? 'เดือนนี้' : `${TH_MONTHS_SHORT[p.m - 1]} ${String(p.y + 543).slice(2)}`;
+    const label = k === thisYm ? 'เดือนนี้' : `${TH_MONTHS_SHORT[p.m - 1]} ${String(p.y + BE).slice(2)}`;
     return `<button class="chip ${k === ym ? 'on' : ''}" data-sched-ym="${k}">${label}</button>`;
   };
 
@@ -70,7 +70,7 @@ function renderSchedule() {
   // Upcoming: what is still to pay this month (or on the picked day, everything due that day).
   const shown = ui.schedDay ? byDay[ui.schedDay] : occ.filter((o) => !o.paid);
   const total = shown.filter((o) => !o.paid).reduce((s, o) => s + o.amount, 0);
-  const title = ui.schedDay ? `${ui.schedDay} ${TH_MONTHS_SHORT[m - 1]} ${y + 543}` : 'กำลังจะถึง';
+  const title = ui.schedDay ? `${ui.schedDay} ${TH_MONTHS_SHORT[m - 1]} ${y + BE}` : 'กำลังจะถึง';
   const n = repeatingBills().length;
 
   view.innerHTML = `
@@ -90,7 +90,7 @@ function renderSchedule() {
 function schedItem(o) {
   const b = o.bill;
   const c = cat(b);
-  const sub = [`${o.due.getDate()} ${TH_MONTHS[o.due.getMonth()]} ${o.due.getFullYear() + 543}`, o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : ''].filter(Boolean).join(' · ');
+  const sub = [`${o.due.getDate()} ${TH_MONTHS[o.due.getMonth()]} ${o.due.getFullYear() + BE}`, o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : ''].filter(Boolean).join(' · ');
   const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : 'ระบุยอด'}</span>` : `-${baht(o.amount)}`;
   return `
     <div class="item sched-item ${o.paid ? 'paid' : ''}" data-occ="${b.id}" data-ym="${o.ym}" role="button" tabindex="0">
@@ -147,7 +147,7 @@ function billDetail(id) {
     `<select data-bset="walletId"><option value="">ไม่บันทึกเป็นรายการ</option>${money.wallets.map((x) => `<option value="${x.id}" ${x.id === w ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`);
   if (b.type === 'once') {
     const d = parseDs(b.onceDate);
-    rows += pick('วันที่', `${thShortDate(d)} ${d.getFullYear() + 543}`, `<input type="date" data-bset="onceDate" value="${b.onceDate}">`);
+    rows += pick('วันที่', `${thShortDate(d)} ${d.getFullYear() + BE}`, `<input type="date" data-bset="onceDate" value="${b.onceDate}">`);
     rows += pick('ทำซ้ำ', `${svgIcon('repeat', 'svg-i xs')} ไม่ทำซ้ำ`);
   } else {
     rows += pick('เริ่ม', thMonthYear(b.startMonth), `<input type="month" data-bset="startMonth" value="${b.startMonth}">`);
@@ -174,7 +174,7 @@ function billDetail(id) {
       <div class="bd-name">${esc(b.name)}</div>
       <div class="bd-cat">${c.label}${b.variable && b.amount ? ' · ยอดประมาณ' : ''}</div>
       <div class="bd-amt">${amount}</div>
-      ${nx ? `<button class="bd-next" data-occ="${b.id}" data-ym="${nx.ym}">ครั้งถัดไป ${thShortDate(nx.due)} ${nx.due.getFullYear() + 543} ›</button>` : ''}
+      ${nx ? `<button class="bd-next" data-occ="${b.id}" data-ym="${nx.ym}">ครั้งถัดไป ${thShortDate(nx.due)} ${nx.due.getFullYear() + BE} ›</button>` : ''}
     </div>
     <div class="form prows">${rows}</div>
     <div class="form note-card"><textarea id="bdNote" placeholder="เพิ่มบันทึก" aria-label="บันทึก">${esc(b.note || '')}</textarea></div>
