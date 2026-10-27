@@ -504,7 +504,7 @@ async function signedIn() {
 
 function loginSheet(mode = 'login') {
   openSheet(`
-    <div class="sheet-head"><button class="link-btn" data-action="close">ยกเลิก</button><h2>${mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</h2><span style="width:40px"></span></div>
+    <div class="sheet-head"><button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button><h2>${mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</h2><span style="width:40px"></span></div>
     <div class="seg" id="lgMode"><button type="button" data-lg="login" class="${mode === 'login' ? 'on' : ''}">เข้าสู่ระบบ</button><button type="button" data-lg="register" class="${mode === 'register' ? 'on' : ''}">สมัครสมาชิก</button></div>
     <div class="gsignin" id="lgGoogle" hidden><div class="gbtn"></div><div class="or"><span>หรือใช้อีเมล</span></div></div>
     <form class="form" id="lgForm">
@@ -635,7 +635,7 @@ function profileSheet() {
     .map((e) => `<button type="button" class="chip emoji" data-pemoji="${e}">${e}</button>`).join('');
   openSheet(`
     <div class="sheet-head">
-      <button class="link-btn" data-action="close">ยกเลิก</button>
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>แก้ไขโปรไฟล์</h2>
       <button class="link-btn strong" id="saveProfile">บันทึก</button>
     </div>
