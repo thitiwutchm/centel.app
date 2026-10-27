@@ -43,7 +43,7 @@ const SCHEMA = {
     merchant: nullable({ type: 'string' }),
     reference: nullable({ type: 'string', description: 'Transaction / reference number printed on a bank slip' }),
     category: nullable({ type: 'string', enum: EXPENSE_CATEGORIES }),
-    purpose_known: { type: 'boolean', description: 'Whether the image says what the money was for' },
+    purpose_known: { type: 'boolean', description: 'Whether the image shows what the money was for: a memo/note, the items bought, or a payee or shop name that names the business' },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
     note: { type: 'string', description: 'Short Thai description of what was bought, or empty' },
   },
@@ -54,7 +54,9 @@ Extract the fields in the schema from the image only; do not invent values.
 - Thai dates often use the Buddhist Era (e.g. 2569 = 2026) and short Thai month names; convert to a Gregorian YYYY-MM-DD.
 - amount is the final total actually paid (after discounts, including VAT and service charge).
 - merchant is the shop name, or for a transfer slip the receiving person or company.
-- category: pick the key of the closest category from the person's list in the message, only when the purchase is clear. When a sub-category clearly fits, use it rather than its parent. For a bank transfer slip that does not say what the money was for, set category to null and purpose_known to false.
+- category: pick the key of the closest category from the person's list in the message. When a sub-category clearly fits, use it rather than its parent.
+- Infer the category from every clue on the image: the memo/note, the items, and the shop, merchant or payee name. Thai sellers who take PromptPay often show their shop name inside the account name, usually in brackets after the owner's name, e.g. "นายนเรศ พุ่มพวงผล(เจ๊ดาลูกชิ้นปลาไร้สาร)" is a fish-ball stall, so it is food; "ร้านกาแฟ…", "…คาเฟ่", "ชานม…" are coffee/drinks; "ร้านข้าวมันไก่…", "ก๋วยเตี๋ยว…", "หมูกระทะ…", "ส้มตำ…" are food; "คลินิก…", "ร้านยา…" are health; "ร้านตัดผม…", "ซาลอน…" are beauty; "ปั๊ม…", "วินมอเตอร์ไซค์" are transport. When such a word names what the shop sells, set purpose_known to true and pick that category with confidence "medium" or "high".
+- For a bank transfer slip to a plain person's name (no shop name, no memo) or a bank/wallet top-up that does not say what the money was for, set category to null and purpose_known to false.
 - Use confidence "low" when the image is blurry, cropped, or a field is unreadable, and set unreadable fields to null.`;
 
 const client = aiEnabled ? new Anthropic() : null;
@@ -101,7 +103,7 @@ export async function analyzeReceipt(base64, mediaType, labels = [], categories 
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-        { type: 'text', text: `Extract the receipt fields.\n\nExpense categories (key: name):\n${categoryLines(cats)}` },
+        { type: 'text', text: `Extract the receipt fields. Choose the category only from this list, using the payee/shop name too.\n\nExpense categories (key: name):\n${categoryLines(cats)}` },
       ],
     }],
   });
