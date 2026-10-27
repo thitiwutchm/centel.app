@@ -155,7 +155,7 @@ function billDetail(id) {
     rows += pick('ทำซ้ำ', `${svgIcon('repeat', 'svg-i xs')} ${repeatText(b)}`);
     rows += b.type === 'installment'
       ? pick('สิ้นสุด', `${thMonthYear(end)} · ${b.months} งวด`, `<select data-bset="months">${months}</select>`)
-      : pick('สิ้นสุด', 'ไม่มีวันสิ้นสุด');
+      : pick('สิ้นสุด', end ? thMonthYear(end) : 'ไม่มีวันสิ้นสุด', `<select data-bset="endMonth">${endMonthOptions(b.startMonth, end)}</select>`);
   }
   if (b.pea) {
     const fd = b.pea.day === undefined ? 'due' : b.pea.day;
@@ -206,7 +206,12 @@ function billDetail(id) {
         b.dueDay = new Date(now.getFullYear(), now.getMonth(), gmailFetchDay(b.gmail, ymOf(now)) + b.gmail.payDays).getDate();
       }
     }
-    else if (k === 'startMonth' || k === 'onceDate') { if (!v) return; b[k] = v; }
+    else if (k === 'startMonth' || k === 'onceDate') {
+      if (!v) return;
+      b[k] = v;
+      if (k === 'startMonth' && b.endMonth && b.endMonth < v) delete b.endMonth;
+    }
+    else if (k === 'endMonth') { if (v) b.endMonth = v; else delete b.endMonth; }
     else b[k] = v;
     save();
     render();

@@ -108,6 +108,7 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 
 function billEndMonth(b) {
   if (b.type === 'installment' && b.months > 0) return addMonths(b.startMonth, b.months - 1);
+  if (b.type === 'monthly' && b.endMonth && !(b.startMonth && b.endMonth < b.startMonth)) return b.endMonth;
   return null;
 }
 
@@ -392,6 +393,17 @@ function renderBills() {
     html += `</div>`;
   });
   view.innerHTML = html;
+}
+
+// Choices for a monthly bill's "สิ้นสุด": no end, or any month from the start month on (10 years).
+function endMonthOptions(start, end) {
+  const opts = [`<option value="">ไม่มีวันสิ้นสุด</option>`];
+  for (let i = 0; i < 120; i++) {
+    const ym = addMonths(start, i);
+    opts.push(`<option value="${ym}" ${ym === end ? 'selected' : ''}>${thMonthYear(ym)}</option>`);
+  }
+  if (end && end > addMonths(start, 119)) opts.push(`<option value="${end}" selected>${thMonthYear(end)}</option>`);
+  return opts.join('');
 }
 
 function billScheduleText(b) {
@@ -732,7 +744,7 @@ function billForm(b, opts = {}) {
         const end = addMonths(draft.startMonth || ui.ym, Math.max(1, draft.months || 12) - 1);
         html += `<div class="field ro"><label>สิ้นสุด</label><span class="val">${thMonthYear(end)}</span></div>`;
       } else {
-        html += `<div class="field ro"><label>สิ้นสุด</label><span class="val">ไม่มีวันสิ้นสุด</span></div>`;
+        html += `<div class="field"><label for="fEnd">สิ้นสุด</label><select id="fEnd">${endMonthOptions(draft.startMonth || ui.ym, draft.endMonth)}</select></div>`;
       }
     }
     $('#schedFields').innerHTML = html;
@@ -751,6 +763,9 @@ function billForm(b, opts = {}) {
     draft.remind = $('#fRemind').value === '' ? undefined : Number($('#fRemind').value);
     if ($('#fDue')) draft.dueDay = Number($('#fDue').value);
     if ($('#fStart')) draft.startMonth = $('#fStart').value || ui.ym;
+    if ($('#fEnd')) draft.endMonth = $('#fEnd').value || undefined;
+    // An end before the start would hide the bill entirely, so it falls back to no end.
+    if (draft.endMonth && draft.endMonth < (draft.startMonth || ui.ym)) draft.endMonth = undefined;
     if ($('#fMonths')) draft.months = parseInt($('#fMonths').value, 10) || 1;
     if ($('#fOnce')) draft.onceDate = $('#fOnce').value;
     if ($('#fPeaCa')) {
@@ -924,6 +939,7 @@ function billForm(b, opts = {}) {
       out.dueDay = Math.min(31, Math.max(1, draft.dueDay || 1));
       out.startMonth = draft.startMonth || ui.ym;
       if (draft.type === 'installment') out.months = Math.max(1, draft.months || 1);
+      if (draft.type === 'monthly' && !draft.auto && draft.endMonth) out.endMonth = draft.endMonth;
     }
     if (draft.auto && draft.source === 'pea') {
       const prev = (b && b.pea) || {};
@@ -1244,7 +1260,7 @@ function buildIcs({ feed = false } = {}) {
         ? `FREQ=MONTHLY;BYMONTHDAY=${Array.from({ length: b.dueDay - 27 }, (_, i) => 28 + i).join(',')};BYSETPOS=-1`
         : `FREQ=MONTHLY;BYMONTHDAY=${b.dueDay}`;
       lines.push(...event(b, dueDateFor(b, b.startMonth), {
-        rrule: `${rule}${b.type === 'installment' ? `;COUNT=${b.months}` : ''}`, amount: b.amount,
+        rrule: `${rule}${b.type === 'installment' ? `;COUNT=${b.months}` : b.type === 'monthly' && billEndMonth(b) ? `;UNTIL=${icsDate(dueDateFor(b, billEndMonth(b)))}` : ''}`, amount: b.amount,
       }));
       Object.keys(state.records).sort().forEach((ym) => {
         const rec = record(ym, b.id);
