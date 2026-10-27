@@ -163,6 +163,9 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .item .main { flex: 1; min-width: 0; }
 .item .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item .sub { font-size: 13px; color: var(--muted); }
+.item .type-line { display: flex; align-items: center; gap: 5px; margin-top: 1px; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.item .type-line .svg-i { width: 15px; height: 15px; stroke-width: 1.7; }
+.item .type-line span { overflow: hidden; text-overflow: ellipsis; }
 .item .right { text-align: right; flex: 0 0 auto; }
 .item .amt { font-weight: 700; font-variant-numeric: tabular-nums; }
 .item.paid .name, .item.paid .amt { color: var(--muted); }
