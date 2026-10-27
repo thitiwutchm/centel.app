@@ -86,6 +86,7 @@ function mapExpense(e, me) {
     reviewNeeded: e.reviewNeeded, receiptKey: e.receiptKey, slipRef: e.slipRef, billId: e.billId, billYm: e.billYm,
     scope: e.scope, status: e.status, labels: e.labels || [],
   };
+  if (e.currency && e.currency !== 'THB') base.currency = e.currency;
   if (!base.billId) { delete base.billId; delete base.billYm; }
   if (e.scope !== 'shared') return base;
   const payerMe = e.payerId === me;
@@ -208,7 +209,7 @@ function cloudSaveTxn(t) {
     merchant: t.merchant, category: t.category, note: t.note, walletId: t.walletId, toWalletId: t.toWalletId,
     reviewNeeded: !!t.reviewNeeded, receiptKey: t.receiptKey, slipRef: t.slipRef, billId: t.billId, billYm: t.billYm,
     payerId: t.payerId, shares: shared ? { [cloud.user.id]: t.amount } : undefined,
-    labels: t.labels || [],
+    labels: t.labels || [], currency: t.currency || 'THB',
   };
   const known = cloud.ids.has(t.id);
   cloud.ids.add(t.id);
@@ -343,7 +344,7 @@ function sharedSheet(t) {
       <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(t.merchant || c.label)}</div>
         <div class="sub">${esc(c.label)} · ${thDate(t.date)}</div></div></div>
       <div class="bd-body">
-        <div class="bd-amt">${baht(t.total)}</div>
+        <div class="bd-amt">${curAmt(t.total, t.currency)}</div>
         <div class="badges"><span class="badge share">ร่วม</span></div>
         <div class="kv"><span>ผู้จ่าย</span><b>${esc(nameOf(t.payerId))}</b></div>
         <div class="kv"><span>ต้นทุน</span><b>${splitOf(t) === 'full' ? 'รับผิดชอบทั้งหมด' : 'หาร 2'}</b></div>

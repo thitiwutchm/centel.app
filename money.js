@@ -393,6 +393,20 @@ function billTxn(billId, ym) { return money.txns.find((t) => t.billId === billId
 /* ---------- Formatting ---------- */
 
 function sbaht(n) { return (n < 0 ? '-' : '') + baht(Math.abs(n)); }
+
+// Currencies a transaction can be entered in ([code, symbol]). THB is the default and the
+// one totals are shown in; other codes are only labels, nothing is converted.
+const CURRENCIES = [
+  ['THB', '฿'], ['USD', '$'], ['EUR', '€'], ['JPY', '¥'], ['GBP', '£'], ['CNY', '¥'], ['KRW', '₩'], ['SGD', 'S$'],
+  ['HKD', 'HK$'], ['TWD', 'NT$'], ['MYR', 'RM'], ['VND', '₫'], ['LAK', '₭'], ['AUD', 'A$'], ['CHF', 'CHF'],
+];
+function curSym(code) { const c = CURRENCIES.find((x) => x[0] === code); return c ? c[1] : code; }
+// An amount in its own currency: ฿ for THB as before, otherwise the symbol plus the code.
+function curAmt(n, code) {
+  if (!code || code === 'THB') return baht(n);
+  const sym = curSym(code);
+  return `${sym === code ? '' : sym}${fmt.format(n || 0)} ${code}`;
+}
 function kbaht(n) {
   const a = Math.abs(n);
   const s = a >= 1e6 ? `${+(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `${+(a / 1e3).toFixed(a >= 1e5 ? 0 : 2)}K` : fmt.format(a);
@@ -440,6 +454,12 @@ const ICONS = {
   shield: '<path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6z"/>',
   home: '<path d="M3.5 11 12 4l8.5 7M6 9.5V20h12V9.5M10 20v-5.5h4V20"/>',
   play: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="m10 9.2 5 2.8-5 2.8z"/>',
+  // Transaction form row icons
+  wallet: '<path d="M4 7.5V18a2 2 0 0 0 2 2h13.5V8.5H6A2 2 0 0 1 4 6.5 2 2 0 0 1 6 4.5h11v4"/><circle cx="16" cy="14.2" r="1.2"/>',
+  cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14h.01M12 14h.01M16 14h.01M8 17.5h.01M12 17.5h.01"/>',
+  note: '<path d="M4 6.5h16M4 11h10M4 15.5h16M4 20h8"/>',
+  store: '<path d="M4 9.5 5.5 4h13L20 9.5M4 9.5c0 1.4 1.1 2.5 2.7 2.5s2.6-1.1 2.6-2.5c0 1.4 1.1 2.5 2.7 2.5s2.7-1.1 2.7-2.5c0 1.4 1 2.5 2.6 2.5S20 10.9 20 9.5M4 9.5h16M5.5 12v8.5h13V12M10 20.5v-5h4v5"/>',
+  people: '<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c1-3.3 3.4-5 6.5-5s5.5 1.7 6.5 5M16 5.2a3.5 3.5 0 0 1 0 6.6M18 15.3c1.6.7 2.8 2.3 3.5 4.7"/>',
   tag: '<path d="M3 12.2V4.5A1.5 1.5 0 0 1 4.5 3h7.7l8.8 8.8a1.5 1.5 0 0 1 0 2.1l-7.1 7.1a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8" cy="8" r="1.6"/>',
 };
 function svgIcon(name, cls = 'svg-i') {
@@ -561,7 +581,7 @@ function txItem(t, S) {
     <button class="item tx" data-tx="${t.id}">
       <div class="ico-wrap">${circleIco(c)}${w ? `<span class="mini${wImg(w) ? ' has-img' : ''}" style="background:${wType(w).color}">${wFace(w)}</span>` : ''}</div>
       <div class="main"><div class="name">${title}</div><div class="sub">${sub}</div>${badges.trim() ? `<div class="badges">${badges}</div>` : ''}</div>
-      <div class="right"><div class="amt ${cls}">${baht(amt)}</div></div>
+      <div class="right"><div class="amt ${cls}">${curAmt(amt, t.currency)}</div></div>
     </button>`;
 }
 
@@ -1216,20 +1236,34 @@ function txnForm(t, preset = {}) {
       <!-- No capture attribute: iOS then offers camera or photo library from one button. -->
       <input type="file" id="rcIn" accept="image/*" hidden>
     </div><div id="rcStatus"></div>` : ''}
-    <div class="amount-input" id="tAmtWrap"><span>฿</span><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
-    <div id="tCatWrap"><button type="button" class="cat-pick-btn" id="tCatOpen"></button></div>
-    <div class="form">
-      <div class="field" id="tMerchRow"><label for="tMerchant">ร้านค้า / ผู้รับ</label><input id="tMerchant" placeholder="เช่น 7-Eleven" value="${esc(d.merchant || '')}" autocomplete="off"></div>
-      <div id="tShareRows">
-        <div class="field col"><label>ต้นทุน</label>
-          <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel}</button><button type="button" data-split="half">หาร 2</button></div></div>
-        <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div>
+    <!-- Rows: icon column on the left, content on the right with a divider under each. -->
+    <div class="form tx-rows">
+      <div class="tr tr-amt" id="tAmtWrap">
+        <div class="tr-ico"><label class="cur-chip"><span id="tCurCode">${esc(d.currency || 'THB')}</span><select id="tCur" aria-label="สกุลเงิน">${CURRENCIES.map(([c, sym]) =>
+          `<option value="${c}" ${(d.currency || 'THB') === c ? 'selected' : ''}>${c}${sym === c ? '' : ` (${sym})`}</option>`).join('')}</select></label></div>
+        <div class="tr-body"><label class="tr-lab" for="tAmount">จำนวนเงิน</label><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
       </div>
-      <div class="field" id="tWalletRow"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select></div>
-      <div class="field" id="tToRow"><label for="tTo">ไปยัง</label><select id="tTo"></select></div>
-      <div class="field"><label for="tDate">วันที่</label><input type="date" id="tDate" value="${d.date}"></div>
-      <div class="field"><label for="tNote">บันทึก</label><input id="tNote" placeholder="เช่น ข้าวกลางวัน" value="${esc(d.note || '')}" autocomplete="off"></div>
-      <div class="field col labels-field"><label>ป้ายกำกับ</label><div class="chips lab-pick" id="tLabels"></div></div>
+      <button type="button" class="tr tr-cat" id="tCatOpen"></button>
+      <div class="tr" id="tMerchRow"><div class="tr-ico">${svgIcon('store')}</div>
+        <div class="tr-body"><input id="tMerchant" aria-label="ร้านค้า / ผู้รับ" placeholder="ร้านค้า / ผู้รับ" value="${esc(d.merchant || '')}" autocomplete="off"></div></div>
+      <div class="tr" id="tShareRows"><div class="tr-ico">${svgIcon('people')}</div>
+        <div class="tr-body col"><span class="tr-lab">ต้นทุน</span>
+          <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel}</button><button type="button" data-split="half">หาร 2</button></div>
+          <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div></div></div>
+      <div class="tr" id="tWalletRow"><div class="tr-ico">${svgIcon('wallet')}</div>
+        <div class="tr-body"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
+      <div class="tr" id="tToRow"><div class="tr-ico">${svgIcon('swap')}</div>
+        <div class="tr-body"><label for="tTo">ไปยัง</label><select id="tTo"></select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
+      <div class="tr" id="tNoteRow"><div class="tr-ico">${svgIcon('note')}</div>
+        <div class="tr-body"><input id="tNote" aria-label="โน้ต" placeholder="โน้ต" value="${esc(d.note || '')}" autocomplete="off"></div></div>
+      <div class="tr tr-date"><div class="tr-ico">${svgIcon('cal')}</div>
+        <div class="tr-body">
+          <button type="button" class="day-step" data-step="-1" aria-label="วันก่อนหน้า">${svgIcon('chev', 'svg-i sm flip')}</button>
+          <label class="date-pill"><span id="tDateTxt"></span><input type="date" id="tDate" value="${d.date}" aria-label="วันที่"></label>
+          <button type="button" class="day-step" data-step="1" aria-label="วันถัดไป">${svgIcon('chev', 'svg-i sm')}</button>
+        </div></div>
+      <div class="tr tr-labels"><div class="tr-ico">${svgIcon('tag')}</div>
+        <div class="tr-body col"><span class="tr-lab">ป้ายกำกับ</span><div class="chips lab-pick" id="tLabels"></div></div></div>
     </div>
     <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
     ${d.billId ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
@@ -1248,10 +1282,10 @@ function txnForm(t, preset = {}) {
     document.querySelectorAll('#txType button').forEach((x) => x.classList.toggle('on', x.dataset.ttype === d.type));
     document.querySelectorAll('#txScope button').forEach((x) => x.classList.toggle('on', x.dataset.scope === d.scope));
     if ($('#txScope')) $('#txScope').hidden = d.type !== 'expense';
-    $('#tAmtWrap').className = `amount-input ${d.type === 'income' ? 'inc' : d.type === 'expense' ? 'exp' : ''}`;
+    $('#tAmtWrap').className = `tr tr-amt ${d.type === 'income' ? 'inc' : d.type === 'expense' ? 'exp' : ''}`;
     const transfer = d.type === 'transfer';
     const sh = shared();
-    $('#tCatWrap').hidden = transfer;
+    $('#tCatOpen').hidden = transfer;
     $('#tMerchRow').hidden = transfer;
     $('#tToRow').hidden = !transfer;
     $('#tShareRows').hidden = !sh;
@@ -1272,16 +1306,30 @@ function txnForm(t, preset = {}) {
     }
     paintCats();
   };
-  // The form shows one round button: "?" until a category is picked, then its icon and name.
+  // The category row: an empty circle and "เลือกหมวดหมู่" until a category is picked, then its icon and name.
   // Tapping it opens the category picker on top of this sheet.
   const paintCats = () => {
     const c = d.category ? catById(d.category) : null;
     const root = c ? catRootId(c.id, d.type) : '';
     const parent = c && root !== c.id ? catById(root) : null;
     $('#tCatOpen').classList.toggle('on', !!c);
-    $('#tCatOpen').innerHTML = (c ? circleIco(c, 'ico round') : '<span class="ico round q">?</span>')
-      + `<span class="cp-name">${parent ? `<small>${esc(parent.label)}</small>` : ''}<b>${c ? esc(c.label) : 'หมวดหมู่'}</b></span><span class="chev">›</span>`;
+    $('#tCatOpen').innerHTML = `<span class="tr-ico">${c ? circleIco(c, 'ico round') : '<span class="ico round blank"></span>'}</span>`
+      + `<span class="tr-body"><span class="cp-name">${parent ? `<small>${esc(parent.label)}</small>` : ''}<b>${c ? esc(c.label) : 'เลือกหมวดหมู่'}</b></span>${svgIcon('chev', 'svg-i sm tr-chev')}</span>`;
   };
+  // The date shows as a long day name in a pill; the arrows step one day either way.
+  const paintDate = () => {
+    const v = $('#tDate').value;
+    $('#tDateTxt').textContent = v ? `${TH_DOW_FULL[parseDs(v).getDay()]} ${thDate(v)}` : 'เลือกวันที่';
+  };
+  paintDate();
+  $('#tDate').addEventListener('change', paintDate);
+  document.querySelectorAll('.day-step').forEach((b) => b.addEventListener('click', () => {
+    const x = parseDs($('#tDate').value || dateStr(new Date()));
+    x.setDate(x.getDate() + Number(b.dataset.step));
+    $('#tDate').value = dateStr(x);
+    paintDate();
+  }));
+  $('#tCur').addEventListener('change', (e) => { d.currency = e.target.value; $('#tCurCode').textContent = d.currency; });
   renderType();
   const pickedLabels = new Set(d.labels || []);
   const repaintLabels = labelPicker($('#tLabels'), pickedLabels);
@@ -1320,7 +1368,7 @@ function txnForm(t, preset = {}) {
         const x = r.result;
         if (x) {
           if (x.amount) $('#tAmount').value = x.amount;
-          if (x.date) $('#tDate').value = x.date;
+          if (x.date) { $('#tDate').value = x.date; paintDate(); }
           if (x.merchant) $('#tMerchant').value = x.merchant;
           if (x.note && !$('#tNote').value) $('#tNote').value = x.note;
           if (x.reference) d.slipRef = x.reference;
@@ -1355,6 +1403,7 @@ function txnForm(t, preset = {}) {
       id: d.id || newId(), type: d.type, amount: total, walletId: $('#tWallet').value, date, note: $('#tNote').value.trim(),
       scope: 'personal', labels: money.labels.filter((l) => pickedLabels.has(l.id)).map((l) => l.id),
     };
+    if (d.currency && d.currency !== 'THB') out.currency = d.currency;
     if (d.type === 'transfer') {
       out.toWalletId = $('#tTo').value;
       if (!out.toWalletId || out.toWalletId === out.walletId) { toast('เพิ่มกระเป๋าเงินอีกใบเพื่อโอนเงิน'); return; }
