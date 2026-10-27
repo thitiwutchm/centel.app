@@ -707,7 +707,7 @@ function renderHome() {
       <div class="hero-top">
         <button class="avatar-btn${userImg(cloud.user) ? ' has-img' : ''}" data-goto="account" aria-label="บัญชี">${cloud.user ? userFace(cloud.user) : svgIcon('user')}</button>
         <button class="search-cap" data-action="search">${svgIcon('search')}<span>ค้นหารายการ</span></button>
-        <button class="round-btn" data-action="alerts" aria-label="การแจ้งเตือน">${svgIcon('bell')}${alerts ? `<span class="nbadge">${alerts}</span>` : ''}</button>
+        <button class="round-btn bare" data-action="alerts" aria-label="การแจ้งเตือน">${svgIcon('bell')}${alerts ? `<span class="nbadge">${alerts}</span>` : ''}</button>
       </div>
       <div class="hb">
         <div class="label">ยอดเงินรวม</div>
