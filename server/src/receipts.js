@@ -37,7 +37,7 @@ const SCHEMA = {
   additionalProperties: false,
   required: ['kind', 'date', 'amount', 'merchant', 'reference', 'category', 'purpose_known', 'confidence', 'note'],
   properties: {
-    kind: { type: 'string', enum: ['bank_transfer_slip', 'store_receipt', 'restaurant_receipt', 'invoice', 'other', 'not_a_receipt'] },
+    kind: { type: 'string', enum: ['bank_transfer_slip', 'store_receipt', 'restaurant_receipt', 'invoice', 'delivery_app_order', 'other', 'not_a_receipt'] },
     date: nullable({ type: 'string', description: 'Transaction date as YYYY-MM-DD in the Gregorian calendar' }),
     amount: nullable({ type: 'number', description: 'Total paid in THB' }),
     merchant: nullable({ type: 'string' }),
@@ -49,7 +49,7 @@ const SCHEMA = {
   },
 };
 
-const SYSTEM = `You read photos of Thai payment documents: bank transfer slips (K PLUS, SCB Easy, Krungthai NEXT, PromptPay and others), store receipts (7-Eleven, Lotus's, Big C and others), restaurant bills and invoices.
+const SYSTEM = `You read photos of Thai payment documents: bank transfer slips (K PLUS, SCB Easy, Krungthai NEXT, PromptPay and others), store receipts (7-Eleven, Lotus's, Big C and others), restaurant bills, invoices, and order screenshots from Thai delivery apps (Grab, LINE MAN and others).
 Extract the fields in the schema from the image only; do not invent values.
 - Thai dates often use the Buddhist Era (e.g. 2569 = 2026) and short Thai month names; convert to a Gregorian YYYY-MM-DD.
 - amount is the final total actually paid (after discounts, including VAT and service charge).
@@ -57,6 +57,8 @@ Extract the fields in the schema from the image only; do not invent values.
 - category: pick the key of the closest category from the person's list in the message. When a sub-category clearly fits, use it rather than its parent.
 - Infer the category from every clue on the image: the memo/note, the items, and the shop, merchant or payee name. Thai sellers who take PromptPay often show their shop name inside the account name, usually in brackets after the owner's name, e.g. "นายนเรศ พุ่มพวงผล(เจ๊ดาลูกชิ้นปลาไร้สาร)" is a fish-ball stall, so it is food; "ร้านกาแฟ…", "…คาเฟ่", "ชานม…" are coffee/drinks; "ร้านข้าวมันไก่…", "ก๋วยเตี๋ยว…", "หมูกระทะ…", "ส้มตำ…" are food; "คลินิก…", "ร้านยา…" are health; "ร้านตัดผม…", "ซาลอน…" are beauty; "ปั๊ม…", "วินมอเตอร์ไซค์" are transport. When such a word names what the shop sells, set purpose_known to true and pick that category with confidence "medium" or "high".
 - For a bank transfer slip to a plain person's name (no shop name, no memo) or a bank/wallet top-up that does not say what the money was for, set category to null and purpose_known to false.
+- Delivery/ride app order screenshots are bills from the app company, not from the shop: set kind to "delivery_app_order" and merchant to the app's name. A Grab Thailand order (GrabFood, GrabMart, GrabExpress, GrabCar/GrabBike rides; "รหัสคำสั่งซื้อ", "สรุปคำสั่งซื้อ", "ติดต่อ Grab", GrabCoins) has merchant "Grab". A LINE MAN order ("Order details" or "รายละเอียดคำสั่งซื้อ" with Menu, Food, delivery fee, "LINE MAN VIP" discount, Coupon, Total, Reorder) has merchant "LINE MAN". Use the same pattern for other apps (foodpanda, ShopeeFood, Robinhood, Bolt).
+- For these app orders: amount is the final total line ("รวมทั้งหมด", "Total") after discounts, coupons and delivery fees, not the food subtotal or a struck-through price; date is the order date shown on the page, not the phone's status-bar clock; reference is the order ID if shown; note is the shop name plus a short list of what was ordered, e.g. "BEARHOUSE – ชานม 4 แก้ว". Infer the category from the shop and items (food, coffee/bubble tea/drinks, groceries; a Grab ride is transport) and set purpose_known to true.
 - Use confidence "low" when the image is blurry, cropped, or a field is unreadable, and set unreadable fields to null.`;
 
 const client = aiEnabled ? new Anthropic() : null;
