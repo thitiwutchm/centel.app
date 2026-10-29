@@ -101,4 +101,63 @@ test('line: a due note is sent once, a shared one to both groups, a switched-off
   assert.equal(pushes('จ่ายค่าน้ำ').length, 1);
 });
 
+test('line: named LINE users are tagged on the notes that are theirs', async (t) => {
+  if (!on) return t.skip('API has no LINE');
+  const dad = 'U' + crypto.randomBytes(16).toString('hex');
+  const mom = 'U' + crypto.randomBytes(16).toString('hex');
+  assert.equal((await A('PUT', '/line/people', { people: [{ userId: 'nope', name: 'x' }] })).status, 400);
+  assert.equal((await A('PUT', '/line/people', { people: [{ userId: dad, name: 'a', who: 'me' }, { userId: mom, name: 'b', who: 'me' }] })).status, 400);
+  const r = await A('PUT', '/line/people', { people: [{ userId: dad, name: 'พ่อบุ๊ค', who: 'me' }, { userId: mom, name: 'แม่เฟิร์น', who: 'partner' }] });
+  assert.equal(r.people.length, 2);
+  assert.deepEqual((await A('GET', '/bootstrap')).linePeople.map((p) => p.name), ['พ่อบุ๊ค', 'แม่เฟิร์น']);
+  assert.deepEqual((await B('GET', '/bootstrap')).linePeople, []);
+  await A('PUT', '/line', { groupId: gA, active: true });
+  const today = new Date().toISOString().slice(0, 10);
+  const mine = crypto.randomUUID(), ours = crypto.randomUUID();
+  const at = new Date(Date.now() - 1000).toISOString();
+  await A('PUT', `/notes/${mine}`, { text: 'ล้างรถ', date: today, remind: 0, remindAt: at });
+  await A('PUT', `/notes/${ours}`, { text: 'พาลูกไปหาหมอ', date: today, remind: 0, remindAt: at, shared: true });
+  await wait(1500);
+  const msg = (txt, to) => sent.find((s) => s.path === '/push' && s.body.to === to && s.body.messages[0].text.includes(txt))?.body.messages[0];
+  const m1 = msg('ล้างรถ', gA);
+  assert.equal(m1.type, 'textV2');
+  assert.deepEqual(Object.values(m1.substitution).map((x) => x.mentionee.userId), [dad]);
+  const m2 = msg('พาลูกไปหาหมอ', gA);
+  assert.deepEqual(Object.values(m2.substitution).map((x) => x.mentionee.userId).sort(), [dad, mom].sort());
+  // B's group gets the shared note without tags: B named nobody.
+  assert.equal(msg('พาลูกไปหาหมอ', gB).type, 'text');
+  // The bot greets a known person by name when asked for the id.
+  await hook({ events: [{ type: 'message', replyToken: 'rt2', message: { type: 'text', text: 'id' }, source: { type: 'group', groupId: gA, userId: dad } }] });
+  await wait(200);
+  assert.match(sent.find((s) => s.body.replyToken === 'rt2').body.messages[0].text, /พ่อบุ๊ค[\s\S]*U/);
+});
+
+test('line: a note typed into the group is saved for the person who typed it', async (t) => {
+  if (!on) return t.skip('API has no LINE');
+  const people = (await A('GET', '/bootstrap')).linePeople;
+  const mom = people.find((p) => p.who === 'partner').userId;
+  const say = async (text, userId, token) => {
+    await hook({ events: [{ type: 'message', replyToken: token, message: { type: 'text', text }, source: { type: 'group', groupId: gA, userId } }] });
+    await wait(300);
+    return sent.find((s) => s.body.replyToken === token)?.body.messages[0].text;
+  };
+  // แม่เฟิร์น is A's partner, so the note is B's, shared with A.
+  const r = await say('ทำนัด 18:00 น 31 ตค ไปแข่งกีฬาที่สนาม welcomedink', mom, 'rt3');
+  assert.match(r, /^✅ นัดแล้ว .*31 ต\.ค\. 18:00 ไปแข่งกีฬาที่สนาม welcomedink/);
+  assert.match(r, /แม่เฟิร์น · แชร์กับคู่/);
+  const n = (await B('GET', '/bootstrap')).notes.find((x) => x.text === 'ไปแข่งกีฬาที่สนาม welcomedink');
+  assert.ok(n);
+  assert.match(n.date, /-10-31$/);
+  assert.equal(n.time, '18:00');
+  assert.equal(n.shared, true);
+  assert.equal(n.remind, 0);
+  assert.equal(new Date(n.remindAt).toISOString().slice(11, 16), '11:00');
+  assert.ok((await A('GET', '/bootstrap')).notes.some((x) => x.id === n.id));
+  // Everyday chat gets no answer; a stranger is told how to link their LINE.
+  assert.equal(await say('นัดกันกี่โมง', mom, 'rt4'), undefined);
+  assert.match(await say('เตือน ซื้อนม', 'U' + '1'.repeat(32), 'rt5'), /ยังไม่รู้[\s\S]*U1{32}/);
+  // No date in it (and no AI in tests): saved without one.
+  assert.match(await say('จด ซื้อนม', mom, 'rt6'), /จดไว้แล้ว: ซื้อนม/);
+});
+
 test('line: teardown', () => { mock.close(); });

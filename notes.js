@@ -64,12 +64,14 @@ function notesAdopt() {
 /* ---------- Reading a date out of the words ---------- */
 
 // English names need word edges so "lemon" is not Monday; Thai has no spaces to lean on.
+// Short Thai forms are read with or without the dots ("ต.ค." or "ตค"). server/src/noteparse.js
+// is the same reader for notes typed into the LINE group; keep the two in step.
 const NOTE_MONTHS = [
-  'มกราคม|มกรา|ม\\.ค\\.?|\\bjan(?:uary)?\\b', 'กุมภาพันธ์|กุมภา|ก\\.พ\\.?|\\bfeb(?:ruary)?\\b', 'มีนาคม|มีนา|มี\\.ค\\.?|\\bmar(?:ch)?\\b',
-  'เมษายน|เมษา|เม\\.ย\\.?|\\bapr(?:il)?\\b', 'พฤษภาคม|พฤษภา|พ\\.ค\\.?|\\bmay\\b', 'มิถุนายน|มิถุนา|มิ\\.ย\\.?|\\bjune?\\b',
-  'กรกฎาคม|กรกฎา|ก\\.ค\\.?|\\bjuly?\\b', 'สิงหาคม|สิงหา|ส\\.ค\\.?|\\baug(?:ust)?\\b', 'กันยายน|กันยา|ก\\.ย\\.?|\\bsep(?:t|tember)?\\b',
-  'ตุลาคม|ตุลา|ต\\.ค\\.?|\\boct(?:ober)?\\b', 'พฤศจิกายน|พฤศจิกา|พ\\.ย\\.?|\\bnov(?:ember)?\\b', 'ธันวาคม|ธันวา|ธ\\.ค\\.?|\\bdec(?:ember)?\\b',
-];
+  'มกราคม|มกรา|ม\\.?ค\\.?|\\bjan(?:uary)?\\b', 'กุมภาพันธ์|กุมภา|ก\\.?พ\\.?|\\bfeb(?:ruary)?\\b', 'มีนาคม|มีนา|มี\\.?ค\\.?|\\bmar(?:ch)?\\b',
+  'เมษายน|เมษา|เม\\.?ย\\.?|\\bapr(?:il)?\\b', 'พฤษภาคม|พฤษภา|พ\\.?ค\\.?|\\bmay\\b', 'มิถุนายน|มิถุนา|มิ\\.?ย\\.?|\\bjune?\\b',
+  'กรกฎาคม|กรกฎา|ก\\.?ค\\.?|\\bjuly?\\b', 'สิงหาคม|สิงหา|ส\\.?ค\\.?|\\baug(?:ust)?\\b', 'กันยายน|กันยา|ก\\.?ย\\.?|\\bsep(?:t|tember)?\\b',
+  'ตุลาคม|ตุลา|ต\\.?ค\\.?|\\boct(?:ober)?\\b', 'พฤศจิกายน|พฤศจิกา|พ\\.?ย\\.?|\\bnov(?:ember)?\\b', 'ธันวาคม|ธันวา|ธ\\.?ค\\.?|\\bdec(?:ember)?\\b',
+].map((x) => `(?:${x})(?![\\u0E01-\\u0E4E])`);
 const NOTE_DOW = ['อาทิตย์|\\bsun(?:day)?\\b', 'จันทร์|\\bmon(?:day)?\\b', 'อังคาร|\\btue(?:s|sday)?\\b', 'พุธ|\\bwed(?:nesday)?\\b',
   'พฤหัส(?:บดี)?|\\bthu(?:rs|rsday)?\\b', 'ศุกร์|\\bfri(?:day)?\\b', 'เสาร์|\\bsat(?:urday)?\\b'];
 
@@ -88,7 +90,7 @@ function parseNote(raw, now = new Date()) {
   let time = '';
   const hm = (h, m = 0) => { if (h >= 0 && h < 24 && m >= 0 && m < 60) time = `${pad(h)}:${pad(m)}`; };
   let m;
-  if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:น\.|นาฬิกา)?/))) hm(+m[1], +m[2]);
+  if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:นาฬิกา|น\.?(?![\u0E01-\u0E4E]))?/))) hm(+m[1], +m[2]);
   else if ((m = take(/(?:ตอน\s*)?เที่ยงคืน/))) hm(0);
   else if ((m = take(/(?:ตอน\s*)?เที่ยง(?:วัน)?/))) hm(12);
   else if ((m = take(/(?:ตอน\s*)?บ่าย\s*โมง/))) hm(13);
@@ -360,8 +362,73 @@ function lineSettings() {
       <div class="field"><label for="lineOn">ส่งเตือนสิ่งที่ต้องทำเข้ากลุ่ม</label><span style="flex:1"></span>
         <label class="switch"><input type="checkbox" id="lineOn" ${!l || l.active ? 'checked' : ''} ${l ? '' : 'disabled'}><span></span></label></div>
     </div>
+    ${isCloud() ? linePeopleList() : ''}
     ${l && l.active && ready ? '<button class="btn ghost" id="lineTest">💬 ส่งข้อความทดสอบเข้ากลุ่ม</button>' : ''}
     <p class="hint">เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้${ready ? '' : '<br>ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ'}</p>`;
+}
+
+/* Who is who in the LINE group: LINE user ids (U…) with a name and which app account
+   they are. Reminders @mention the people a note belongs to. */
+const LINE_UID_RX = /^U[0-9a-f]{32}$/;
+function myNick() { return (cloud.user && (cloud.user.nickname || cloud.user.name)) || 'ฉัน'; }
+function lineWhoLabel(who) { return who === 'me' ? `ฉัน (${myNick()})` : who === 'partner' ? partnerName() : 'ไม่ระบุ'; }
+
+function linePeopleList() {
+  const list = cloud.linePeople || [];
+  const rows = list.map((p, i) => `
+    <button class="item" data-lp="${i}">
+      <div class="ico round lp-ico">${esc([...p.name][0] || '?')}</div>
+      <div class="main"><div class="name">${esc(p.name)}</div><div class="sub"><span class="mono">${p.userId.slice(0, 6)}…${p.userId.slice(-5)}</span> · <span>${esc(lineWhoLabel(p.who))}</span></div></div>
+      ${svgIcon('chev', 'svg-i sm')}
+    </button>`).join('');
+  return `
+    <div class="section-title">คนในกลุ่ม LINE</div>
+    <div class="list">${rows}
+      <button class="item" data-lp="new"><div class="ico round lp-ico add">${svgIcon('plus')}</div><div class="main"><div class="name">เพิ่มคน</div></div></button>
+    </div>
+    <p class="hint">ใส่ LINE ID (ขึ้นต้นด้วย U) แล้วบอกว่าเป็นใครในแอป การเตือนจะแท็กคนที่เกี่ยวกับโน้ตนั้น พิมพ์ id ในกลุ่มเพื่อดู LINE ID ของตัวเอง</p>
+    <p class="hint">สั่งนัดจากกลุ่มได้ เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา” หรือขึ้นต้นด้วย นัด / เตือน / จด แล้วเว้นวรรค นัดจะขึ้นในแอปของคนที่พิมพ์ แชร์กับคู่</p>`;
+}
+
+function linePersonForm(i) {
+  const list = cloud.linePeople || [];
+  const isNew = i === 'new';
+  const d = isNew ? { userId: '', name: '', who: '' } : { ...list[Number(i)] };
+  const taken = new Set(list.filter((_, k) => String(k) !== String(i)).map((p) => p.who).filter(Boolean));
+  const opt = (v, label) => (v && taken.has(v) ? '' : `<option value="${v}" ${d.who === v ? 'selected' : ''}>${esc(label)}</option>`);
+  openSheet(`
+    <div class="sheet-head">
+      <button class="close-x" data-action="close" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <h2>${isNew ? 'เพิ่มคนในกลุ่ม LINE' : 'แก้ไข'}</h2>
+      <button class="link-btn strong" id="lpSave">บันทึก</button>
+    </div>
+    <form class="form" id="lpForm">
+      <div class="field"><label for="lpName">ชื่อ</label><input id="lpName" maxlength="40" placeholder="เช่น พ่อบุ๊ค" value="${esc(d.name)}" autocomplete="off"></div>
+      <div class="field line-set"><label for="lpId">LINE ID</label><input id="lpId" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="U1a2b3…" value="${esc(d.userId)}"></div>
+      <div class="field"><label for="lpWho">คือใครในแอป</label><select id="lpWho">${opt('', 'ไม่ระบุ')}${opt('me', `ฉัน (${myNick()})`)}${cloud.partner ? opt('partner', partnerName()) : ''}</select></div>
+    </form>
+    ${isNew ? '' : '<button class="btn danger" id="lpDel">ลบ</button>'}
+  `);
+  const put = (next, msg) => {
+    cloud.linePeople = next;
+    cloudCall('PUT', '/line/people', { people: next }).then((r) => { if (r) toast(msg); });
+    closeSheet(); render();
+  };
+  const save = (e) => {
+    if (e) e.preventDefault();
+    const name = $('#lpName').value.trim();
+    const userId = $('#lpId').value.trim();
+    if (!name) { toast('กรุณาใส่ชื่อ'); $('#lpName').focus(); return; }
+    if (!LINE_UID_RX.test(userId)) { toast('LINE ID ไม่ถูกต้อง (U ตามด้วยตัวอักษร 32 ตัว)'); $('#lpId').focus(); return; }
+    if (list.some((p, k) => p.userId === userId && String(k) !== String(i))) { toast('มี LINE ID นี้แล้ว'); return; }
+    const p = { userId, name, who: $('#lpWho').value };
+    const next = isNew ? [...list, p] : list.map((x, k) => (String(k) === String(i) ? p : x));
+    put(next, isNew ? 'เพิ่มแล้ว' : 'บันทึกแล้ว');
+  };
+  $('#lpSave').addEventListener('click', save);
+  $('#lpForm').addEventListener('submit', save);
+  if ($('#lpDel')) $('#lpDel').addEventListener('click', () => confirmDelete(`ลบ ${d.name}?`, '', () => put(list.filter((_, k) => String(k) !== String(i)), 'ลบแล้ว')));
+  if (isNew) setTimeout(() => $('#lpName') && $('#lpName').focus(), 300);
 }
 
 function lineSettingsBind() {
@@ -421,6 +488,8 @@ function notesIcs(stamp, alarm) {
 /* ---------- Clicks ---------- */
 
 function notesClick(t) {
+  const lp = t.closest('[data-lp]');
+  if (lp) { linePersonForm(lp.dataset.lp); return true; }
   const dn = t.closest('[data-note-done]');
   if (dn) { noteToggle(dn.dataset.noteDone, dn); return true; }
   const nn = t.closest('[data-note-new]');
