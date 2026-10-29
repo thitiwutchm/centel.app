@@ -236,7 +236,7 @@ const I18N_EN = {
   'ใส่ยอดรวมทั้งบิล ค่าเริ่มต้นแบ่งครึ่ง แก้ส่วนของแต่ละคนได้ รายการจะนับเป็นรายจ่ายเมื่อ {0} อนุมัติแล้วเท่านั้น':
     'Enter the full bill total. It is split in half by default and you can change each share. It counts as spending only after {0} approves.',
   'บันทึกเป็นร่าง (ยังไม่ส่ง)': 'Save as draft (don’t send yet)', 'จาก': 'From', 'ทั่วไป': 'General',
-  '⏳ กำลังอัปโหลดและอ่านสลิป…': '⏳ Uploading and reading the slip…', '✅ อ่านสลิปแล้ว ตรวจสอบข้อมูลอีกครั้งก่อนบันทึก': '✅ Slip read. Check the details before saving.',
+  '⏳ กำลังอัปโหลดและอ่านสลิป…': '⏳ Uploading and reading the slip…', 'กำลังอ่านสลิป…': 'Reading slip…', '✅ อ่านสลิปแล้ว ตรวจสอบข้อมูลอีกครั้งก่อนบันทึก': '✅ Slip read. Check the details before saving.',
   '⚠️ อ่านได้ไม่ครบหรือไม่ทราบวัตถุประสงค์ของการโอน กรุณาตรวจสอบและเลือกหมวดหมู่': '⚠️ Some details or the purpose could not be read. Please check and pick a category.',
   '⚠️ อ่านสลิปไม่สำเร็จ แนบรูปไว้แล้ว กรุณากรอกข้อมูลเอง': '⚠️ Could not read the slip. The image is attached; please fill in the details.',
   '🧾 แนบรูปแล้ว (ยังไม่ได้เปิดการอ่านสลิปอัตโนมัติ)': '🧾 Image attached (automatic slip reading is not set up)', '🧾 แนบรูปแล้ว': '🧾 Image attached',
