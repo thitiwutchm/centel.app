@@ -6,6 +6,7 @@ import { analyzeReceipt, aiEnabled, RECEIPT_MODEL } from './receipts.js';
 import { putReceipt, receiptUrl, storageEnabled } from './storage.js';
 import { verifyGoogleIdToken, googleClientId } from './google.js';
 import { lineEnabled, linePush } from './line.js';
+import { pushKeys, pushTo, saveSub, dropSub, subCount, saveAlerts } from './push.js';
 
 const router = express.Router();
 // Compared against when an email is unknown, so login takes the same time either way.
@@ -202,7 +203,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
       notes: notes.map(noteOut),
       line: line ? { groupId: line.group_id, active: line.active } : null,
       linePeople: linePeople.map((x) => ({ userId: x.line_user_id, name: x.name, who: x.who })),
-      features: { line: lineEnabled, ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
+      features: { line: lineEnabled, push: true, ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
     };
   });
   res.json(out);
@@ -335,16 +336,30 @@ router.post('/expenses', wrap(async (req, res) => {
       [id, x.scope, x.type, x.date, x.merchant, x.amount, x.category, x.note,
         shared && x.payerId !== me ? null : x.walletId, x.toWalletId, shared ? x.payerId : null,
         shared ? 'draft' : 'approved', x.reviewNeeded, x.receiptKey, x.slipRef, x.billId, x.billYm, x.currency]);
+    let partner = null;
     if (shared) {
       await writeShares(db, id, x, me);
       await db.query('select submit_expense($1)', [id]);
+      partner = (await db.query('select my_partner() as p, (select coalesce(nickname, display_name) from users where id = app_uid()) as name')).rows[0];
     }
     if (x.labels) await writeLabels(db, id, x.labels);
-    return { id };
+    return { id, partner };
   });
   if (out.duplicate) return res.status(409).json({ error: 'duplicate', id: out.duplicate });
-  res.json(out);
+  if (out.partner?.p) sharedPush(out.partner, x, id);
+  res.json({ id: out.id });
 }));
+
+// Tells the partner's devices about a new shared expense; never holds up the answer.
+function sharedPush(partner, x, id) {
+  const amount = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(x.amount);
+  const what = x.merchant || x.note || 'รายจ่ายร่วม';
+  pushTo([partner.p], {
+    title: `💸 ${partner.name || 'คู่ของคุณ'} เพิ่มรายจ่ายร่วม`,
+    body: `${what} · ${x.currency === 'THB' ? '฿' : `${x.currency} `}${amount}`,
+    url: '/', tag: `exp-${id}`,
+  }).catch((e) => console.error('push shared', e.message));
+}
 
 router.put('/expenses/:id', wrap(async (req, res) => {
   const id = req.params.id;
@@ -533,6 +548,44 @@ router.post('/line/test', rateLimit(10, 15 * 60000), wrap(async (req, res) => {
     throw bad('line_failed', 502);
   }
   res.json({ ok: true });
+}));
+
+/* ---------- iPhone notifications (Web Push) ---------- */
+
+router.get('/push', wrap(async (req, res) => {
+  const { publicKey } = await pushKeys();
+  res.json({ publicKey, devices: await subCount(uid(req)) });
+}));
+
+router.post('/push/subscribe', rateLimit(30, 60 * 60000), wrap(async (req, res) => {
+  if (!(await saveSub(uid(req), req.body?.subscription, str(req.body?.device, 60)))) throw bad('bad_subscription');
+  res.json({ ok: true, devices: await subCount(uid(req)) });
+}));
+
+router.delete('/push/subscribe', wrap(async (req, res) => {
+  await dropSub(uid(req), req.body?.endpoint);
+  res.json({ ok: true, devices: await subCount(uid(req)) });
+}));
+
+router.post('/push/test', rateLimit(10, 15 * 60000), wrap(async (req, res) => {
+  const n = await pushTo([uid(req)], { title: '✅ Centel แจ้งเตือนได้แล้ว', body: 'บิลที่ใกล้ครบกำหนดและโน้ตที่ตั้งเตือนไว้จะเด้งแบบนี้', url: '/', tag: 'test' });
+  if (!n) throw bad('no_device', 404);
+  res.json({ ok: true, devices: n });
+}));
+
+// This device's upcoming bill alerts (worked out on the device, where bills live).
+const ALERT_KEY = /^[\w:.-]{1,120}$/;
+router.put('/push/alerts', wrap(async (req, res) => {
+  const device = str(req.body?.device, 60);
+  const list = Array.isArray(req.body?.alerts) ? req.body.alerts : null;
+  if (!device || !list || list.length > 500) throw bad('bad_alerts');
+  const alerts = list.map((a) => {
+    const at = new Date(a?.at);
+    if (!ALERT_KEY.test(String(a?.key || '')) || Number.isNaN(at.getTime()) || !a.title) throw bad('bad_alerts');
+    return { key: String(a.key), at: at.toISOString(), title: str(a.title, 120), body: str(a.body, 300) || '', url: str(a.url, 200) };
+  });
+  await saveAlerts(uid(req), device, alerts);
+  res.json({ ok: true, count: alerts.length });
 }));
 
 /* ---------- Settlements ---------- */

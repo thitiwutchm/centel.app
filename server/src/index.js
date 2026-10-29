@@ -2,7 +2,7 @@ import express from 'express';
 import { migrate, pool } from './db.js';
 import { loadUser, csrfGuard } from './auth.js';
 import routes from './routes.js';
-import { lineWebhook, startLineReminders } from './line.js';
+import { lineWebhook, startReminders } from './line.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -34,4 +34,4 @@ app.use((err, _req, res, _next) => {
 const port = Number(process.env.PORT || 3000);
 await migrate();
 app.listen(port, () => console.log(`centel api on :${port}`));
-startLineReminders();
+startReminders();
