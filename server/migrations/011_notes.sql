@@ -36,3 +36,17 @@ create policy edit on notes for update to app_user
   with check ((couple_id is null and owner_id = app_uid()) or couple_id = my_couple());
 create policy remove on notes for delete to app_user
   using (owner_id = app_uid());
+
+-- Where reminders go in LINE: the group (or room) the LINE OA was added to, set by the
+-- person in the Account tab. `active` turns sending on or off without losing the id.
+create table line_targets (
+  user_id    uuid primary key references users on delete cascade default app_uid(),
+  group_id   text not null,
+  active     boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+grant select, insert, update, delete on line_targets to app_user;
+alter table line_targets enable row level security;
+create policy owner on line_targets for all to app_user
+  using (user_id = app_uid()) with check (user_id = app_uid());

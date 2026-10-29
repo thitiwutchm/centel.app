@@ -168,6 +168,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const labels = (await db.query('select id, name, sort from labels order by sort, name')).rows;
     const links = (await db.query('select expense_id, label_id from expense_labels')).rows;
     const notes = (await db.query('select * from notes order by date nulls last, time nulls first, created_at')).rows;
+    const line = (await db.query('select group_id, active from line_targets where user_id = app_uid()')).rows[0];
     let invite = null;
     if (couple && !partner) {
       // The pending invite code is read with the owner role: invites are not exposed to app_user.
@@ -197,7 +198,8 @@ router.get('/bootstrap', wrap(async (req, res) => {
       })),
       prefs: prefs ? prefs.data : {},
       notes: notes.map(noteOut),
-      features: { ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
+      line: line ? { groupId: line.group_id, active: line.active } : null,
+      features: { line: lineEnabled, ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
     };
   });
   res.json(out);
@@ -468,6 +470,28 @@ router.delete('/notes/:id', wrap(async (req, res) => {
   if (!isUuid(req.params.id)) throw bad('bad_id');
   await asUser(uid(req), (db) => db.query('delete from notes where id = $1', [req.params.id]));
   res.json({ ok: true });
+}));
+
+/* ---------- LINE group for reminders ---------- */
+
+// Sending needs the LINE OA's Messaging API channel token on this service.
+const lineEnabled = !!process.env.LINE_CHANNEL_ACCESS_TOKEN;
+// LINE ids: C… for a group chat, R… for a multi-person room.
+const LINE_TARGET = /^[CR][0-9a-f]{32}$/;
+
+router.put('/line', wrap(async (req, res) => {
+  const groupId = String((req.body || {}).groupId || '').trim();
+  if (!groupId) {
+    await asUser(uid(req), (db) => db.query('delete from line_targets where user_id = app_uid()'));
+    return res.json({ line: null });
+  }
+  if (!LINE_TARGET.test(groupId)) throw bad('bad_group_id');
+  const active = req.body.active !== false;
+  await asUser(uid(req), (db) => db.query(
+    `insert into line_targets (group_id, active) values ($1, $2)
+     on conflict (user_id) do update set group_id = excluded.group_id, active = excluded.active, updated_at = now()`,
+    [groupId, active]));
+  res.json({ line: { groupId, active } });
 }));
 
 /* ---------- Settlements ---------- */

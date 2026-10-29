@@ -78,3 +78,15 @@ test('notes: a shared note is seen and ticked by the partner, but only the owner
   assert.equal((await A('DELETE', `/notes/${id1}`)).ok, true);
   assert.equal((await notes(B)).length, 0);
 });
+
+test('notes: the LINE group for reminders is set, switched off and removed in Account', async () => {
+  const gid = 'C' + crypto.randomBytes(16).toString('hex');
+  assert.equal((await A('GET', '/bootstrap')).line, null);
+  assert.equal((await A('PUT', '/line', { groupId: 'not-an-id' })).status, 400);
+  assert.deepEqual((await A('PUT', '/line', { groupId: gid })).line, { groupId: gid, active: true });
+  assert.deepEqual((await A('PUT', '/line', { groupId: gid, active: false })).line, { groupId: gid, active: false });
+  assert.deepEqual((await A('GET', '/bootstrap')).line, { groupId: gid, active: false });
+  assert.equal((await B('GET', '/bootstrap')).line, null);
+  assert.equal((await A('PUT', '/line', { groupId: '' })).line, null);
+  assert.equal((await A('GET', '/bootstrap')).line, null);
+});

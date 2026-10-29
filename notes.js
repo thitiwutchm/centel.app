@@ -240,17 +240,20 @@ function notesSheet() {
     ${groups.filter(([, l]) => l.length).map(([t, l]) => `<div class="section-title">${t} (${l.length})</div><div class="list">${l.map(noteRow).join('')}</div>`).join('')}
     ${open.length ? '' : '<div class="empty"><div class="e-ico">📝</div>ไม่มีสิ่งที่ต้องทำค้างอยู่</div>'}
     ${done.length ? `<div class="section-title">เสร็จแล้ว (${done.length})</div><div class="list">${done.map(noteRow).join('')}</div>` : ''}
-    ${lineSoonCard()}
+    ${lineHint()}
   `);
   ui.notesOpen = true;
 }
 
-function lineSoonCard() {
+// LINE reminders are set up once in the Account tab; the list points there.
+function lineHint() {
+  const on = isCloud() && cloud.line && cloud.line.active;
   return `
-    <div class="line-soon">
+    <button class="line-soon" data-goto="account">
       <span class="ls-ico">LINE</span>
-      <div><b>แจ้งเตือนในกลุ่ม LINE</b><div class="muted small">เร็วๆ นี้: ส่งการเตือนของโน้ตที่แชร์เข้ากลุ่ม LINE ของบ้านผ่าน LINE OA</div></div>
-    </div>`;
+      <div><b>แจ้งเตือนในกลุ่ม LINE</b><div class="muted small">${on ? 'ตั้งกลุ่มไว้แล้ว · แก้ไขได้ที่หน้า บัญชี' : 'ตั้งค่า LINE Group ID ได้ที่หน้า บัญชี'}</div></div>
+      ${svgIcon('chev', 'svg-i sm')}
+    </button>`;
 }
 
 function noteForm(n, preset = {}) {
@@ -279,7 +282,6 @@ function noteForm(n, preset = {}) {
         `<select data-nset="remind">${NOTE_REMINDS.map(([k, l]) => `<option value="${k == null ? '' : k}" ${k === d.remind ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
     }
     if (canShare) h += pick(`แชร์กับ ${esc(partnerName())}`, d.shared ? 'ใช่' : 'ไม่', `<select data-nset="shared"><option value="">ไม่</option><option value="1" ${d.shared ? 'selected' : ''}>ใช่</option></select>`);
-    h += `<div class="prow soon"><span class="pl">แจ้งเตือนในกลุ่ม LINE</span><span class="pv muted">เร็วๆ นี้</span></div>`;
     $('#nRows').innerHTML = h;
   };
   rows();
@@ -339,6 +341,43 @@ function noteQuick(form) {
     const el = $('#naHome');
     if (el) el.focus({ preventScroll: true });
   }
+}
+
+/* ---------- LINE settings (Account tab) ---------- */
+
+const LINE_ID_RX = /^[CR][0-9a-f]{32}$/;
+
+function lineSettings() {
+  const l = isCloud() ? cloud.line : null;
+  const ready = isCloud() && cloud.features && cloud.features.line;
+  const status = !isCloud() ? 'ต้องเข้าสู่ระบบ' : !l ? 'ยังไม่ได้ตั้งค่า' : !l.active ? 'ปิดอยู่' : ready ? 'พร้อมส่ง' : 'รอเชื่อม LINE OA';
+  return `
+    <div class="section-title">แจ้งเตือนในกลุ่ม LINE</div>
+    <div class="form line-set">
+      <div class="field"><label>สถานะ</label><span class="ln-status${l && l.active && ready ? ' ok' : ''}">${status}</span></div>
+      <div class="field"><label for="lineGroup">LINE Group ID</label>
+        <input id="lineGroup" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="C1a2b3…" value="${esc(l ? l.groupId : '')}" ${isCloud() ? '' : 'disabled'}></div>
+      <div class="field"><label for="lineOn">ส่งเตือนสิ่งที่ต้องทำเข้ากลุ่ม</label><span style="flex:1"></span>
+        <label class="switch"><input type="checkbox" id="lineOn" ${!l || l.active ? 'checked' : ''} ${l ? '' : 'disabled'}><span></span></label></div>
+    </div>
+    <p class="hint">เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน แล้วใส่ Group ID (ขึ้นต้นด้วย C) ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้${ready ? '' : '<br>ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ'}</p>`;
+}
+
+function lineSettingsBind() {
+  const input = $('#lineGroup');
+  if (!input || !isCloud()) return;
+  const send = (groupId, active) => {
+    cloud.line = groupId ? { groupId, active } : null;
+    cloudCall('PUT', '/line', { groupId, active }).then((r) => { if (r) toast(groupId ? 'บันทึกแล้ว' : 'ลบ Group ID แล้ว'); });
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  };
+  input.addEventListener('change', () => {
+    const v = input.value.trim();
+    if (v && !LINE_ID_RX.test(v)) { toast('Group ID ไม่ถูกต้อง (C ตามด้วยตัวอักษร 32 ตัว)'); input.focus(); return; }
+    if (v === (cloud.line ? cloud.line.groupId : '')) return;
+    send(v, cloud.line ? cloud.line.active : true);
+  });
+  $('#lineOn').addEventListener('change', (e) => { if (cloud.line) send(cloud.line.groupId, e.target.checked); });
 }
 
 /* ---------- Calendar feed ---------- */

@@ -1375,6 +1375,11 @@ body::before {
 .note-edit textarea { min-height: 96px; font-size: 18px; font-weight: 600; }
 .prow.soon .pv { font-weight: 500; }
 
-/* LINE group reminders: shown as coming soon until the LINE OA is connected */
-.line-soon { display: flex; align-items: center; gap: 12px; margin: 18px 0 6px; padding: 12px 14px; border-radius: 18px; background: var(--sheet-card); border: 0.5px dashed var(--line); }
+/* LINE group reminders: the list links to the Account tab, where the Group ID is set */
+.line-soon { display: flex; align-items: center; gap: 12px; width: 100%; margin: 18px 0 6px; padding: 12px 14px; border-radius: 18px; background: var(--sheet-card); border: 0.5px solid var(--line); color: var(--c-text); font: inherit; text-align: left; }
+.line-soon > div { flex: 1; min-width: 0; }
+.line-soon > .svg-i { color: var(--c-muted); }
+.line-set input { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }
+.ln-status { margin-left: auto; font-weight: 600; color: var(--c-muted); }
+.ln-status.ok { color: var(--c-ok); }
 .ls-ico { flex: 0 0 auto; padding: 6px 7px; border-radius: 10px; background: #06c755; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .3px; }
