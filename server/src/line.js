@@ -15,6 +15,10 @@ export const lineEnabled = !!TOKEN;
 // LINE_API_URL / LINE_TICK_MS let the tests point at a stand-in LINE and tick faster.
 const API = process.env.LINE_API_URL || 'https://api.line.me/v2/bot/message';
 const TICK = Number(process.env.LINE_TICK_MS) || 60000;
+// Other systems that also need this channel's webhook (LINE allows one URL per channel):
+// each signed event body is passed on to them as it came, with LINE's signature, so they
+// check it as usual. Space or comma separated https URLs.
+const FORWARD = (process.env.LINE_WEBHOOK_FORWARD || '').split(/[\s,]+/).filter((u) => /^https?:\/\//.test(u));
 
 async function lineCall(path, body) {
   const res = await fetch(`${API}/${path}`, {
@@ -62,6 +66,11 @@ export async function lineWebhook(req, res) {
   const want = SECRET ? crypto.createHmac('sha256', SECRET).update(raw).digest('base64') : '';
   if (!want || sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) {
     return res.status(401).json({ error: 'bad_signature' });
+  }
+  for (const url of FORWARD) {
+    fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-line-signature': sig }, body: raw, signal: AbortSignal.timeout(10000) })
+      .then((r) => { if (!r.ok) console.error('line forward', url, r.status); })
+      .catch((e) => console.error('line forward', url, e.message));
   }
   let events = [];
   try { events = JSON.parse(raw.toString('utf8')).events || []; } catch { /* empty */ }

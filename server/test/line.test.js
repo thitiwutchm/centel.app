@@ -2,6 +2,7 @@
 // sent once to the owner's and the partner's groups. Needs the API started with
 //   LINE_API_URL=http://localhost:3998 LINE_CHANNEL_SECRET=test-secret
 //   LINE_CHANNEL_ACCESS_TOKEN=test-token LINE_TICK_MS=500
+//   LINE_WEBHOOK_FORWARD=http://localhost:3998/forwarded
 // (a stand-in LINE runs on :3998 inside this test). Skipped when the API has no LINE.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +16,7 @@ const mock = http.createServer((req, res) => {
   let b = '';
   req.on('data', (c) => { b += c; });
   req.on('end', () => {
-    sent.push({ path: req.url, auth: req.headers.authorization, body: JSON.parse(b || '{}') });
+    sent.push({ path: req.url, auth: req.headers.authorization, sig: req.headers['x-line-signature'], raw: b, body: JSON.parse(b || '{}') });
     res.setHeader('content-type', 'application/json');
     res.end(JSON.parse(b || '{}').to === 'C' + '0'.repeat(32) ? (res.statusCode = 400, '{"message":"bad"}') : '{}');
   });
@@ -64,6 +65,11 @@ test('line: the webhook checks the signature and answers a join with the Group I
   assert.ok(r);
   assert.equal(r.auth, 'Bearer test-token');
   assert.match(r.body.messages[0].text, new RegExp(gA));
+  // Signed events are passed on unchanged to the other system on this channel; bad ones are not.
+  const f = sent.filter((s) => s.path === '/forwarded');
+  assert.equal(f.length, 1);
+  assert.equal(f[0].raw, JSON.stringify(ev));
+  assert.equal(f[0].sig, crypto.createHmac('sha256', 'test-secret').update(f[0].raw).digest('base64'));
 });
 
 test('line: test message goes to the saved group', async (t) => {
