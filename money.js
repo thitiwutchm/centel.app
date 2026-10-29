@@ -200,7 +200,8 @@ function scanning(btn, on) {
   btn.querySelector('.scan-ring')?.remove();
   btn.classList.toggle('scanning', on);
   btn.setAttribute('aria-busy', on ? 'true' : 'false');
-  text.textContent = on ? 'กำลังอ่านสลิป…' : 'สแกนสลิป';
+  if (on && !btn.dataset.label) btn.dataset.label = text.textContent;
+  text.textContent = on ? 'กำลังอ่านสลิป…' : (btn.dataset.label || 'สแกนสลิป');
   if (!on) return;
   const w = btn.offsetWidth, h = btn.offsetHeight;
   btn.insertAdjacentHTML('beforeend', `<svg class="scan-ring" viewBox="0 0 ${w} ${h}" aria-hidden="true">
@@ -347,13 +348,40 @@ function removeBillTxn(billId, ym) {
   money.txns.filter((t) => t.billId === billId && t.billYm === ym).forEach(deleteTxn);
 }
 
-function recordBillTxn(b, ym, amount, walletId, date = dateStr(new Date())) {
+function recordBillTxn(b, ym, amount, walletId, date = dateStr(new Date()), extra = {}) {
   removeBillTxn(b.id, ym);
   if (!walletId || !walletById(walletId) || !(amount > 0)) return;
   saveTxn({
     id: newId(), type: 'expense', amount, category: BILL_TX_CAT[b.category] || 'other_exp',
-    walletId, date, note: tr(`จ่าย${b.name}`), billId: b.id, billYm: ym,
+    walletId, date, note: tr(`จ่าย${b.name}`), billId: b.id, billYm: ym, ...extra,
   });
+}
+
+// When a bill was paid on day `date` (YYYY-MM-DD): now for today, else midday of that day.
+function paidAtOf(date) {
+  if (!date || date === dateStr(new Date())) return new Date().toISOString();
+  const d = parseDs(date);
+  d.setHours(12);
+  return d.toISOString();
+}
+
+// A payment slip pays a bill's month: the record turns paid with the slip's amount and date,
+// keeps the slip, and the payment's transaction carries it too.
+function payBillWithSlip(b, ym, { amount, date, walletId, receiptKey, slipRef }) {
+  const amt = amount > 0 ? amount : (record(ym, b.id).amount ?? b.amount ?? 0);
+  setRecord(ym, b.id, { amount: amt || undefined, paid: true, paidAt: paidAtOf(date), slip: receiptKey });
+  const extra = {};
+  if (receiptKey) extra.receiptKey = receiptKey;
+  if (slipRef) extra.slipRef = slipRef;
+  recordBillTxn(b, ym, amt, walletId, date || dateStr(new Date()), extra);
+  return amt;
+}
+
+// Bills a slip could pay: unpaid months from two months back to next month, soonest due first.
+function pendingBillOccs() {
+  const cur = ymOf(new Date());
+  return [-2, -1, 0, 1].flatMap((i) => occurrences(addMonths(cur, i))).filter((o) => !o.paid)
+    .sort((a, b2) => a.due - b2.due);
 }
 
 /* ---------- Persistence: local profile, or the signed-in account (cloud.js) ---------- */
@@ -1306,6 +1334,8 @@ function txnForm(t, preset = {}) {
   const fullLabel = d.payerId === me ? 'รับผิดชอบทั้งหมด' : `${esc(partnerName())} รับผิดชอบทั้งหมด`;
   if (d.scope === 'shared' && !canShare) d.scope = 'personal';
   const receipts = isCloud() && cloud.features.storage;
+  // A new expense can be the payment of a bill still due (picked here or matched from a slip).
+  const pend = isNew && !d.billId ? pendingBillOccs() : [];
   const wOpts = (selId, skip) => money.wallets.filter((w) => w.id !== skip)
     .map((w) => `<option value="${w.id}" ${selId === w.id ? 'selected' : ''}>${esc(wEmoji(w))} ${esc(w.name)}</option>`).join('');
 
@@ -1341,6 +1371,8 @@ function txnForm(t, preset = {}) {
       <button type="button" class="tr tr-cat" id="tCatOpen"></button>
       <div class="tr" id="tMerchRow"><div class="tr-ico">${svgIcon('store')}</div>
         <div class="tr-body"><input id="tMerchant" aria-label="ร้านค้า / ผู้รับ" placeholder="ร้านค้า / ผู้รับ" value="${esc(d.merchant || '')}" autocomplete="off"></div></div>
+      ${pend.length ? `<div class="tr" id="tBillRow"><div class="tr-ico">${svgIcon('bell')}</div>
+        <div class="tr-body"><label for="tBill">ตัดบิล</label><select id="tBill"></select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>` : ''}
       <div class="tr" id="tShareRows"><div class="tr-ico">${svgIcon('people')}</div>
         <div class="tr-body col"><span class="tr-lab">ต้นทุน</span>
           <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel}</button><button type="button" data-split="half">หาร 2</button></div>
@@ -1382,6 +1414,7 @@ function txnForm(t, preset = {}) {
     const sh = shared();
     $('#tCatOpen').hidden = transfer;
     $('#tMerchRow').hidden = transfer;
+    if ($('#tBillRow')) $('#tBillRow').hidden = d.type !== 'expense';
     $('#tToRow').hidden = !transfer;
     $('#tShareRows').hidden = !sh;
     $('#tShareHint').hidden = !sh;
@@ -1452,6 +1485,33 @@ function txnForm(t, preset = {}) {
   $('#tWallet').addEventListener('change', () => { if (d.type === 'transfer') renderType(); });
   $('#tTo').addEventListener('change', (e) => { d.toWalletId = e.target.value; });
 
+  // Pending bills, those whose amount is closest to `amt` first (a slip's amount usually matches one).
+  const paintBills = (amt) => {
+    if (!pend.length) return;
+    const list = amt > 0 ? [...pend].sort((a, b2) => Math.abs(a.amount - amt) - Math.abs(b2.amount - amt) || a.due - b2.due) : pend;
+    const sel = d.billId ? `${d.billId}|${d.billYm}` : '';
+    $('#tBill').innerHTML = `<option value="">ไม่ใช่การจ่ายบิล</option>${list.map((o) => {
+      const v = `${o.bill.id}|${o.ym}`;
+      return `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(o.bill.name)} · ${thDate(dateStr(o.due))}</option>`;
+    }).join('')}`;
+  };
+  // Picking a bill fills what the form can know from it; whatever was typed stays.
+  const pickBill = (v) => {
+    const o = pend.find((x) => `${x.bill.id}|${x.ym}` === v);
+    d.billId = o ? o.bill.id : undefined;
+    d.billYm = o ? o.ym : undefined;
+    if (!o) return;
+    d.type = 'expense';
+    if (!num($('#tAmount').value) && o.amount) $('#tAmount').value = o.amount;
+    if (!d.category) d.category = BILL_TX_CAT[o.bill.category] || 'other_exp';
+    if (!$('#tNote').value) $('#tNote').value = tr(`จ่าย${o.bill.name}`);
+    renderType();
+  };
+  if (pend.length) {
+    paintBills();
+    $('#tBill').addEventListener('change', (e) => pickBill(e.target.value));
+  }
+
   if (receipts) {
     const status = (html) => { $('#rcStatus').innerHTML = html ? `<p class="hint rc-status">${html}</p>` : ''; };
     const onFile = async (file) => {
@@ -1477,12 +1537,25 @@ function txnForm(t, preset = {}) {
           d.category = x.category || null;
           renderType();
         }
+        // A slip whose amount is exactly a bill still due is taken as paying it: of several
+        // months with that amount, the one due nearest the slip's date.
+        const amt = num($('#tAmount').value);
+        const paidOn = parseDs($('#tDate').value || dateStr(new Date()));
+        const hit = pend.filter((o) => amt > 0 && Math.abs(o.amount - amt) < 0.005)
+          .sort((a, b2) => Math.abs(a.due - paidOn) - Math.abs(b2.due - paidOn))[0];
+        if (!d.billId && hit) {
+          paintBills(amt);
+          $('#tBill').value = `${hit.bill.id}|${hit.ym}`;
+          pickBill($('#tBill').value);
+        } else paintBills(amt);
+        const billHit = d.billId && pend.find((o) => o.bill.id === d.billId && o.ym === d.billYm);
         status({
           ok: '✅ อ่านสลิปแล้ว ตรวจสอบข้อมูลอีกครั้งก่อนบันทึก',
           needs_review: '⚠️ อ่านได้ไม่ครบหรือไม่ทราบวัตถุประสงค์ของการโอน กรุณาตรวจสอบและเลือกหมวดหมู่',
           failed: '⚠️ อ่านสลิปไม่สำเร็จ แนบรูปไว้แล้ว กรุณากรอกข้อมูลเอง',
           skipped: '🧾 แนบรูปแล้ว (ยังไม่ได้เปิดการอ่านสลิปอัตโนมัติ)',
         }[r.status] || '🧾 แนบรูปแล้ว');
+        if (billHit) $('#rcStatus').insertAdjacentHTML('beforeend', `<p class="hint rc-status">🧾 ยอดตรงกับบิล ${esc(billHit.bill.name)} (${thMonthYear(billHit.ym)}) จะตัดบิลนี้ให้เมื่อบันทึก</p>`);
       } catch (e) {
         status('❌ อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
       } finally {
@@ -1494,7 +1567,7 @@ function txnForm(t, preset = {}) {
     if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
   }
 
-  const save = () => {
+  const submit = () => {
     const total = num($('#tAmount').value);
     if (!(total > 0)) { toast('กรุณาใส่จำนวนเงิน'); $('#tAmount').focus(); return; }
     const date = $('#tDate').value;
@@ -1526,11 +1599,17 @@ function txnForm(t, preset = {}) {
       });
     }
     saveTxn(out);
+    // Paying a bill from here marks its month paid with this amount, date and slip.
+    const paidBill = pend.find((o) => o.bill.id === out.billId && o.ym === out.billYm);
+    if (paidBill) {
+      setRecord(out.billYm, out.billId, { amount: total, paid: true, paidAt: paidAtOf(date), slip: out.receiptKey });
+      save();
+    }
     if (out.walletId && money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
     closeSheet(); render(); if (isNew) popIn();
-    toast(out.scope === 'shared' ? `บันทึกแล้ว ${partnerName()} จะเห็นรายการนี้` : isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว');
+    toast(paidBill ? `จ่าย ${paidBill.bill.name} แล้ว` : out.scope === 'shared' ? `บันทึกแล้ว ${partnerName()} จะเห็นรายการนี้` : isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว');
   };
-  $('#saveTx').addEventListener('click', save);
+  $('#saveTx').addEventListener('click', submit);
   const del = $('#delTx');
   if (del) del.addEventListener('click', () => {
     confirmDelete('ลบรายการนี้?', '', () => {

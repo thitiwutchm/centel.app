@@ -1005,6 +1005,8 @@ function occurrenceSheet(id, ym) {
   const rec = record(ym, id);
   const c = cat(b);
   const peaNeeded = !!b.pea && rec.amount == null && !o.paid;
+  // Payment slips go through AI Slips, which needs the signed-in account's receipt storage.
+  const slips = isCloud() && cloud.features.storage;
 
   const history = [];
   for (let i = 1; i <= 6; i++) {
@@ -1043,7 +1045,16 @@ function occurrenceSheet(id, ym) {
     ${peaNeeded && peaFetchDay(b, ym) ? `<p class="hint">แอปจะดึงยอดให้เองตั้งแต่วันที่ ${peaFetchDay(b, ym)} เมื่อเปิดแอป</p>` : ''}
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
-      : `${peaNeeded ? '' : '<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button>'}<button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
+      : `${slips ? `<button type="button" class="scan-btn pay-slip" id="oSlip">${SCAN_ICON}<span class="scan-text">จ่ายด้วยสลิป</span></button>
+         <p class="hint pay-slip-hint">อัปโหลดสลิปโอนเงิน AI อ่านยอดและวันที่ แล้วตัดบิลนี้ให้</p>` : ''}
+         ${peaNeeded ? '' : '<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button>'}<button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
+    ${o.paid && (rec.slip || slips) ? `<div class="section-title">สลิปการจ่าย</div>
+    <div class="list">
+      ${rec.slip
+        ? `<button class="item" id="oSlipView"><div class="ico" style="background:var(--accent-soft)">🧾</div><div class="main"><div class="name">ดูสลิป</div><div class="sub">แตะเพื่อเปิดดู</div></div></button>`
+        : `<button class="item add-row" id="oSlipAdd"><span class="plus">🧾</span><div class="main"><div class="name">แนบสลิปการจ่าย</div></div></button>`}
+    </div>` : ''}
+    <input type="file" id="oSlipIn" accept="image/*" hidden>
     <div class="section-title">ใบแจ้งหนี้</div>
     <div class="list">
       ${rec.file
@@ -1070,9 +1081,48 @@ function occurrenceSheet(id, ym) {
     savePrefs();
     save(); saveMoney(); closeSheet(); render(); toast(`จ่าย ${b.name} แล้ว`);
   });
+  // Upload a slip: unpaid → AI reads amount and date, then the bill is paid with it;
+  // already paid → the slip is only attached to the record and its transaction.
+  const slipBtn = $('#oSlip');
+  if (slipBtn) slipBtn.addEventListener('click', () => { if (!slipBtn.classList.contains('scanning')) $('#oSlipIn').click(); });
+  const slipAdd = $('#oSlipAdd');
+  if (slipAdd) slipAdd.addEventListener('click', () => $('#oSlipIn').click());
+  const slipView = $('#oSlipView');
+  if (slipView) slipView.addEventListener('click', () => openReceipt(rec.slip));
+  $('#oSlipIn').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const wallet = $('#oWallet') ? $('#oWallet').value : billWallet(b);
+    scanning(slipBtn, true);
+    if (slipAdd) slipAdd.classList.add('busy');
+    try {
+      const r = await uploadReceipt(f, [], slipCats());
+      if (o.paid) {
+        setRecord(ym, id, { slip: r.key });
+        const tx = billTxn(id, ym);
+        if (tx) { tx.receiptKey = r.key; saveTxn(tx); }
+        save(); render(); occurrenceSheet(id, ym); toast('แนบสลิปแล้ว');
+        return;
+      }
+      const x = r.result || {};
+      const amount = payBillWithSlip(b, ym, {
+        amount: x.amount || readAmount(), date: x.date, walletId: wallet, receiptKey: r.key, slipRef: x.reference,
+      });
+      if (b.walletId !== undefined) b.walletId = wallet;
+      else money.prefs.billWallet = wallet;
+      savePrefs();
+      save(); saveMoney(); render(); occurrenceSheet(id, ym);
+      toast(amount ? `จ่าย ${b.name} แล้ว ${baht(amount)}` : `จ่าย ${b.name} แล้ว อ่านยอดจากสลิปไม่ได้ กรอกยอดเอง`);
+    } catch (err) {
+      scanning(slipBtn, false);
+      if (slipAdd) slipAdd.classList.remove('busy');
+      toast('อัปโหลดสลิปไม่สำเร็จ ลองใหม่อีกครั้ง');
+    }
+  });
   const unpay = $('#oUnpay');
   if (unpay) unpay.addEventListener('click', () => {
-    setRecord(ym, id, { paid: undefined, paidAt: undefined });
+    setRecord(ym, id, { paid: undefined, paidAt: undefined, slip: undefined });
     removeBillTxn(id, ym);
     save(); saveMoney(); closeSheet(); render();
   });
