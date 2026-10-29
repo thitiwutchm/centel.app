@@ -402,6 +402,7 @@ const I18N_EN = {
   'จดสิ่งที่ต้องทำไว้ตรงนี้ ใส่วันในประโยคได้เลย แอปจะตั้งวันให้เอง': 'Jot down what you need to do. Put the day in the sentence and the app sets the date for you.',
   'เพิ่มสิ่งที่ต้องทำ เช่น จันทร์ที่ 1 ไปเยี่ยมแม่ ลำพูน': 'Add a to-do, e.g. Mon the 1st visit Mom', 'เพิ่มสิ่งที่ต้องทำ': 'Add a to-do',
   'ตั้งวันและการเตือน': 'Set date and reminder', 'ไม่เตือน': 'No reminder', 'ตรงเวลา': 'At the time',
+  'ล่วงหน้า 2 ชั่วโมง': '2 hours before', 'ล่วงหน้า 6 ชั่วโมง': '6 hours before', 'ล่วงหน้า 2 วัน': '2 days before',
   'ล่วงหน้า 1 ชั่วโมง': '1 hour before', 'ล่วงหน้า 3 ชั่วโมง': '3 hours before', 'ล่วงหน้า 1 วัน': '1 day before', 'ล่วงหน้า 3 วัน': '3 days before',
   '{0} น.': '{0}', 'จาก {0}': 'From {0}', 'แชร์กับคู่': 'Shared', 'ยังไม่เสร็จ': 'Not done', 'ทำเสร็จแล้ว': 'Mark as done',
   'ไม่ระบุวัน': 'No date', 'เสร็จแล้ว': 'Done', 'เลยกำหนด ({0})': 'Overdue ({0})', 'วันนี้ ({0})': 'Today ({0})', 'กำลังจะถึง ({0})': 'Upcoming ({0})',
@@ -419,8 +420,8 @@ const I18N_EN = {
   'มี LINE ID นี้แล้ว': 'This LINE ID is already in the list', 'เพิ่มแล้ว': 'Added', 'ลบ {0}?': 'Delete {0}?',
   'ใส่ LINE ID (ขึ้นต้นด้วย U) แล้วบอกว่าเป็นใครในแอป การเตือนจะแท็กคนที่เกี่ยวกับโน้ตนั้น พิมพ์ id ในกลุ่มเพื่อดู LINE ID ของตัวเอง':
     'Enter a LINE ID (starts with U) and who they are in the app. Reminders tag the people a note belongs to. Type id in the group to see your own LINE ID.',
-  'สั่งนัดจากกลุ่มได้ เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา” หรือขึ้นต้นด้วย นัด / เตือน / จด แล้วเว้นวรรค นัดจะขึ้นในแอปของคนที่พิมพ์ แชร์กับคู่':
-    'You can add notes from the group, e.g. “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา”, or start with นัด / เตือน / จด and a space. The note shows in the app of whoever typed it, shared with their partner.',
+  'สั่งนัดจากกลุ่มได้ เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา” หรือขึ้นต้นด้วย นัด / เตือน / จด แล้วเว้นวรรค ต่อท้าย “เตือนก่อน 2 ชม.” หรือ “ล่วงหน้า 1 วัน” ได้ นัดจะขึ้นในแอปของคนที่พิมพ์ แชร์กับคู่':
+    'You can add notes from the group, e.g. “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา”, or start with นัด / เตือน / จด and a space. Add “เตือนก่อน 2 ชม.” or “ล่วงหน้า 1 วัน” to be reminded earlier. The note shows in the app of whoever typed it, shared with their partner.',
   '💬 ส่งข้อความทดสอบเข้ากลุ่ม': '💬 Send a test message to the group', 'ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE': 'Test message sent, check the LINE group',
   'ส่งไม่สำเร็จ ตรวจว่า LINE OA อยู่ในกลุ่มและ Group ID ถูกต้อง': 'Could not send. Check the LINE OA is in the group and the Group ID is right',
   'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้':

@@ -434,7 +434,8 @@ router.delete('/labels/:id', wrap(async (req, res) => {
 /* ---------- To-do notes ---------- */
 
 // Minutes before the note's time (or 09:00 on a note without a time) to remind.
-const REMINDS = new Set([0, 60, 180, 1440, 4320]);
+// 60, 180 and 4320 were the choices before 2026-10-29 and stay valid for older notes.
+const REMINDS = new Set([0, 120, 360, 1440, 2880, 60, 180, 4320]);
 const noteOut = (n) => ({
   id: n.id, ownerId: n.owner_id, shared: !!n.couple_id, text: n.text, date: n.date || '',
   time: n.time ? n.time.slice(0, 5) : '', remind: n.remind, remindAt: n.remind_at, notifiedAt: n.notified_at || undefined,

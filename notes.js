@@ -10,7 +10,9 @@
 
 const NOTES_KEY = 'centel.notes.v1';
 // Minutes before the note's time (09:00 when it has none). null = no reminder.
-const NOTE_REMINDS = [[null, 'ไม่เตือน'], [0, 'ตรงเวลา'], [60, 'ล่วงหน้า 1 ชั่วโมง'], [180, 'ล่วงหน้า 3 ชั่วโมง'], [1440, 'ล่วงหน้า 1 วัน'], [4320, 'ล่วงหน้า 3 วัน']];
+const NOTE_REMINDS = [[null, 'ไม่เตือน'], [0, 'ตรงเวลา'], [120, 'ล่วงหน้า 2 ชั่วโมง'], [360, 'ล่วงหน้า 6 ชั่วโมง'], [1440, 'ล่วงหน้า 1 วัน'], [2880, 'ล่วงหน้า 2 วัน']];
+// Choices offered before 2026-10-29; notes saved with them keep their reminder.
+const NOTE_REMINDS_OLD = [[60, 'ล่วงหน้า 1 ชั่วโมง'], [180, 'ล่วงหน้า 3 ชั่วโมง'], [4320, 'ล่วงหน้า 3 วัน']];
 const NOTE_DAY_START = 9 * 60;
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -160,7 +162,7 @@ function noteLeaf(n, cls) {
   return `<div class="leaf ${cls}"><span class="lw">${TH_DOW[d.getDay()]}</span><b>${d.getDate()}</b><span class="lm">${TH_MONTHS_SHORT[d.getMonth()]}</span></div>`;
 }
 
-function remindLabel(v) { return (NOTE_REMINDS.find(([k]) => k === v) || NOTE_REMINDS[0])[1]; }
+function remindLabel(v) { return ([...NOTE_REMINDS, ...NOTE_REMINDS_OLD].find(([k]) => k === v) || NOTE_REMINDS[0])[1]; }
 
 function noteRow(n) {
   const w = noteWhen(n);
@@ -278,11 +280,11 @@ function noteForm(n, preset = {}) {
   const rows = () => {
     const dt = d.date ? parseDs(d.date) : null;
     let h = pick('วันที่', dt ? `${TH_DOW_FULL[dt.getDay()]} ${thShortDate(dt)} ${dt.getFullYear() + BE}` : 'ไม่ระบุวัน', `<input type="date" data-nset="date" value="${d.date || ''}">`);
-    if (d.date) {
-      h += pick('เวลา', d.time ? `${d.time} น.` : 'ทั้งวัน', `<input type="time" data-nset="time" value="${d.time || ''}">`);
-      h += pick('เตือน', `${svgIcon('bell', 'svg-i xs')} ${remindLabel(d.remind)}`,
-        `<select data-nset="remind">${NOTE_REMINDS.map(([k, l]) => `<option value="${k == null ? '' : k}" ${k === d.remind ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
-    }
+    if (d.date) h += pick('เวลา', d.time ? `${d.time} น.` : 'ทั้งวัน', `<input type="time" data-nset="time" value="${d.time || ''}">`);
+    // Always shown; picking a reminder on a note without a date puts it on today.
+    const choices = NOTE_REMINDS_OLD.some(([k]) => k === d.remind) ? [...NOTE_REMINDS, NOTE_REMINDS_OLD.find(([k]) => k === d.remind)] : NOTE_REMINDS;
+    h += pick('เตือน', `${svgIcon('bell', 'svg-i xs')} ${d.date ? remindLabel(d.remind) : 'ไม่เตือน'}`,
+      `<select data-nset="remind">${choices.map(([k, l]) => `<option value="${k == null ? '' : k}" ${d.date && k === d.remind ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
     if (canShare) h += pick(`แชร์กับ ${esc(partnerName())}`, d.shared ? 'ใช่' : 'ไม่', `<select data-nset="shared"><option value="">ไม่</option><option value="1" ${d.shared ? 'selected' : ''}>ใช่</option></select>`);
     $('#nRows').innerHTML = h;
   };
@@ -293,7 +295,7 @@ function noteForm(n, preset = {}) {
     const v = e.target.value;
     if (k === 'date') { const had = !!d.date; d.date = v; if (!v) { d.time = ''; d.remind = null; } else if (!had && d.remind == null) d.remind = 0; }
     if (k === 'time') d.time = v;
-    if (k === 'remind') d.remind = v === '' ? null : Number(v);
+    if (k === 'remind') { d.remind = v === '' ? null : Number(v); if (d.remind != null && !d.date) d.date = dateStr(today()); }
     if (k === 'shared') d.shared = !!v;
     rows();
   });
@@ -387,7 +389,7 @@ function linePeopleList() {
       <button class="item" data-lp="new"><div class="ico round lp-ico add">${svgIcon('plus')}</div><div class="main"><div class="name">เพิ่มคน</div></div></button>
     </div>
     <p class="hint">ใส่ LINE ID (ขึ้นต้นด้วย U) แล้วบอกว่าเป็นใครในแอป การเตือนจะแท็กคนที่เกี่ยวกับโน้ตนั้น พิมพ์ id ในกลุ่มเพื่อดู LINE ID ของตัวเอง</p>
-    <p class="hint">สั่งนัดจากกลุ่มได้ เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา” หรือขึ้นต้นด้วย นัด / เตือน / จด แล้วเว้นวรรค นัดจะขึ้นในแอปของคนที่พิมพ์ แชร์กับคู่</p>`;
+    <p class="hint">สั่งนัดจากกลุ่มได้ เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา” หรือขึ้นต้นด้วย นัด / เตือน / จด แล้วเว้นวรรค ต่อท้าย “เตือนก่อน 2 ชม.” หรือ “ล่วงหน้า 1 วัน” ได้ นัดจะขึ้นในแอปของคนที่พิมพ์ แชร์กับคู่</p>`;
 }
 
 function linePersonForm(i) {

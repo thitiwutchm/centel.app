@@ -143,8 +143,8 @@ test('line: a note typed into the group is saved for the person who typed it', a
   };
   // แม่เฟิร์น is A's partner, so the note is B's, shared with A.
   const r = await say('ทำนัด 18:00 น 31 ตค ไปแข่งกีฬาที่สนาม welcomedink', mom, 'rt3');
-  assert.match(r, /^✅ นัดแล้ว .*31 ต\.ค\. 18:00 ไปแข่งกีฬาที่สนาม welcomedink/);
-  assert.match(r, /แม่เฟิร์น · แชร์กับคู่/);
+  assert.match(r, /^รับทราบครับ ทำนัดให้ แม่เฟิร์น เรียบร้อยแล้ว ✅\n📝 ไปแข่งกีฬาที่สนาม welcomedink\n📅 .*31 ต\.ค\. 18:00 น\./);
+  assert.match(r, /🤝 แชร์กับคู่/);
   const n = (await B('GET', '/bootstrap')).notes.find((x) => x.text === 'ไปแข่งกีฬาที่สนาม welcomedink');
   assert.ok(n);
   assert.match(n.date, /-10-31$/);
@@ -153,11 +153,19 @@ test('line: a note typed into the group is saved for the person who typed it', a
   assert.equal(n.remind, 0);
   assert.equal(new Date(n.remindAt).toISOString().slice(11, 16), '11:00');
   assert.ok((await A('GET', '/bootstrap')).notes.some((x) => x.id === n.id));
+  // A lead time in the line sets the reminder.
+  assert.match(await say('ทำนัด พรุ่งนี้ 18:00 ประชุมผู้ปกครอง เตือนก่อน 2 ชม.', mom, 'rt7'), /เตือนล่วงหน้า 2 ชั่วโมง/);
+  const n2 = (await B('GET', '/bootstrap')).notes.find((x) => x.text === 'ประชุมผู้ปกครอง');
+  assert.equal(n2.remind, 120);
+  assert.equal(new Date(n2.remindAt).toISOString().slice(11, 16), '09:00');
   // Everyday chat gets no answer; a stranger is told how to link their LINE.
   assert.equal(await say('นัดกันกี่โมง', mom, 'rt4'), undefined);
   assert.match(await say('เตือน ซื้อนม', 'U' + '1'.repeat(32), 'rt5'), /ยังไม่รู้[\s\S]*U1{32}/);
-  // No date in it (and no AI in tests): saved without one.
-  assert.match(await say('จด ซื้อนม', mom, 'rt6'), /จดไว้แล้ว: ซื้อนม/);
+  // No date in it (and no AI in tests): a จด note is saved without one; an appointment
+  // the bot cannot read gets no answer and no note.
+  assert.match(await say('จด ซื้อนม', mom, 'rt6'), /^รับทราบครับ จดให้ แม่เฟิร์น เรียบร้อยแล้ว ✅\n📝 ซื้อนม/);
+  assert.equal(await say('ทำนัด ไปหาหมอ', mom, 'rt8'), undefined);
+  assert.equal((await B('GET', '/bootstrap')).notes.some((x) => x.text === 'ไปหาหมอ'), false);
 });
 
 test('line: teardown', () => { mock.close(); });
