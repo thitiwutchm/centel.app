@@ -435,6 +435,20 @@ const I18N_EN = {
   'เวลา': 'Time', 'ทั้งวัน': 'All day', 'แชร์กับ {0}': 'Share with {0}', 'กรุณาพิมพ์สิ่งที่ต้องทำ': 'Please type what to do',
   'เพิ่มโน้ตแล้ว': 'Note added', 'เพิ่มแล้ว · {0}': 'Added · {0}', 'เสร็จแล้ว ✓': 'Done ✓', 'ลบโน้ตนี้?': 'Delete this note?',
   'สิ่งที่ต้องทำวันนี้ / เลยกำหนด': 'To-dos due today or overdue',
+  // iPhone notifications (push.js)
+  'แจ้งเตือนบนเครื่องนี้': 'Notifications on this device', '🔔 ส่งแจ้งเตือนทดสอบ': '🔔 Send a test notification',
+  'บน iPhone ต้องเพิ่มแอปไปยังหน้าจอโฮมก่อน (Safari › แชร์ › เพิ่มไปยังหน้าจอโฮม) แล้วเปิดจากไอคอน จึงจะเปิดการแจ้งเตือนได้ (iOS 16.4 ขึ้นไป)':
+    'On iPhone, add the app to the Home Screen first (Safari › Share › Add to Home Screen) and open it from the icon to turn on notifications (iOS 16.4 or later)',
+  'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน': 'This browser does not support notifications',
+  'ต้องเข้าสู่ระบบก่อน การแจ้งเตือนส่งมาจากเซิร์ฟเวอร์ จึงเด้งได้แม้ปิดแอปอยู่': 'Sign in first. Notifications come from the server, so they arrive even when the app is closed',
+  'การแจ้งเตือนถูกปิดไว้ เปิดได้ที่ การตั้งค่า › การแจ้งเตือน › Centel': 'Notifications are turned off. Turn them on in Settings › Notifications › Centel',
+  'จะเด้งเตือนบนเครื่องนี้เมื่อ บิลใกล้ครบกำหนด (09:00 ของวันเตือนล่วงหน้าและวันครบกำหนด) · โน้ตสิ่งที่ต้องทำถึงเวลาเตือน · คู่ของคุณเพิ่มรายจ่ายร่วม':
+    'This device is notified when a bill is coming due (09:00 on the remind day and the due day), when a to-do reminder is due, and when your partner adds a shared expense',
+  'เปิดแล้วจะเด้งเตือนแม้ปิดแอปอยู่: บิลใกล้ครบกำหนด โน้ตสิ่งที่ต้องทำที่ตั้งเตือนไว้ และเมื่อคู่ของคุณเพิ่มรายจ่ายร่วม':
+    'Turn on to get notified even when the app is closed: bills coming due, to-do reminders, and shared expenses your partner adds',
+  'ต้องเข้าสู่ระบบก่อน': 'Sign in first', 'ยังไม่ได้อนุญาตการแจ้งเตือน': 'Notifications were not allowed',
+  'เปิดการแจ้งเตือนแล้ว': 'Notifications on', 'ปิดการแจ้งเตือนแล้ว': 'Notifications off', 'เปิดการแจ้งเตือนไม่สำเร็จ': 'Could not turn on notifications',
+  'ส่งแล้ว ดูการแจ้งเตือนบนเครื่อง': 'Sent, check your notifications', 'ไม่พบเครื่องที่เปิดการแจ้งเตือน ลองปิดแล้วเปิดใหม่': 'No device with notifications on. Turn it off and on again',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { pool } from './db.js';
 import { parseNote, remindAt } from './noteparse.js';
 import { aiReadNote } from './noteai.js';
+import { pushTo, sendDueAlerts } from './push.js';
 
 /* LINE OA reminders for to-do notes. The person adds the LINE OA to a group chat;
    the webhook answers with that group's id, which they paste into the Account tab
@@ -276,12 +277,22 @@ export async function noteEditFromLine({ noteId, body, cancel }, lineUserId, now
 const TH_DATE = new Intl.DateTimeFormat('th-TH-u-ca-buddhist', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const REMIND_TEXT = { 0: 'ถึงเวลาแล้ว', 60: 'อีก 1 ชั่วโมง', 120: 'อีก 2 ชั่วโมง', 180: 'อีก 3 ชั่วโมง', 360: 'อีก 6 ชั่วโมง', 1440: 'พรุ่งนี้', 2880: 'อีก 2 วัน', 4320: 'อีก 3 วัน' };
 
-export function reminderText(n) {
+function reminderWhen(n) {
   const long = (ds) => { const [y, m, d] = ds.split('-').map(Number); return TH_DATE.format(new Date(Date.UTC(y, m - 1, d))); };
-  const when = n.end_date || n.end_time ? whenText(n, long).replace(/ (\d\d:\d\d)/, ' · $1') : `${long(noteDate(n))}${n.time ? ` · ${n.time.slice(0, 5)} น.` : ''}`;
-  const lines = [`🔔 ${REMIND_TEXT[n.remind] || 'เตือนความจำ'}`, `📝 ${n.text}`, `📅 ${when}`];
+  return n.end_date || n.end_time ? whenText(n, long).replace(/ (\d\d:\d\d)/, ' · $1') : `${long(noteDate(n))}${n.time ? ` · ${n.time.slice(0, 5)} น.` : ''}`;
+}
+
+export function reminderText(n) {
+  const lines = [`🔔 ${REMIND_TEXT[n.remind] || 'เตือนความจำ'}`, `📝 ${n.text}`, `📅 ${reminderWhen(n)}`];
   if (n.couple_id && n.owner_name) lines.push(`👤 จาก ${n.owner_name}`);
   return lines.join('\n');
+}
+
+// The same reminder as an iPhone notification: the lead line is the title.
+export function reminderPush(n) {
+  const body = [n.text, `📅 ${reminderWhen(n)}`];
+  if (n.couple_id && n.owner_name) body.push(`👤 จาก ${n.owner_name}`);
+  return { title: `🔔 ${REMIND_TEXT[n.remind] || 'เตือนความจำ'}`, body: body.join('\n'), url: '/', tag: `note-${n.id}` };
 }
 
 // Claims due notes first (notified_at), then sends, so a reminder goes out at most once
@@ -301,6 +312,8 @@ export async function sendDueReminders() {
             else array(select user_id from couple_members where couple_id = due.couple_id) end as people_ids
      from due join users u on u.id = due.owner_id`);
   if (!rows.length) return 0;
+  for (const n of rows) await pushTo(n.people_ids, reminderPush(n)).catch((e) => console.error('push note', n.id, e.message));
+  if (!lineEnabled) return rows.length;
   const users = [...new Set(rows.flatMap((n) => n.people_ids))];
   const targets = (await pool.query(
     `select t.user_id, t.group_id,
@@ -330,10 +343,14 @@ export async function sendDueReminders() {
   return rows.length;
 }
 
-export function startLineReminders() {
-  if (!lineEnabled) return;
-  const tick = () => sendDueReminders().catch((e) => console.error('line reminders', e.message));
+// Every minute: due to-do notes (iPhone notifications, and LINE when it is set up) and
+// the bill alerts devices sent (push.js).
+export function startReminders() {
+  const tick = () => {
+    sendDueReminders().catch((e) => console.error('note reminders', e.message));
+    sendDueAlerts().catch((e) => console.error('push alerts', e.message));
+  };
   setTimeout(tick, Math.min(5000, TICK));
   setInterval(tick, TICK);
-  console.log('line reminders on');
+  console.log(`reminders on${lineEnabled ? ' (LINE too)' : ''}`);
 }
