@@ -153,6 +153,11 @@ test('line: a note typed into the group is saved for the person who typed it', a
   assert.equal(n.remind, 0);
   assert.equal(new Date(n.remindAt).toISOString().slice(11, 16), '11:00');
   assert.ok((await A('GET', '/bootstrap')).notes.some((x) => x.id === n.id));
+  // A lead time in the line sets the reminder.
+  assert.match(await say('ทำนัด พรุ่งนี้ 18:00 ประชุมผู้ปกครอง เตือนก่อน 2 ชม.', mom, 'rt7'), /เตือนล่วงหน้า 2 ชั่วโมง/);
+  const n2 = (await B('GET', '/bootstrap')).notes.find((x) => x.text === 'ประชุมผู้ปกครอง');
+  assert.equal(n2.remind, 120);
+  assert.equal(new Date(n2.remindAt).toISOString().slice(11, 16), '09:00');
   // Everyday chat gets no answer; a stranger is told how to link their LINE.
   assert.equal(await say('นัดกันกี่โมง', mom, 'rt4'), undefined);
   assert.match(await say('เตือน ซื้อนม', 'U' + '1'.repeat(32), 'rt5'), /ยังไม่รู้[\s\S]*U1{32}/);

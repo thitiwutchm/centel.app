@@ -101,6 +101,8 @@ export function noteCommand(message) {
   return (m ? s.slice(m[0].length) : s).trim();
 }
 
+const LEADS = [0, 120, 360, 1440, 2880];
+const LEAD_TEXT = { 0: 'ตรงเวลา', 120: 'ล่วงหน้า 2 ชั่วโมง', 360: 'ล่วงหน้า 6 ชั่วโมง', 1440: 'ล่วงหน้า 1 วัน', 2880: 'ล่วงหน้า 2 วัน' };
 const TH_SHORT = new Intl.DateTimeFormat('th-TH-u-ca-buddhist', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 const thDay = (date) => { const [y, m, d] = date.split('-').map(Number); return TH_SHORT.format(new Date(Date.UTC(y, m - 1, d))); };
 
@@ -118,24 +120,32 @@ async function appUserOf(lineUserId) {
 // Saves the note for the person who typed it (shared with the partner when they have
 // one, so it shows in both apps) and returns the reply for the group. The free reader
 // goes first; the AI only reads lines it finds no date in.
-export async function noteFromLine(cmd, lineUserId, now = new Date()) {
+export async function noteFromLine(text0, lineUserId, now = new Date()) {
   const who = await appUserOf(lineUserId);
   if (!who) {
     return ['ยังไม่รู้ว่า LINE นี้เป็นใครในแอป Centel 🙏', '', 'ใส่ LINE ID นี้ในแอป หน้า บัญชี › คนในกลุ่ม LINE แล้วเลือกว่าเป็นตัวเองหรือคู่', lineUserId].join('\n');
   }
+  let cmd = text0;
   if (!cmd) return 'พิมพ์ต่อท้ายได้เลย เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา”';
+  // "เตือนก่อน 2 ชม." / "ล่วงหน้า 1 วัน" picks the reminder; on time otherwise.
+  let lead = 0;
+  const lm = cmd.match(/(?:เตือน)?\s*(?:ก่อน|ล่วงหน้า)\s*(\d{1,2})\s*(ชม\.?|ชั่วโมง|วัน)/);
+  if (lm) {
+    const mins = +lm[1] * (lm[2] === 'วัน' ? 1440 : 60);
+    if (LEADS.includes(mins)) { lead = mins; cmd = cmd.replace(lm[0], ' '); }
+  }
   let p = parseNote(cmd, now);
   let ai = false;
   if (!p.date) { const r = await aiReadNote(cmd, now); if (r?.date) { p = r; ai = true; } }
   const text = p.text.slice(0, 500);
-  const remind = p.date ? 0 : null;
+  const remind = p.date ? lead : null;
   const { rows } = await pool.query(
     `insert into notes (id, owner_id, couple_id, text, date, time, remind, remind_at)
      values ($1, $2, (select couple_id from couple_members where user_id = $2), $3, $4, $5, $6, $7) returning couple_id`,
     [crypto.randomUUID(), who.user_id, text, p.date || null, p.time || null, remind, remindAt(p.date, p.time, remind)]);
   console.log('line note', ai ? 'ai' : 'rules', p.date ? 'dated' : 'undated');
   const lines = p.date
-    ? [`✅ นัดแล้ว ${thDay(p.date)}${p.time ? ` ${p.time}` : ''} ${text}`, `🔔 เตือน${p.time ? 'ตรงเวลา' : 'ตอน 9 โมงเช้าวันนั้น'}`]
+    ? [`✅ นัดแล้ว ${thDay(p.date)}${p.time ? ` ${p.time}` : ''} ${text}`, `🔔 เตือน${LEAD_TEXT[lead]}${p.time ? '' : ' (นับจาก 9 โมงเช้าวันนั้น)'}`]
     : [`📝 จดไว้แล้ว: ${text}`, 'ยังไม่มีวันที่ เปิดแอปเพื่อใส่วันและเวลาเตือนได้'];
   lines.push(`👤 ${who.name}${rows[0].couple_id ? ' · แชร์กับคู่' : ''}`);
   return lines.join('\n');
@@ -144,7 +154,7 @@ export async function noteFromLine(cmd, lineUserId, now = new Date()) {
 /* ---------- Reminder sender ---------- */
 
 const TH_DATE = new Intl.DateTimeFormat('th-TH-u-ca-buddhist', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const REMIND_TEXT = { 0: 'ถึงเวลาแล้ว', 60: 'อีก 1 ชั่วโมง', 180: 'อีก 3 ชั่วโมง', 1440: 'พรุ่งนี้', 4320: 'อีก 3 วัน' };
+const REMIND_TEXT = { 0: 'ถึงเวลาแล้ว', 60: 'อีก 1 ชั่วโมง', 120: 'อีก 2 ชั่วโมง', 180: 'อีก 3 ชั่วโมง', 360: 'อีก 6 ชั่วโมง', 1440: 'พรุ่งนี้', 2880: 'อีก 2 วัน', 4320: 'อีก 3 วัน' };
 
 export function reminderText(n) {
   const [y, m, d] = n.date.split('-').map(Number);
