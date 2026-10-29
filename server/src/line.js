@@ -24,10 +24,33 @@ async function lineCall(path, body) {
 }
 
 export const linePush = (to, text) => lineCall('push', { to, messages: [{ type: 'text', text: text.slice(0, 5000) }] });
+
+// Text with @mentions of LINE users ({p0}, {p1} … in text). Falls back to plain text,
+// with the names written out, when LINE refuses a mention (someone not in the group).
+async function linePushMentions(to, text, people) {
+  if (!people.length) return linePush(to, text);
+  const body = `${text}\n👥 ${people.map((_, i) => `{p${i}}`).join(' ')}`;
+  const substitution = Object.fromEntries(people.map((p, i) => [`p${i}`, { type: 'mention', mentionee: { type: 'user', userId: p.userId } }]));
+  try {
+    await lineCall('push', { to, messages: [{ type: 'textV2', text: body, substitution }] });
+  } catch (e) {
+    if (e.status !== 400) throw e;
+    await linePush(to, `${text}\n👥 ${people.map((p) => p.name).join(' ')}`);
+  }
+}
 const lineReply = (replyToken, text) => lineCall('reply', { replyToken, messages: [{ type: 'text', text }] });
 
-function groupIdText(id) {
-  return `👋 Centel พร้อมส่งเตือนในกลุ่มนี้แล้ว\n\nGroup ID ของกลุ่มนี้:\n${id}\n\nคัดลอกไปใส่ในแอป Centel หน้า บัญชี › แจ้งเตือนในกลุ่ม LINE`;
+async function knownName(userId) {
+  if (!userId) return '';
+  const r = await pool.query('select name from line_people where line_user_id = $1 order by sort limit 1', [userId]);
+  return r.rows[0]?.name || '';
+}
+
+function groupIdText(id, userId, name) {
+  const lines = [`👋 ${name ? `สวัสดี ${name} ` : ''}Centel พร้อมส่งเตือนในกลุ่มนี้แล้ว`, '', 'Group ID ของกลุ่มนี้:', id];
+  if (userId) lines.push('', `LINE ID ของ${name ? ` ${name}` : 'คุณ'}:`, userId);
+  lines.push('', 'นำไปใส่ในแอป Centel หน้า บัญชี › แจ้งเตือนในกลุ่ม LINE');
+  return lines.join('\n');
 }
 
 // POST /api/line/webhook with the raw body, so the signature can be checked.
@@ -47,7 +70,10 @@ export async function lineWebhook(req, res) {
     if (!ev.replyToken || !TOKEN) continue;
     const text = ev.type === 'message' && ev.message?.type === 'text' ? ev.message.text.trim().toLowerCase() : '';
     try {
-      if (id && (ev.type === 'join' || /^(group ?id|groupid|id|ไอดี|ไอดีกลุ่ม)$/.test(text))) await lineReply(ev.replyToken, groupIdText(id));
+      if (id && (ev.type === 'join' || /^(group ?id|groupid|id|ไอดี|ไอดีกลุ่ม)$/.test(text))) {
+        const who = ev.type === 'join' ? '' : src.userId;
+        await lineReply(ev.replyToken, groupIdText(id, who, who ? await knownName(who) : ''));
+      }
       else if (!id && ev.type === 'follow') {
         await lineReply(ev.replyToken, 'สวัสดีครับ 👋 เพิ่ม Centel เข้ากลุ่ม LINE ของบ้าน แล้วบอทจะส่ง Group ID ให้ในกลุ่ม เพื่อนำไปใส่ในแอปหน้า บัญชี');
       }
@@ -70,6 +96,9 @@ export function reminderText(n) {
 
 // Claims due notes first (notified_at), then sends, so a reminder goes out at most once
 // even if two api instances run. Reminders more than a day late are not sent.
+// A note goes to its owner's active group and, when shared, the partner's too. Each
+// group's owner can name LINE users (line_people); those who are the note's people
+// (the owner, plus the partner on a shared note) are @mentioned.
 export async function sendDueReminders() {
   const { rows } = await pool.query(
     `with due as (
@@ -78,13 +107,31 @@ export async function sendDueReminders() {
        returning *
      )
      select due.*, coalesce(u.nickname, u.display_name) as owner_name,
-       array(select distinct t.group_id from line_targets t
-             where t.active and (t.user_id = due.owner_id
-               or (due.couple_id is not null and t.user_id in (select user_id from couple_members where couple_id = due.couple_id)))) as groups
+       case when due.couple_id is null then array[due.owner_id]
+            else array(select user_id from couple_members where couple_id = due.couple_id) end as people_ids
      from due join users u on u.id = due.owner_id`);
+  if (!rows.length) return 0;
+  const users = [...new Set(rows.flatMap((n) => n.people_ids))];
+  const targets = (await pool.query(
+    `select t.user_id, t.group_id,
+       (select m2.user_id from couple_members m1 join couple_members m2 on m2.couple_id = m1.couple_id and m2.user_id <> m1.user_id
+        where m1.user_id = t.user_id limit 1) as partner_id
+     from line_targets t where t.active and t.user_id = any($1)`, [users])).rows;
+  const people = (await pool.query(
+    "select owner_id, line_user_id, name, who from line_people where who <> '' and owner_id = any($1) order by sort", [users])).rows;
   for (const n of rows) {
-    for (const g of n.groups) {
-      try { await linePush(g, reminderText(n)); } catch (e) { console.error('line push', n.id, e.message, e.detail || ''); }
+    const mine = new Set(n.people_ids);
+    const groups = new Map();
+    for (const t of targets.filter((x) => mine.has(x.user_id))) {
+      const list = groups.get(t.group_id) || [];
+      for (const p of people.filter((x) => x.owner_id === t.user_id)) {
+        const appUser = p.who === 'me' ? t.user_id : t.partner_id;
+        if (mine.has(appUser) && !list.some((x) => x.userId === p.line_user_id)) list.push({ userId: p.line_user_id, name: p.name });
+      }
+      groups.set(t.group_id, list);
+    }
+    for (const [g, list] of groups) {
+      try { await linePushMentions(g, reminderText(n), list); } catch (e) { console.error('line push', n.id, e.message, e.detail || ''); }
     }
   }
   return rows.length;

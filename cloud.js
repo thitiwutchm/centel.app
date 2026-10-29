@@ -14,6 +14,7 @@ const cloud = {
   settlements: [],
   notes: [], // to-do notes (notes.js), own and the partner's shared ones
   line: null, // { groupId, active }: LINE group for reminders, set in the Account tab
+  linePeople: [], // [{ userId, name, who: 'me' | 'partner' | '' }]: who is who in that group
   features: {},
   ids: new Set(),
   queue: Promise.resolve(),
@@ -121,6 +122,7 @@ function applyBootstrap(b) {
   cloud.settlements = b.settlements || [];
   cloud.notes = b.notes || [];
   cloud.line = b.line || null;
+  cloud.linePeople = b.linePeople || [];
   cloud.ids = new Set(b.expenses.map((e) => e.id));
   const txns = b.expenses.map((e) => mapExpense(e, me));
   // A repayment moves money between our wallets but is not income or spending.
@@ -178,6 +180,7 @@ function cloudSignedOut() {
   cloud.settlements = [];
   cloud.notes = [];
   cloud.line = null;
+  cloud.linePeople = [];
   cloud.ids = new Set();
   try { localStorage.removeItem(CLOUD_KEY); } catch (e) { /* ignore */ }
   money = loadMoney();

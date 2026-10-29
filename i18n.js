@@ -413,6 +413,12 @@ const I18N_EN = {
   'Group ID ไม่ถูกต้อง (C ตามด้วยตัวอักษร 32 ตัว)': 'Invalid Group ID (C followed by 32 characters)',
   'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน แล้วใส่ Group ID (ขึ้นต้นด้วย C) ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้': 'Add the Centel LINE OA to your family group and enter its Group ID (starts with C) here. Note reminders are posted to this group.',
   'ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ': 'Sending starts once the LINE OA is connected.',
+  'คนในกลุ่ม LINE': 'People in the LINE group', 'เพิ่มคน': 'Add person', 'เพิ่มคนในกลุ่ม LINE': 'Add a person in the LINE group',
+  'ฉัน ({0})': 'Me ({0})', 'คือใครในแอป': 'Who in the app', 'เช่น พ่อบุ๊ค': 'e.g. Dad', 'LINE ID': 'LINE ID',
+  'LINE ID ไม่ถูกต้อง (U ตามด้วยตัวอักษร 32 ตัว)': 'Invalid LINE ID (U followed by 32 characters)',
+  'มี LINE ID นี้แล้ว': 'This LINE ID is already in the list', 'เพิ่มแล้ว': 'Added', 'ลบ {0}?': 'Delete {0}?',
+  'ใส่ LINE ID (ขึ้นต้นด้วย U) แล้วบอกว่าเป็นใครในแอป การเตือนจะแท็กคนที่เกี่ยวกับโน้ตนั้น พิมพ์ id ในกลุ่มเพื่อดู LINE ID ของตัวเอง':
+    'Enter a LINE ID (starts with U) and who they are in the app. Reminders tag the people a note belongs to. Type id in the group to see your own LINE ID.',
   '💬 ส่งข้อความทดสอบเข้ากลุ่ม': '💬 Send a test message to the group', 'ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE': 'Test message sent, check the LINE group',
   'ส่งไม่สำเร็จ ตรวจว่า LINE OA อยู่ในกลุ่มและ Group ID ถูกต้อง': 'Could not send. Check the LINE OA is in the group and the Group ID is right',
   'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้':

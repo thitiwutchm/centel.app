@@ -101,4 +101,35 @@ test('line: a due note is sent once, a shared one to both groups, a switched-off
   assert.equal(pushes('จ่ายค่าน้ำ').length, 1);
 });
 
+test('line: named LINE users are tagged on the notes that are theirs', async (t) => {
+  if (!on) return t.skip('API has no LINE');
+  const dad = 'U' + crypto.randomBytes(16).toString('hex');
+  const mom = 'U' + crypto.randomBytes(16).toString('hex');
+  assert.equal((await A('PUT', '/line/people', { people: [{ userId: 'nope', name: 'x' }] })).status, 400);
+  assert.equal((await A('PUT', '/line/people', { people: [{ userId: dad, name: 'a', who: 'me' }, { userId: mom, name: 'b', who: 'me' }] })).status, 400);
+  const r = await A('PUT', '/line/people', { people: [{ userId: dad, name: 'พ่อบุ๊ค', who: 'me' }, { userId: mom, name: 'แม่เฟิร์น', who: 'partner' }] });
+  assert.equal(r.people.length, 2);
+  assert.deepEqual((await A('GET', '/bootstrap')).linePeople.map((p) => p.name), ['พ่อบุ๊ค', 'แม่เฟิร์น']);
+  assert.deepEqual((await B('GET', '/bootstrap')).linePeople, []);
+  await A('PUT', '/line', { groupId: gA, active: true });
+  const today = new Date().toISOString().slice(0, 10);
+  const mine = crypto.randomUUID(), ours = crypto.randomUUID();
+  const at = new Date(Date.now() - 1000).toISOString();
+  await A('PUT', `/notes/${mine}`, { text: 'ล้างรถ', date: today, remind: 0, remindAt: at });
+  await A('PUT', `/notes/${ours}`, { text: 'พาลูกไปหาหมอ', date: today, remind: 0, remindAt: at, shared: true });
+  await wait(1500);
+  const msg = (txt, to) => sent.find((s) => s.path === '/push' && s.body.to === to && s.body.messages[0].text.includes(txt))?.body.messages[0];
+  const m1 = msg('ล้างรถ', gA);
+  assert.equal(m1.type, 'textV2');
+  assert.deepEqual(Object.values(m1.substitution).map((x) => x.mentionee.userId), [dad]);
+  const m2 = msg('พาลูกไปหาหมอ', gA);
+  assert.deepEqual(Object.values(m2.substitution).map((x) => x.mentionee.userId).sort(), [dad, mom].sort());
+  // B's group gets the shared note without tags: B named nobody.
+  assert.equal(msg('พาลูกไปหาหมอ', gB).type, 'text');
+  // The bot greets a known person by name when asked for the id.
+  await hook({ events: [{ type: 'message', replyToken: 'rt2', message: { type: 'text', text: 'id' }, source: { type: 'group', groupId: gA, userId: dad } }] });
+  await wait(200);
+  assert.match(sent.find((s) => s.body.replyToken === 'rt2').body.messages[0].text, /พ่อบุ๊ค[\s\S]*U/);
+});
+
 test('line: teardown', () => { mock.close(); });

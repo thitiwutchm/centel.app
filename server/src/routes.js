@@ -170,6 +170,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const links = (await db.query('select expense_id, label_id from expense_labels')).rows;
     const notes = (await db.query('select * from notes order by date nulls last, time nulls first, created_at')).rows;
     const line = (await db.query('select group_id, active from line_targets where user_id = app_uid()')).rows[0];
+    const linePeople = (await db.query('select line_user_id, name, who from line_people order by sort, name')).rows;
     let invite = null;
     if (couple && !partner) {
       // The pending invite code is read with the owner role: invites are not exposed to app_user.
@@ -200,6 +201,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
       prefs: prefs ? prefs.data : {},
       notes: notes.map(noteOut),
       line: line ? { groupId: line.group_id, active: line.active } : null,
+      linePeople: linePeople.map((x) => ({ userId: x.line_user_id, name: x.name, who: x.who })),
       features: { line: lineEnabled, ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
     };
   });
@@ -491,6 +493,28 @@ router.put('/line', wrap(async (req, res) => {
      on conflict (user_id) do update set group_id = excluded.group_id, active = excluded.active, updated_at = now()`,
     [groupId, active]));
   res.json({ line: { groupId, active } });
+}));
+
+// Replaces the person's list of who is who in the LINE group.
+router.put('/line/people', wrap(async (req, res) => {
+  const list = Array.isArray(req.body?.people) ? req.body.people : null;
+  if (!list || list.length > 30) throw bad('bad_people');
+  const seen = new Set();
+  const people = list.map((x, i) => {
+    const userId = String(x?.userId || '').trim();
+    const name = str(String(x?.name || '').trim(), 40);
+    if (!/^U[0-9a-f]{32}$/.test(userId) || !name || seen.has(userId)) throw bad('bad_people');
+    seen.add(userId);
+    return { userId, name, who: ['me', 'partner'].includes(x.who) ? x.who : '', sort: i };
+  });
+  if (people.filter((x) => x.who === 'me').length > 1 || people.filter((x) => x.who === 'partner').length > 1) throw bad('bad_people');
+  await asUser(uid(req), async (db) => {
+    await db.query('delete from line_people');
+    for (const x of people) {
+      await db.query('insert into line_people (line_user_id, name, who, sort) values ($1, $2, $3, $4)', [x.userId, x.name, x.who, x.sort]);
+    }
+  });
+  res.json({ people: people.map(({ userId, name, who }) => ({ userId, name, who })) });
 }));
 
 // Sends a test message to the saved group, so the person can see the OA is in it.
