@@ -27,6 +27,7 @@ async function lineCall(path, body) {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw Object.assign(new Error(`line_${res.status}`), { status: res.status, detail: await res.text().catch(() => '') });
+  return res.json().catch(() => ({}));
 }
 
 export const linePush = (to, text) => lineCall('push', { to, messages: [{ type: 'text', text: text.slice(0, 5000) }] });
@@ -38,13 +39,19 @@ async function linePushMentions(to, text, people) {
   const body = `${text}\n👥 ${people.map((_, i) => `{p${i}}`).join(' ')}`;
   const substitution = Object.fromEntries(people.map((p, i) => [`p${i}`, { type: 'mention', mentionee: { type: 'user', userId: p.userId } }]));
   try {
-    await lineCall('push', { to, messages: [{ type: 'textV2', text: body, substitution }] });
+    return await lineCall('push', { to, messages: [{ type: 'textV2', text: body, substitution }] });
   } catch (e) {
     if (e.status !== 400) throw e;
-    await linePush(to, `${text}\n👥 ${people.map((p) => p.name).join(' ')}`);
+    return linePush(to, `${text}\n👥 ${people.map((p) => p.name).join(' ')}`);
   }
 }
 const lineReply = (replyToken, text) => lineCall('reply', { replyToken, messages: [{ type: 'text', text }] });
+
+async function linkMessages(noteId, lineUserId, ids) {
+  for (const id of ids.filter(Boolean)) {
+    await pool.query('insert into line_note_msgs (message_id, note_id, line_user_id) values ($1, $2, $3) on conflict do nothing', [String(id), noteId, lineUserId || null]);
+  }
+}
 
 async function knownName(userId) {
   if (!userId) return '';
@@ -82,8 +89,15 @@ export async function lineWebhook(req, res) {
     const raw = ev.type === 'message' && ev.message?.type === 'text' ? ev.message.text : '';
     const text = raw.trim().toLowerCase();
     try {
-      const cmd = raw && noteCommand(ev.message);
-      if (cmd && src.userId) { const reply = await noteFromLine(cmd, src.userId); if (reply) await lineReply(ev.replyToken, reply); }
+      const edit = raw && src.userId && await noteEditTarget(ev.message, src.userId);
+      const cmd = !edit && raw && noteCommand(ev.message);
+      const out = edit ? await noteEditFromLine(edit, src.userId)
+        : cmd && src.userId ? await noteFromLine(cmd, src.userId) : null;
+      if (out) {
+        // The typed line and the bot's answer both point at the note, so a reply to either edits it.
+        const sent = await lineReply(ev.replyToken, out.text);
+        if (out.noteId) await linkMessages(out.noteId, src.userId, [ev.message.id, sent?.sentMessages?.[0]?.id]);
+      }
       else if (id && (ev.type === 'join' || /^(group ?id|groupid|id|ไอดี|ไอดีกลุ่ม)$/.test(text))) {
         const who = ev.type === 'join' ? '' : src.userId;
         await lineReply(ev.replyToken, groupIdText(id, who, who ? await knownName(who) : ''));
@@ -137,17 +151,14 @@ async function appUserOf(lineUserId) {
 export async function noteFromLine({ verb, text: text0 }, lineUserId, now = new Date()) {
   const who = await appUserOf(lineUserId);
   if (!who) {
-    return ['ยังไม่รู้ว่า LINE นี้เป็นใครในแอป Centel 🙏', '', 'ใส่ LINE ID นี้ในแอป หน้า บัญชี › คนในกลุ่ม LINE แล้วเลือกว่าเป็นตัวเองหรือคู่', lineUserId].join('\n');
+    return { text: unknownText(lineUserId) };
   }
   let cmd = text0;
   if (!cmd) return null;
   // "เตือนก่อน 2 ชม." / "ล่วงหน้า 1 วัน" picks the reminder; on time otherwise.
-  let lead = 0;
-  const lm = cmd.match(/(?:เตือน)?\s*(?:ก่อน|ล่วงหน้า)\s*(\d{1,2})\s*(ชม\.?|ชั่วโมง|วัน)/);
-  if (lm) {
-    const mins = +lm[1] * (lm[2] === 'วัน' ? 1440 : 60);
-    if (LEADS.includes(mins)) { lead = mins; cmd = cmd.replace(lm[0], ' '); }
-  }
+  const l = takeLead(cmd);
+  const lead = l.lead ?? 0;
+  cmd = l.rest;
   let p = parseNote(cmd, now);
   let ai = false;
   if (!p.date) { const r = await aiReadNote(cmd, now); if (r?.date) { p = r; ai = true; } }
@@ -156,13 +167,95 @@ export async function noteFromLine({ verb, text: text0 }, lineUserId, now = new 
   const remind = p.date ? lead : null;
   const { rows } = await pool.query(
     `insert into notes (id, owner_id, couple_id, text, date, time, remind, remind_at)
-     values ($1, $2, (select couple_id from couple_members where user_id = $2), $3, $4, $5, $6, $7) returning couple_id`,
+     values ($1, $2, (select couple_id from couple_members where user_id = $2), $3, $4, $5, $6, $7) returning *`,
     [crypto.randomUUID(), who.user_id, text, p.date || null, p.time || null, remind, remindAt(p.date, p.time, remind)]);
   console.log('line note', ai ? 'ai' : 'rules', p.date ? 'dated' : 'undated');
-  const lines = [`รับทราบครับ ${verb}ให้ ${who.name} เรียบร้อยแล้ว ✅`, `📝 ${text}`];
-  if (p.date) lines.push(`📅 ${thDay(p.date)}${p.time ? ` ${p.time} น.` : ''}`, `🔔 เตือน${LEAD_TEXT[lead]}${p.time ? '' : ' (นับจาก 9 โมงเช้าวันนั้น)'}`);
-  if (rows[0].couple_id) lines.push('🤝 แชร์กับคู่');
+  return { text: noteSummary(`รับทราบครับ ${verb}ให้ ${who.name} เรียบร้อยแล้ว ✅`, rows[0]), noteId: rows[0].id };
+}
+
+const unknownText = (lineUserId) => ['ยังไม่รู้ว่า LINE นี้เป็นใครในแอป Centel 🙏', '', 'ใส่ LINE ID นี้ในแอป หน้า บัญชี › คนในกลุ่ม LINE แล้วเลือกว่าเป็นตัวเองหรือคู่', lineUserId].join('\n');
+
+const noteDate = (n) => (n.date instanceof Date ? n.date.toISOString().slice(0, 10) : n.date || '');
+function noteSummary(head, n) {
+  const date = noteDate(n);
+  const time = n.time ? n.time.slice(0, 5) : '';
+  const lines = [head, `📝 ${n.text}`];
+  if (date) {
+    lines.push(`📅 ${thDay(date)}${time ? ` ${time} น.` : ''}`);
+    lines.push(n.remind == null ? '🔕 ไม่เตือน' : `🔔 เตือน${LEAD_TEXT[n.remind] || `ล่วงหน้า ${n.remind} นาที`}${time ? '' : ' (นับจาก 9 โมงเช้าวันนั้น)'}`);
+  }
+  lines.push(n.couple_id ? '🤝 แชร์กับคู่' : '🔒 ไม่แชร์');
   return lines.join('\n');
+}
+
+// "เตือนก่อน 2 ชม." / "ล่วงหน้า 1 วัน" / "เตือนตรงเวลา" / "ไม่ต้องเตือน": lead is minutes, null for
+// no reminder, undefined when the line says nothing about it; rest is the line without it.
+function takeLead(line) {
+  let m = line.match(/(?:เตือน)?\s*(?:ก่อน|ล่วงหน้า)\s*(\d{1,2})\s*(ชม\.?|ชั่วโมง|วัน)/);
+  if (m) {
+    const mins = +m[1] * (m[2] === 'วัน' ? 1440 : 60);
+    if (LEADS.includes(mins)) return { lead: mins, rest: line.replace(m[0], ' ') };
+  }
+  if ((m = line.match(/เตือนตรงเวลา|ตรงเวลา/))) return { lead: 0, rest: line.replace(m[0], ' ') };
+  if ((m = line.match(/ไม่(?:ต้อง)?เตือน/))) return { lead: null, rest: line.replace(m[0], ' ') };
+  return { lead: undefined, rest: line };
+}
+
+/* ---------- Editing a note from the group ---------- */
+
+// A reply (quote) to the bot's answer, the typed line or a reminder edits that note; a line
+// starting with แก้ไข / แก้ / เลื่อน / ยกเลิก / ลบ (and no quote) edits the sender's latest note from LINE.
+const EDIT = /^\s*(แก้ไข|แก้|เลื่อน(?:นัด)?|ยกเลิก(?:นัด)?|ลบ(?:นัด)?)\s*(?:เป็น|ไป)?\s*:?\s*/;
+export async function noteEditTarget(message, lineUserId) {
+  const text = message.text || '';
+  if (message.quotedMessageId) {
+    const r = await pool.query('select note_id from line_note_msgs where message_id = $1', [String(message.quotedMessageId)]);
+    if (r.rows[0]) return { noteId: r.rows[0].note_id, body: text.replace(EDIT, '') , cancel: /^\s*(ยกเลิก|ลบ)/.test(text) };
+  }
+  const m = text.match(EDIT);
+  if (!m) return null;
+  const r = await pool.query(
+    `select l.note_id from line_note_msgs l join notes n on n.id = l.note_id
+     where l.line_user_id = $1 and not n.done order by l.created_at desc limit 1`, [lineUserId]);
+  if (!r.rows[0]) return null;
+  return { noteId: r.rows[0].note_id, body: text.slice(m[0].length), cancel: /^(ยกเลิก|ลบ)/.test(m[1]) };
+}
+
+// Applies what the line asks for: reminder lead, sharing, a new date and/or time, or cancelling.
+// Returns null (no answer) when nothing in it is understood or the sender may not edit the note.
+export async function noteEditFromLine({ noteId, body, cancel }, lineUserId, now = new Date()) {
+  const who = await appUserOf(lineUserId);
+  if (!who) return { text: unknownText(lineUserId) };
+  const n = (await pool.query(
+    `select n.*, (n.owner_id = $2) as mine from notes n
+     where n.id = $1 and (n.owner_id = $2 or (n.couple_id is not null and n.couple_id = (select couple_id from couple_members where user_id = $2)))`,
+    [noteId, who.user_id])).rows[0];
+  if (!n) return null;
+  if (cancel) {
+    if (!n.mine) return null;
+    await pool.query('delete from notes where id = $1', [n.id]);
+    return { text: `รับทราบครับ ยกเลิกนัดให้ ${who.name} เรียบร้อยแล้ว 🗑️\n📝 ${n.text}` };
+  }
+  let rest = body;
+  const l = takeLead(rest);
+  rest = l.rest;
+  let share;
+  const sm = rest.match(/(ไม่(?:ต้อง)?)?แชร์(?:กับ(?:คู่|\S*))?/);
+  if (sm) { share = !sm[1]; rest = rest.replace(sm[0], ' '); }
+  const p = parseNote(rest, now);
+  const date = p.date && !p.timeOnly ? p.date : noteDate(n);
+  const time = p.time || (n.time ? n.time.slice(0, 5) : '');
+  const changed = l.lead !== undefined || (share !== undefined && n.mine) || (p.date && !p.timeOnly) || p.time;
+  if (!changed || !date) return null;
+  const remind = l.lead !== undefined ? l.lead : n.remind;
+  const coupleSql = share === undefined || !n.mine ? 'couple_id' : share ? '(select couple_id from couple_members where user_id = owner_id)' : 'null';
+  const at = remindAt(date, time, remind);
+  const { rows } = await pool.query(
+    `update notes set date = $2, time = $3, remind = $4, remind_at = $5, couple_id = ${coupleSql},
+       notified_at = case when remind_at is not distinct from $5 then notified_at end, updated_at = now()
+     where id = $1 returning *`,
+    [n.id, date, time || null, remind, at]);
+  return { text: noteSummary(`รับทราบครับ แก้ไขนัดให้ ${who.name} เรียบร้อยแล้ว ✅`, rows[0]), noteId: n.id };
 }
 
 /* ---------- Reminder sender ---------- */
@@ -215,7 +308,10 @@ export async function sendDueReminders() {
       groups.set(t.group_id, list);
     }
     for (const [g, list] of groups) {
-      try { await linePushMentions(g, reminderText(n), list); } catch (e) { console.error('line push', n.id, e.message, e.detail || ''); }
+      try {
+        const sent = await linePushMentions(g, reminderText(n), list);
+        await linkMessages(n.id, null, [sent?.sentMessages?.[0]?.id]);
+      } catch (e) { console.error('line push', n.id, e.message, e.detail || ''); }
     }
   }
   return rows.length;

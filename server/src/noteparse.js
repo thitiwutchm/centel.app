@@ -35,7 +35,7 @@ export function thaiToday(now = new Date()) {
 }
 
 // Returns { text, date, time } with the date words taken out of text; date is '' when
-// nothing in the line looks like a date or time.
+// nothing in the line looks like a date or time. timeOnly is set when only a time was given.
 export function parseNote(raw, now = new Date()) {
   const t = new Date(now.getTime() + TZ_MS);
   let s = ` ${raw} `;
@@ -89,10 +89,12 @@ export function parseNote(raw, now = new Date()) {
     else if (take(/วันนี้|คืนนี้|today|tonight/i)) date = addDays(0);
   }
   // A time on its own means the next time it comes round: today, or tomorrow once past.
-  if (!date && time) date = addDays(time > `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}` ? 0 : 1);
+  const timeOnly = !date && !!time;
+  if (timeOnly) date = addDays(time > `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}` ? 0 : 1);
   const text = s.replace(/\s+/g, ' ').trim();
-  if (!text) return { text: raw.trim(), date: '', time: '' };
-  return { text, date: date ? dateStr(date) : '', time };
+  // A line that is only a date or time ("19:30", an edit) keeps it; the words stay as the text.
+  // timeOnly: the date was not in the words, only worked out from the time.
+  return { text: text || raw.trim(), date: date ? dateStr(date) : '', time, ...(timeOnly ? { timeOnly } : {}) };
 }
 
 // When the reminder is due: `remind` minutes before the note's time in Thailand,

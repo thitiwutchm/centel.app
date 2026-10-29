@@ -16,7 +16,7 @@ test('noteparse: Thai dates and times, with or without dots', () => {
 });
 
 test('noteparse: "น" and short months only when they stand alone', () => {
-  assert.deepEqual(p('18:00 นัดหมอ'), { text: 'นัดหมอ', date: '2026-10-30', time: '18:00' });
+  assert.deepEqual(p('18:00 นัดหมอ'), { text: 'นัดหมอ', date: '2026-10-30', time: '18:00', timeOnly: true });
   assert.deepEqual(p('ไปตลาด'), { text: 'ไปตลาด', date: '', time: '' });
 });
 
