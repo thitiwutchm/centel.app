@@ -2,10 +2,13 @@ import express from 'express';
 import { migrate, pool } from './db.js';
 import { loadUser, csrfGuard } from './auth.js';
 import routes from './routes.js';
+import { lineWebhook, startLineReminders } from './line.js';
 
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
+// LINE signs the raw body, so its webhook is read before the JSON parser and the CSRF guard.
+app.post('/api/line/webhook', express.raw({ type: '*/*', limit: '1mb' }), lineWebhook);
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/api/health', async (_req, res) => {
@@ -31,3 +34,4 @@ app.use((err, _req, res, _next) => {
 const port = Number(process.env.PORT || 3000);
 await migrate();
 app.listen(port, () => console.log(`centel api on :${port}`));
+startLineReminders();

@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword, createSession, destroySession, requireUse
 import { analyzeReceipt, aiEnabled, RECEIPT_MODEL } from './receipts.js';
 import { putReceipt, receiptUrl, storageEnabled } from './storage.js';
 import { verifyGoogleIdToken, googleClientId } from './google.js';
+import { lineEnabled, linePush } from './line.js';
 
 const router = express.Router();
 // Compared against when an email is unknown, so login takes the same time either way.
@@ -474,8 +475,6 @@ router.delete('/notes/:id', wrap(async (req, res) => {
 
 /* ---------- LINE group for reminders ---------- */
 
-// Sending needs the LINE OA's Messaging API channel token on this service.
-const lineEnabled = !!process.env.LINE_CHANNEL_ACCESS_TOKEN;
 // LINE ids: C… for a group chat, R… for a multi-person room.
 const LINE_TARGET = /^[CR][0-9a-f]{32}$/;
 
@@ -492,6 +491,20 @@ router.put('/line', wrap(async (req, res) => {
      on conflict (user_id) do update set group_id = excluded.group_id, active = excluded.active, updated_at = now()`,
     [groupId, active]));
   res.json({ line: { groupId, active } });
+}));
+
+// Sends a test message to the saved group, so the person can see the OA is in it.
+router.post('/line/test', rateLimit(10, 15 * 60000), wrap(async (req, res) => {
+  if (!lineEnabled) throw bad('line_off', 503);
+  const t = await asUser(uid(req), (db) => db.query('select group_id from line_targets where user_id = app_uid()'));
+  if (!t.rows[0]) throw bad('no_group', 404);
+  try {
+    await linePush(t.rows[0].group_id, '✅ Centel เชื่อมกับกลุ่มนี้แล้ว การเตือนจากโน้ตสิ่งที่ต้องทำจะส่งมาที่นี่');
+  } catch (e) {
+    console.error('line test', e.message, e.detail || '');
+    throw bad('line_failed', 502);
+  }
+  res.json({ ok: true });
 }));
 
 /* ---------- Settlements ---------- */

@@ -413,6 +413,10 @@ const I18N_EN = {
   'Group ID ไม่ถูกต้อง (C ตามด้วยตัวอักษร 32 ตัว)': 'Invalid Group ID (C followed by 32 characters)',
   'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน แล้วใส่ Group ID (ขึ้นต้นด้วย C) ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้': 'Add the Centel LINE OA to your family group and enter its Group ID (starts with C) here. Note reminders are posted to this group.',
   'ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ': 'Sending starts once the LINE OA is connected.',
+  '💬 ส่งข้อความทดสอบเข้ากลุ่ม': '💬 Send a test message to the group', 'ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE': 'Test message sent, check the LINE group',
+  'ส่งไม่สำเร็จ ตรวจว่า LINE OA อยู่ในกลุ่มและ Group ID ถูกต้อง': 'Could not send. Check the LINE OA is in the group and the Group ID is right',
+  'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้':
+    'Add the Centel LINE OA to your family group. The bot posts the Group ID (starts with C) there, or type id in the group to get it again. Enter it here and note reminders are posted to this group.',
   'แก้ไขโน้ต': 'Edit note', 'เช่น ไปเยี่ยมแม่ ลำพูน': 'e.g. Visit Mom in Lamphun', 'ลบโน้ต': 'Delete note', 'โน้ตนี้สร้างโดย {0}': 'Created by {0}',
   'เวลา': 'Time', 'ทั้งวัน': 'All day', 'แชร์กับ {0}': 'Share with {0}', 'กรุณาพิมพ์สิ่งที่ต้องทำ': 'Please type what to do',
   'เพิ่มโน้ตแล้ว': 'Note added', 'เพิ่มแล้ว · {0}': 'Added · {0}', 'เสร็จแล้ว ✓': 'Done ✓', 'ลบโน้ตนี้?': 'Delete this note?',

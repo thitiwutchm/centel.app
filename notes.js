@@ -360,7 +360,8 @@ function lineSettings() {
       <div class="field"><label for="lineOn">ส่งเตือนสิ่งที่ต้องทำเข้ากลุ่ม</label><span style="flex:1"></span>
         <label class="switch"><input type="checkbox" id="lineOn" ${!l || l.active ? 'checked' : ''} ${l ? '' : 'disabled'}><span></span></label></div>
     </div>
-    <p class="hint">เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน แล้วใส่ Group ID (ขึ้นต้นด้วย C) ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้${ready ? '' : '<br>ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ'}</p>`;
+    ${l && l.active && ready ? '<button class="btn ghost" id="lineTest">💬 ส่งข้อความทดสอบเข้ากลุ่ม</button>' : ''}
+    <p class="hint">เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้${ready ? '' : '<br>ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ'}</p>`;
 }
 
 function lineSettingsBind() {
@@ -378,6 +379,14 @@ function lineSettingsBind() {
     send(v, cloud.line ? cloud.line.active : true);
   });
   $('#lineOn').addEventListener('change', (e) => { if (cloud.line) send(cloud.line.groupId, e.target.checked); });
+  const test = $('#lineTest');
+  if (test) test.addEventListener('click', async () => {
+    test.disabled = true;
+    try { await api('POST', '/line/test'); toast('ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE'); } catch (e) {
+      toast(e.message === 'line_failed' ? 'ส่งไม่สำเร็จ ตรวจว่า LINE OA อยู่ในกลุ่มและ Group ID ถูกต้อง' : cloudErr(e));
+    }
+    test.disabled = false;
+  });
 }
 
 /* ---------- Calendar feed ---------- */
