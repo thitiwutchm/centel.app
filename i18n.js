@@ -419,6 +419,8 @@ const I18N_EN = {
   'มี LINE ID นี้แล้ว': 'This LINE ID is already in the list', 'เพิ่มแล้ว': 'Added', 'ลบ {0}?': 'Delete {0}?',
   'ใส่ LINE ID (ขึ้นต้นด้วย U) แล้วบอกว่าเป็นใครในแอป การเตือนจะแท็กคนที่เกี่ยวกับโน้ตนั้น พิมพ์ id ในกลุ่มเพื่อดู LINE ID ของตัวเอง':
     'Enter a LINE ID (starts with U) and who they are in the app. Reminders tag the people a note belongs to. Type id in the group to see your own LINE ID.',
+  'สั่งนัดจากกลุ่มได้ เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา” หรือขึ้นต้นด้วย นัด / เตือน / จด แล้วเว้นวรรค นัดจะขึ้นในแอปของคนที่พิมพ์ แชร์กับคู่':
+    'You can add notes from the group, e.g. “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา”, or start with นัด / เตือน / จด and a space. The note shows in the app of whoever typed it, shared with their partner.',
   '💬 ส่งข้อความทดสอบเข้ากลุ่ม': '💬 Send a test message to the group', 'ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE': 'Test message sent, check the LINE group',
   'ส่งไม่สำเร็จ ตรวจว่า LINE OA อยู่ในกลุ่มและ Group ID ถูกต้อง': 'Could not send. Check the LINE OA is in the group and the Group ID is right',
   'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้':

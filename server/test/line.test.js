@@ -132,4 +132,32 @@ test('line: named LINE users are tagged on the notes that are theirs', async (t)
   assert.match(sent.find((s) => s.body.replyToken === 'rt2').body.messages[0].text, /พ่อบุ๊ค[\s\S]*U/);
 });
 
+test('line: a note typed into the group is saved for the person who typed it', async (t) => {
+  if (!on) return t.skip('API has no LINE');
+  const people = (await A('GET', '/bootstrap')).linePeople;
+  const mom = people.find((p) => p.who === 'partner').userId;
+  const say = async (text, userId, token) => {
+    await hook({ events: [{ type: 'message', replyToken: token, message: { type: 'text', text }, source: { type: 'group', groupId: gA, userId } }] });
+    await wait(300);
+    return sent.find((s) => s.body.replyToken === token)?.body.messages[0].text;
+  };
+  // แม่เฟิร์น is A's partner, so the note is B's, shared with A.
+  const r = await say('ทำนัด 18:00 น 31 ตค ไปแข่งกีฬาที่สนาม welcomedink', mom, 'rt3');
+  assert.match(r, /^✅ นัดแล้ว .*31 ต\.ค\. 18:00 ไปแข่งกีฬาที่สนาม welcomedink/);
+  assert.match(r, /แม่เฟิร์น · แชร์กับคู่/);
+  const n = (await B('GET', '/bootstrap')).notes.find((x) => x.text === 'ไปแข่งกีฬาที่สนาม welcomedink');
+  assert.ok(n);
+  assert.match(n.date, /-10-31$/);
+  assert.equal(n.time, '18:00');
+  assert.equal(n.shared, true);
+  assert.equal(n.remind, 0);
+  assert.equal(new Date(n.remindAt).toISOString().slice(11, 16), '11:00');
+  assert.ok((await A('GET', '/bootstrap')).notes.some((x) => x.id === n.id));
+  // Everyday chat gets no answer; a stranger is told how to link their LINE.
+  assert.equal(await say('นัดกันกี่โมง', mom, 'rt4'), undefined);
+  assert.match(await say('เตือน ซื้อนม', 'U' + '1'.repeat(32), 'rt5'), /ยังไม่รู้[\s\S]*U1{32}/);
+  // No date in it (and no AI in tests): saved without one.
+  assert.match(await say('จด ซื้อนม', mom, 'rt6'), /จดไว้แล้ว: ซื้อนม/);
+});
+
 test('line: teardown', () => { mock.close(); });

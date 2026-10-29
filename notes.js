@@ -64,12 +64,14 @@ function notesAdopt() {
 /* ---------- Reading a date out of the words ---------- */
 
 // English names need word edges so "lemon" is not Monday; Thai has no spaces to lean on.
+// Short Thai forms are read with or without the dots ("ต.ค." or "ตค"). server/src/noteparse.js
+// is the same reader for notes typed into the LINE group; keep the two in step.
 const NOTE_MONTHS = [
-  'มกราคม|มกรา|ม\\.ค\\.?|\\bjan(?:uary)?\\b', 'กุมภาพันธ์|กุมภา|ก\\.พ\\.?|\\bfeb(?:ruary)?\\b', 'มีนาคม|มีนา|มี\\.ค\\.?|\\bmar(?:ch)?\\b',
-  'เมษายน|เมษา|เม\\.ย\\.?|\\bapr(?:il)?\\b', 'พฤษภาคม|พฤษภา|พ\\.ค\\.?|\\bmay\\b', 'มิถุนายน|มิถุนา|มิ\\.ย\\.?|\\bjune?\\b',
-  'กรกฎาคม|กรกฎา|ก\\.ค\\.?|\\bjuly?\\b', 'สิงหาคม|สิงหา|ส\\.ค\\.?|\\baug(?:ust)?\\b', 'กันยายน|กันยา|ก\\.ย\\.?|\\bsep(?:t|tember)?\\b',
-  'ตุลาคม|ตุลา|ต\\.ค\\.?|\\boct(?:ober)?\\b', 'พฤศจิกายน|พฤศจิกา|พ\\.ย\\.?|\\bnov(?:ember)?\\b', 'ธันวาคม|ธันวา|ธ\\.ค\\.?|\\bdec(?:ember)?\\b',
-];
+  'มกราคม|มกรา|ม\\.?ค\\.?|\\bjan(?:uary)?\\b', 'กุมภาพันธ์|กุมภา|ก\\.?พ\\.?|\\bfeb(?:ruary)?\\b', 'มีนาคม|มีนา|มี\\.?ค\\.?|\\bmar(?:ch)?\\b',
+  'เมษายน|เมษา|เม\\.?ย\\.?|\\bapr(?:il)?\\b', 'พฤษภาคม|พฤษภา|พ\\.?ค\\.?|\\bmay\\b', 'มิถุนายน|มิถุนา|มิ\\.?ย\\.?|\\bjune?\\b',
+  'กรกฎาคม|กรกฎา|ก\\.?ค\\.?|\\bjuly?\\b', 'สิงหาคม|สิงหา|ส\\.?ค\\.?|\\baug(?:ust)?\\b', 'กันยายน|กันยา|ก\\.?ย\\.?|\\bsep(?:t|tember)?\\b',
+  'ตุลาคม|ตุลา|ต\\.?ค\\.?|\\boct(?:ober)?\\b', 'พฤศจิกายน|พฤศจิกา|พ\\.?ย\\.?|\\bnov(?:ember)?\\b', 'ธันวาคม|ธันวา|ธ\\.?ค\\.?|\\bdec(?:ember)?\\b',
+].map((x) => `(?:${x})(?![\\u0E01-\\u0E4E])`);
 const NOTE_DOW = ['อาทิตย์|\\bsun(?:day)?\\b', 'จันทร์|\\bmon(?:day)?\\b', 'อังคาร|\\btue(?:s|sday)?\\b', 'พุธ|\\bwed(?:nesday)?\\b',
   'พฤหัส(?:บดี)?|\\bthu(?:rs|rsday)?\\b', 'ศุกร์|\\bfri(?:day)?\\b', 'เสาร์|\\bsat(?:urday)?\\b'];
 
@@ -88,7 +90,7 @@ function parseNote(raw, now = new Date()) {
   let time = '';
   const hm = (h, m = 0) => { if (h >= 0 && h < 24 && m >= 0 && m < 60) time = `${pad(h)}:${pad(m)}`; };
   let m;
-  if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:น\.|นาฬิกา)?/))) hm(+m[1], +m[2]);
+  if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:นาฬิกา|น\.?(?![\u0E01-\u0E4E]))?/))) hm(+m[1], +m[2]);
   else if ((m = take(/(?:ตอน\s*)?เที่ยงคืน/))) hm(0);
   else if ((m = take(/(?:ตอน\s*)?เที่ยง(?:วัน)?/))) hm(12);
   else if ((m = take(/(?:ตอน\s*)?บ่าย\s*โมง/))) hm(13);
@@ -384,7 +386,8 @@ function linePeopleList() {
     <div class="list">${rows}
       <button class="item" data-lp="new"><div class="ico round lp-ico add">${svgIcon('plus')}</div><div class="main"><div class="name">เพิ่มคน</div></div></button>
     </div>
-    <p class="hint">ใส่ LINE ID (ขึ้นต้นด้วย U) แล้วบอกว่าเป็นใครในแอป การเตือนจะแท็กคนที่เกี่ยวกับโน้ตนั้น พิมพ์ id ในกลุ่มเพื่อดู LINE ID ของตัวเอง</p>`;
+    <p class="hint">ใส่ LINE ID (ขึ้นต้นด้วย U) แล้วบอกว่าเป็นใครในแอป การเตือนจะแท็กคนที่เกี่ยวกับโน้ตนั้น พิมพ์ id ในกลุ่มเพื่อดู LINE ID ของตัวเอง</p>
+    <p class="hint">สั่งนัดจากกลุ่มได้ เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา” หรือขึ้นต้นด้วย นัด / เตือน / จด แล้วเว้นวรรค นัดจะขึ้นในแอปของคนที่พิมพ์ แชร์กับคู่</p>`;
 }
 
 function linePersonForm(i) {

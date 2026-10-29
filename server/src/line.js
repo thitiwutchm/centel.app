@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { pool } from './db.js';
+import { parseNote, remindAt } from './noteparse.js';
+import { aiReadNote } from './noteai.js';
 
 /* LINE OA reminders for to-do notes. The person adds the LINE OA to a group chat;
    the webhook answers with that group's id, which they paste into the Account tab
@@ -68,9 +70,12 @@ export async function lineWebhook(req, res) {
     const src = ev.source || {};
     const id = src.groupId || src.roomId;
     if (!ev.replyToken || !TOKEN) continue;
-    const text = ev.type === 'message' && ev.message?.type === 'text' ? ev.message.text.trim().toLowerCase() : '';
+    const raw = ev.type === 'message' && ev.message?.type === 'text' ? ev.message.text : '';
+    const text = raw.trim().toLowerCase();
     try {
-      if (id && (ev.type === 'join' || /^(group ?id|groupid|id|ไอดี|ไอดีกลุ่ม)$/.test(text))) {
+      const cmd = raw && noteCommand(ev.message);
+      if (cmd != null && src.userId) await lineReply(ev.replyToken, await noteFromLine(cmd, src.userId));
+      else if (id && (ev.type === 'join' || /^(group ?id|groupid|id|ไอดี|ไอดีกลุ่ม)$/.test(text))) {
         const who = ev.type === 'join' ? '' : src.userId;
         await lineReply(ev.replyToken, groupIdText(id, who, who ? await knownName(who) : ''));
       }
@@ -79,6 +84,61 @@ export async function lineWebhook(req, res) {
       }
     } catch (e) { console.error('line reply', e.message, e.detail || ''); }
   }
+}
+
+/* ---------- Notes typed into the group ---------- */
+
+// "ทำนัด 18:00 น 31 ตค ไปแข่งกีฬา", "เตือน พรุ่งนี้ 9 โมง จ่ายค่าเน็ต", "นัด หมอฟัน ศุกร์ 10:00",
+// or any line that @mentions the bot. Returns the note part, or null for other chat.
+// The command word must stand alone, so everyday chat ("นัดกันกี่โมง") is left alone.
+const COMMAND = /^\s*(?:ทำนัด|นัดหมาย|ลงนัด|นัด|เตือน(?:ความจำ)?|จดไว้|จด|โน้ต|note|remind(?:\s+me)?)(?:\s+|\s*:\s*|$)/i;
+export function noteCommand(message) {
+  let s = message.text || '';
+  const self = (message.mention?.mentionees || []).filter((x) => x.isSelf);
+  for (const x of [...self].sort((a, b) => b.index - a.index)) s = s.slice(0, x.index) + s.slice(x.index + x.length);
+  const m = s.match(COMMAND);
+  if (!m && !self.length) return null;
+  return (m ? s.slice(m[0].length) : s).trim();
+}
+
+const TH_SHORT = new Intl.DateTimeFormat('th-TH-u-ca-buddhist', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const thDay = (date) => { const [y, m, d] = date.split('-').map(Number); return TH_SHORT.format(new Date(Date.UTC(y, m - 1, d))); };
+
+// The app account behind a LINE user: someone a person named in Account › คนในกลุ่ม LINE
+// as themselves (me) or as their partner.
+async function appUserOf(lineUserId) {
+  const { rows } = await pool.query(
+    `select case when p.who = 'me' then p.owner_id
+            else (select m2.user_id from couple_members m1 join couple_members m2 on m2.couple_id = m1.couple_id and m2.user_id <> m1.user_id
+                  where m1.user_id = p.owner_id limit 1) end as user_id, p.name
+     from line_people p where p.line_user_id = $1 and p.who <> '' order by p.who = 'me' desc, p.sort`, [lineUserId]);
+  return rows.find((r) => r.user_id) || null;
+}
+
+// Saves the note for the person who typed it (shared with the partner when they have
+// one, so it shows in both apps) and returns the reply for the group. The free reader
+// goes first; the AI only reads lines it finds no date in.
+export async function noteFromLine(cmd, lineUserId, now = new Date()) {
+  const who = await appUserOf(lineUserId);
+  if (!who) {
+    return ['ยังไม่รู้ว่า LINE นี้เป็นใครในแอป Centel 🙏', '', 'ใส่ LINE ID นี้ในแอป หน้า บัญชี › คนในกลุ่ม LINE แล้วเลือกว่าเป็นตัวเองหรือคู่', lineUserId].join('\n');
+  }
+  if (!cmd) return 'พิมพ์ต่อท้ายได้เลย เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา”';
+  let p = parseNote(cmd, now);
+  let ai = false;
+  if (!p.date) { const r = await aiReadNote(cmd, now); if (r?.date) { p = r; ai = true; } }
+  const text = p.text.slice(0, 500);
+  const remind = p.date ? 0 : null;
+  const { rows } = await pool.query(
+    `insert into notes (id, owner_id, couple_id, text, date, time, remind, remind_at)
+     values ($1, $2, (select couple_id from couple_members where user_id = $2), $3, $4, $5, $6, $7) returning couple_id`,
+    [crypto.randomUUID(), who.user_id, text, p.date || null, p.time || null, remind, remindAt(p.date, p.time, remind)]);
+  console.log('line note', ai ? 'ai' : 'rules', p.date ? 'dated' : 'undated');
+  const lines = p.date
+    ? [`✅ นัดแล้ว ${thDay(p.date)}${p.time ? ` ${p.time}` : ''} ${text}`, `🔔 เตือน${p.time ? 'ตรงเวลา' : 'ตอน 9 โมงเช้าวันนั้น'}`]
+    : [`📝 จดไว้แล้ว: ${text}`, 'ยังไม่มีวันที่ เปิดแอปเพื่อใส่วันและเวลาเตือนได้'];
+  lines.push(`👤 ${who.name}${rows[0].couple_id ? ' · แชร์กับคู่' : ''}`);
+  return lines.join('\n');
 }
 
 /* ---------- Reminder sender ---------- */
