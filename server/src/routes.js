@@ -167,6 +167,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const prefs = (await db.query('select data from prefs where user_id = app_uid()')).rows[0];
     const labels = (await db.query('select id, name, sort from labels order by sort, name')).rows;
     const links = (await db.query('select expense_id, label_id from expense_labels')).rows;
+    const notes = (await db.query('select * from notes order by date nulls last, time nulls first, created_at')).rows;
     let invite = null;
     if (couple && !partner) {
       // The pending invite code is read with the owner role: invites are not exposed to app_user.
@@ -195,6 +196,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
         id: b.id, ownerId: b.owner_id, scope: b.scope, category: b.category, amount: b.amount, walletId: b.wallet_id,
       })),
       prefs: prefs ? prefs.data : {},
+      notes: notes.map(noteOut),
       features: { ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
     };
   });
@@ -421,6 +423,50 @@ router.put('/labels/:id', wrap(async (req, res) => {
 // Removing a label takes it off every transaction (expense_labels cascades).
 router.delete('/labels/:id', wrap(async (req, res) => {
   await asUser(uid(req), (db) => db.query('delete from labels where id = $1', [req.params.id]));
+  res.json({ ok: true });
+}));
+
+/* ---------- To-do notes ---------- */
+
+// Minutes before the note's time (or 09:00 on a note without a time) to remind.
+const REMINDS = new Set([0, 60, 180, 1440, 4320]);
+const noteOut = (n) => ({
+  id: n.id, ownerId: n.owner_id, shared: !!n.couple_id, text: n.text, date: n.date || '',
+  time: n.time ? n.time.slice(0, 5) : '', remind: n.remind, remindAt: n.remind_at, notifiedAt: n.notified_at || undefined,
+  done: n.done, doneAt: n.done_at || undefined, doneBy: n.done_by || undefined, createdAt: n.created_at,
+});
+
+// Creates or changes one note. Only the creator can share or unshare it; the partner
+// can edit a shared note's text, date and reminder and tick it off. A new reminder
+// time clears notified_at so it is sent again.
+router.put('/notes/:id', wrap(async (req, res) => {
+  const b = req.body || {};
+  if (!isUuid(req.params.id)) throw bad('bad_id');
+  const text = str(String(b.text || '').trim(), 500);
+  if (!text) throw bad('bad_text');
+  const date = isDate(b.date) ? b.date : null;
+  const time = date && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.time || '') ? b.time : null;
+  const remind = date && REMINDS.has(b.remind) ? b.remind : null;
+  const at = remind != null && b.remindAt && !Number.isNaN(Date.parse(b.remindAt)) ? new Date(b.remindAt) : null;
+  const note = await asUser(uid(req), (db) => db.query(
+    `insert into notes (id, couple_id, text, date, time, remind, remind_at, done, done_at, done_by)
+       values ($1, case when $2 then my_couple() end, $3, $4, $5, $6, $7, $8, case when $8 then now() end, case when $8 then app_uid() end)
+     on conflict (id) do update set
+       couple_id = case when notes.owner_id = app_uid() then excluded.couple_id else notes.couple_id end,
+       text = excluded.text, date = excluded.date, time = excluded.time, remind = excluded.remind, remind_at = excluded.remind_at,
+       notified_at = case when notes.remind_at is not distinct from excluded.remind_at then notes.notified_at end,
+       done = excluded.done,
+       done_at = case when excluded.done and not notes.done then now() when excluded.done then notes.done_at end,
+       done_by = case when excluded.done and not notes.done then app_uid() when excluded.done then notes.done_by end,
+       updated_at = now()
+     returning *`,
+    [req.params.id, !!b.shared, text, date, time, remind, at, !!b.done]));
+  res.json({ note: noteOut(note.rows[0]) });
+}));
+
+router.delete('/notes/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('bad_id');
+  await asUser(uid(req), (db) => db.query('delete from notes where id = $1', [req.params.id]));
   res.json({ ok: true });
 }));
 
