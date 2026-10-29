@@ -396,6 +396,27 @@ const I18N_EN = {
   'ธีม': 'Theme', 'ฟ้า': 'Blue', 'ชมพูพาสเทล': 'Pastel pink', 'ดำสนิท': 'Black', 'ขาว': 'White',
   'ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่':
     'The blue theme follows the phone’s light / dark mode · The theme is remembered on this device · On iPhone the status bar colour changes the next time you open the app',
+
+  // To-do notes (notes.js)
+  'สิ่งที่ต้องทำ': 'To-do', 'โน้ตเตือนความจำ': 'Reminder notes', '{0} รายการถึงกำหนด': '{0} due', 'ดูทั้งหมด ({0})': 'See all ({0})',
+  'จดสิ่งที่ต้องทำไว้ตรงนี้ ใส่วันในประโยคได้เลย แอปจะตั้งวันให้เอง': 'Jot down what you need to do. Put the day in the sentence and the app sets the date for you.',
+  'เพิ่มสิ่งที่ต้องทำ เช่น จันทร์ที่ 1 ไปเยี่ยมแม่ ลำพูน': 'Add a to-do, e.g. Mon the 1st visit Mom', 'เพิ่มสิ่งที่ต้องทำ': 'Add a to-do',
+  'ตั้งวันและการเตือน': 'Set date and reminder', 'ไม่เตือน': 'No reminder', 'ตรงเวลา': 'At the time',
+  'ล่วงหน้า 1 ชั่วโมง': '1 hour before', 'ล่วงหน้า 3 ชั่วโมง': '3 hours before', 'ล่วงหน้า 1 วัน': '1 day before', 'ล่วงหน้า 3 วัน': '3 days before',
+  '{0} น.': '{0}', 'จาก {0}': 'From {0}', 'แชร์กับคู่': 'Shared', 'ยังไม่เสร็จ': 'Not done', 'ทำเสร็จแล้ว': 'Mark as done',
+  'ไม่ระบุวัน': 'No date', 'เสร็จแล้ว': 'Done', 'เลยกำหนด ({0})': 'Overdue ({0})', 'วันนี้ ({0})': 'Today ({0})', 'กำลังจะถึง ({0})': 'Upcoming ({0})',
+  'ไม่ระบุวัน ({0})': 'No date ({0})', 'เสร็จแล้ว ({0})': 'Done ({0})', 'ไม่มีสิ่งที่ต้องทำค้างอยู่': 'Nothing left to do',
+  'แจ้งเตือนในกลุ่ม LINE': 'Reminders in a LINE group', 'ตั้งกลุ่มไว้แล้ว · แก้ไขได้ที่หน้า บัญชี': 'Group set · change it in Account',
+  'ตั้งค่า LINE Group ID ได้ที่หน้า บัญชี': 'Set the LINE Group ID in Account', 'ต้องเข้าสู่ระบบ': 'Sign in first',
+  'ยังไม่ได้ตั้งค่า': 'Not set', 'ปิดอยู่': 'Off', 'พร้อมส่ง': 'Ready', 'รอเชื่อม LINE OA': 'Waiting for LINE OA',
+  'ส่งเตือนสิ่งที่ต้องทำเข้ากลุ่ม': 'Send to-do reminders to the group', 'ลบ Group ID แล้ว': 'Group ID removed',
+  'Group ID ไม่ถูกต้อง (C ตามด้วยตัวอักษร 32 ตัว)': 'Invalid Group ID (C followed by 32 characters)',
+  'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน แล้วใส่ Group ID (ขึ้นต้นด้วย C) ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้': 'Add the Centel LINE OA to your family group and enter its Group ID (starts with C) here. Note reminders are posted to this group.',
+  'ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ': 'Sending starts once the LINE OA is connected.',
+  'แก้ไขโน้ต': 'Edit note', 'เช่น ไปเยี่ยมแม่ ลำพูน': 'e.g. Visit Mom in Lamphun', 'ลบโน้ต': 'Delete note', 'โน้ตนี้สร้างโดย {0}': 'Created by {0}',
+  'เวลา': 'Time', 'ทั้งวัน': 'All day', 'แชร์กับ {0}': 'Share with {0}', 'กรุณาพิมพ์สิ่งที่ต้องทำ': 'Please type what to do',
+  'เพิ่มโน้ตแล้ว': 'Note added', 'เพิ่มแล้ว · {0}': 'Added · {0}', 'เสร็จแล้ว ✓': 'Done ✓', 'ลบโน้ตนี้?': 'Delete this note?',
+  'สิ่งที่ต้องทำวันนี้ / เลยกำหนด': 'To-dos due today or overdue',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.
@@ -448,6 +469,8 @@ if (LANG === 'en') {
   const trText = (n) => {
     const v = n.nodeValue;
     if (!TH_RE.test(v) || (n.parentNode && SKIP.has(n.parentNode.nodeName))) return;
+    // Text the person typed (marked translate="no") stays as written.
+    if (n.parentElement && n.parentElement.closest('[translate="no"]')) return;
     const t = tr(v);
     if (t !== v) n.nodeValue = t;
   };

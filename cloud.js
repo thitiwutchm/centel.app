@@ -12,6 +12,8 @@ const cloud = {
   coupleId: null,
   invite: null,
   settlements: [],
+  notes: [], // to-do notes (notes.js), own and the partner's shared ones
+  line: null, // { groupId, active }: LINE group for reminders, set in the Account tab
   features: {},
   ids: new Set(),
   queue: Promise.resolve(),
@@ -117,6 +119,8 @@ function applyBootstrap(b) {
   cloud.invite = b.invite;
   cloud.features = b.features || {};
   cloud.settlements = b.settlements || [];
+  cloud.notes = b.notes || [];
+  cloud.line = b.line || null;
   cloud.ids = new Set(b.expenses.map((e) => e.id));
   const txns = b.expenses.map((e) => mapExpense(e, me));
   // A repayment moves money between our wallets but is not income or spending.
@@ -144,6 +148,7 @@ async function cloudRefresh() {
     if (!b || !b.user) throw Object.assign(new Error('no_api'), { status: 404 });
     cloud.available = true;
     applyBootstrap(b);
+    notesAdopt();
     try { localStorage.setItem(CLOUD_KEY, JSON.stringify(b)); } catch (e) { /* full */ }
     render();
     if (needNickname() && $('#sheet').hidden) nicknameSheet();
@@ -171,6 +176,8 @@ function cloudSignedOut() {
   cloud.on = false;
   cloud.user = cloud.partner = cloud.coupleId = cloud.invite = null;
   cloud.settlements = [];
+  cloud.notes = [];
+  cloud.line = null;
   cloud.ids = new Set();
   try { localStorage.removeItem(CLOUD_KEY); } catch (e) { /* ignore */ }
   money = loadMoney();

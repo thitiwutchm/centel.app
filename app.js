@@ -454,6 +454,7 @@ function renderSettings() {
     </div>
     <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม)</p>
     ${calFeedSettings()}
+    ${lineSettings()}
 
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
@@ -478,6 +479,7 @@ function renderSettings() {
     toast('บันทึกแล้ว');
   });
   $('#importFile').addEventListener('change', importData);
+  lineSettingsBind();
   view.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.themePick === themeId()) return;
     setTheme(b.dataset.themePick);
@@ -507,6 +509,7 @@ function closeSheet() {
   if ($('#sheet').dataset.locked) return;
   const layer = $('#catLayer');
   if (layer) layer.remove();
+  ui.notesOpen = false;
   $('#sheet').hidden = true;
   $('#backdrop').hidden = true;
   document.body.style.overflow = '';
@@ -1271,6 +1274,7 @@ function buildIcs({ feed = false } = {}) {
     }
     count++;
   });
+  if (feed) lines.push(...notesIcs(stamp, alarm)); // dated to-do notes (notes.js)
   lines.push('END:VCALENDAR');
   return { text: lines.map(icsFold).join('\r\n') + '\r\n', count };
 }
@@ -1350,6 +1354,7 @@ window.addEventListener('scroll', () => {
 
 document.addEventListener('click', (e) => {
   const t = e.target;
+  if (notesClick(t)) return;
   const toggle = t.closest('[data-toggle]');
   if (toggle) { e.stopPropagation(); togglePaid(toggle.dataset.toggle, toggle.dataset.ym); return; }
   const edit = t.closest('[data-edit]');
@@ -1369,7 +1374,7 @@ document.addEventListener('click', (e) => {
   if (moneyClick(t) || cloudClick(t)) return;
   const act = t.closest('[data-action]');
   if (!act) return;
-  if (moneyAction(act.dataset.action, act) || cloudAction(act.dataset.action, act)) return;
+  if (notesAction(act.dataset.action) || moneyAction(act.dataset.action, act) || cloudAction(act.dataset.action, act)) return;
   switch (act.dataset.action) {
     case 'close': closeSheet(); break;
     case 'add': billForm(); break;
@@ -1398,6 +1403,7 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeSheet();
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-note]')) { e.preventDefault(); notesClick(e.target); }
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-occ]')) {
     e.preventDefault();
     occurrenceSheet(e.target.dataset.occ, e.target.dataset.ym);

@@ -523,6 +523,9 @@ const ICONS = {
   note: '<path d="M4 6.5h16M4 11h10M4 15.5h16M4 20h8"/>',
   store: '<path d="M4 9.5 5.5 4h13L20 9.5M4 9.5c0 1.4 1.1 2.5 2.7 2.5s2.6-1.1 2.6-2.5c0 1.4 1.1 2.5 2.7 2.5s2.7-1.1 2.7-2.5c0 1.4 1 2.5 2.6 2.5S20 10.9 20 9.5M4 9.5h16M5.5 12v8.5h13V12M10 20.5v-5h4v5"/>',
   people: '<circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c1-3.3 3.4-5 6.5-5s5.5 1.7 6.5 5M16 5.2a3.5 3.5 0 0 1 0 6.6M18 15.3c1.6.7 2.8 2.3 3.5 4.7"/>',
+  // To-do notes (notes.js)
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  todo: '<rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="m7.8 9 1.6 1.6L12.5 7.5M14.5 9.2h2M7.8 15l1.6 1.6 3.1-3.1M14.5 15.2h2"/>',
   tag: '<path d="M3 12.2V4.5A1.5 1.5 0 0 1 4.5 3h7.7l8.8 8.8a1.5 1.5 0 0 1 0 2.1l-7.1 7.1a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8" cy="8" r="1.6"/>',
 };
 function svgIcon(name, cls = 'svg-i') {
@@ -728,6 +731,8 @@ function renderHome() {
       ${wallets}
     </div>
 
+    ${notesCard()}
+
     ${coupleCard()}
 
     ${state.bills.length ? `
@@ -827,17 +832,19 @@ function alertList() {
   const over = money.budgets.filter((bg) => budgetSpent(bg, ym) >= bg.amount * 0.8);
   return { bills, over };
 }
-function alertCount() { const a = alertList(); return a.bills.length + a.over.length + (gmailAutoDue() ? 1 : 0); }
+function alertCount() { const a = alertList(); return a.bills.length + a.over.length + (gmailAutoDue() ? 1 : 0) + notesDue().length; }
 
 function alertsSheet() {
   const { bills, over } = alertList();
+  const notes = notesDue();
   const ym = ymOf(new Date());
   openSheet(`
     <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>การแจ้งเตือน</h2><span style="width:40px"></span></div>
     ${gmailAutoDue() ? gmailAutoAlert() : ''}
     ${bills.length ? `<div class="section-title">บิลใกล้ครบกำหนด / เลยกำหนด</div><div class="list">${bills.map(occItem).join('')}</div>` : ''}
     ${over.length ? `<div class="section-title">งบประมาณใช้ไปแล้ว 80% ขึ้นไป</div>${over.map((bg) => budgetRow(bg, ym)).join('')}` : ''}
-    ${bills.length || over.length || gmailAutoDue() ? '' : '<div class="empty"><div class="e-ico">🔔</div>ไม่มีการแจ้งเตือน</div>'}
+    ${notes.length ? `<div class="section-title">สิ่งที่ต้องทำวันนี้ / เลยกำหนด</div><div class="list">${notes.map(noteRow).join('')}</div>` : ''}
+    ${bills.length || over.length || notes.length || gmailAutoDue() ? '' : '<div class="empty"><div class="e-ico">🔔</div>ไม่มีการแจ้งเตือน</div>'}
   `);
 }
 

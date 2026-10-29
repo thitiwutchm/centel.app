@@ -1321,3 +1321,65 @@ body::before {
 .nick-hero .avatar.big { width: 72px; height: 72px; flex-basis: 72px; font-size: 32px; }
 .nick-hero p { margin: 0; font-size: 14px; }
 .scope-row[hidden] { display: none; }
+
+/* To-do notes mini app (notes.js): Home card, full list sheet, quick add */
+.notes-card .card-head { padding-bottom: 4px; }
+.nc-title { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.nc-title .svg-i { width: 19px; height: 19px; color: var(--accent); }
+.nc-due { font-size: 12.5px; font-weight: 600; color: var(--bad); background: var(--bad-soft); padding: 3px 9px; border-radius: 10px; }
+.note-empty { padding: 4px 14px 10px; }
+.note-row { cursor: pointer; align-items: center; }
+.note-row .main { padding: 1px 0; }
+.note-text { font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.note-sub { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+.note-sub > span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.note-sub .svg-i.xs { width: 13px; height: 13px; stroke-width: 2; }
+.note-sub .nrel { font-weight: 600; }
+.note-sub .nrel.over { color: var(--bad); }
+.note-sub .nrel.today { color: var(--accent); }
+.note-row.done .note-text { color: var(--muted); text-decoration: line-through; font-weight: 500; }
+.note-row .check { width: 26px; height: 26px; flex-basis: 26px; border-color: color-mix(in srgb, var(--muted) 55%, transparent); font-size: 14px; font-weight: 700; transition: background .2s, border-color .2s, transform .2s; }
+.note-row .check:active { transform: scale(.88); }
+.note-row .check.on { background: var(--ok); border-color: var(--ok); }
+
+/* Date leaf: weekday / day / month, like a desk calendar page */
+.leaf { width: 42px; flex: 0 0 42px; height: 48px; border-radius: 12px; background: var(--c-fill); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; color: var(--text); }
+.leaf .lw, .leaf .lm { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.leaf .lw { color: var(--accent); }
+.leaf b { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.leaf.soon { background: var(--accent-soft); }
+.leaf.today { background: var(--accent); color: #fff; }
+.leaf.today .lw, .leaf.today .lm { color: rgba(255, 255, 255, .85); }
+.leaf.over { background: var(--bad-soft); color: var(--bad); }
+.leaf.over .lw, .leaf.over .lm { color: var(--bad); }
+.leaf.none { color: var(--muted); }
+.leaf.none .svg-i { width: 20px; height: 20px; }
+.note-row.done .leaf { opacity: .5; }
+
+/* Quick add: type a line, the date in it is picked up */
+.note-add { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; border-top: 0.5px solid var(--line); }
+.list > .note-add:first-child { border-top: 0; }
+.na-plus { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.na-plus .svg-i { width: 16px; height: 16px; stroke-width: 2.4; }
+.note-add input { flex: 1; min-width: 0; height: 36px; border: 0; background: none; font: inherit; font-size: 16px; color: var(--text); outline: none; }
+.note-add input::placeholder { color: var(--muted); opacity: .8; }
+.na-more { width: 36px; height: 36px; flex: 0 0 36px; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; }
+.na-more:active { background: var(--accent-soft); }
+.na-more .svg-i { width: 20px; height: 20px; }
+.note-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 14px 12px 50px; font-size: 12.5px; }
+.note-preview[hidden] { display: none; }
+.np-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.np-chip .svg-i.xs { width: 13px; height: 13px; }
+.np-text { color: var(--muted); }
+.sheet .list.notes-card { margin-bottom: 4px; }
+.note-edit textarea { min-height: 96px; font-size: 18px; font-weight: 600; }
+.prow.soon .pv { font-weight: 500; }
+
+/* LINE group reminders: the list links to the Account tab, where the Group ID is set */
+.line-soon { display: flex; align-items: center; gap: 12px; width: 100%; margin: 18px 0 6px; padding: 12px 14px; border-radius: 18px; background: var(--sheet-card); border: 0.5px solid var(--line); color: var(--c-text); font: inherit; text-align: left; }
+.line-soon > div { flex: 1; min-width: 0; }
+.line-soon > .svg-i { color: var(--c-muted); }
+.line-set input { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }
+.ln-status { margin-left: auto; font-weight: 600; color: var(--c-muted); }
+.ln-status.ok { color: var(--c-ok); }
+.ls-ico { flex: 0 0 auto; padding: 6px 7px; border-radius: 10px; background: #06c755; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .3px; }
