@@ -1336,6 +1336,9 @@ function txnForm(t, preset = {}) {
   const receipts = isCloud() && cloud.features.storage;
   // A new expense can be the payment of a bill still due (picked here or matched from a slip).
   const pend = isNew && !d.billId ? pendingBillOccs() : [];
+  // A bill payment links back to its bill month (tap to open it), showing the bill's amount.
+  const linkedBill = !isNew && d.billId ? state.bills.find((b) => b.id === d.billId) : null;
+  const billPaidAmount = linkedBill ? (record(d.billYm, linkedBill.id).amount ?? linkedBill.amount ?? 0) : 0;
   const wOpts = (selId, skip) => money.wallets.filter((w) => w.id !== skip)
     .map((w) => `<option value="${w.id}" ${selId === w.id ? 'selected' : ''}>${esc(wEmoji(w))} ${esc(w.name)}</option>`).join('');
 
@@ -1371,6 +1374,11 @@ function txnForm(t, preset = {}) {
       <button type="button" class="tr tr-cat" id="tCatOpen"></button>
       <div class="tr" id="tMerchRow"><div class="tr-ico">${svgIcon('store')}</div>
         <div class="tr-body"><input id="tMerchant" aria-label="ร้านค้า / ผู้รับ" placeholder="ร้านค้า / ผู้รับ" value="${esc(d.merchant || '')}" autocomplete="off"></div></div>
+      ${linkedBill ? `<button type="button" class="tr tr-cat on tr-bill" data-occ="${linkedBill.id}" data-ym="${d.billYm}" aria-label="เปิดบิล">
+        <span class="tr-ico">${icoHtml(linkedBill, 'ico round')}</span>
+        <span class="tr-body"><span class="cp-name"><small>บิล · ${esc(thMonthYear(d.billYm))}</small><b>${esc(linkedBill.name)}</b></span>
+          <span class="bill-link-amt">${baht(billPaidAmount)}${record(d.billYm, linkedBill.id).paid ? ' ✓' : ''}</span>${svgIcon('chev', 'svg-i sm tr-chev')}</span>
+      </button>` : ''}
       ${pend.length ? `<div class="tr" id="tBillRow"><div class="tr-ico">${svgIcon('bell')}</div>
         <div class="tr-body"><label for="tBill">ตัดบิล</label><select id="tBill"></select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>` : ''}
       <div class="tr" id="tShareRows"><div class="tr-ico">${svgIcon('people')}</div>
@@ -1393,7 +1401,7 @@ function txnForm(t, preset = {}) {
         <div class="tr-body col"><span class="tr-lab">ป้ายกำกับ</span><div class="chips lab-pick" id="tLabels"></div></div></div>
     </div>
     <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
-    ${d.billId ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
+    ${d.billId && !linkedBill && !isNew ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
     ${isNew ? '' : '<button class="btn danger" id="delTx">ลบรายการ</button>'}
     <div class="save-bar"><button type="button" class="save-pill" id="saveTx">${isNew ? 'เพิ่มรายการ' : 'บันทึก'}</button></div>
   `);
@@ -1603,6 +1611,10 @@ function txnForm(t, preset = {}) {
     const paidBill = pend.find((o) => o.bill.id === out.billId && o.ym === out.billYm);
     if (paidBill) {
       setRecord(out.billYm, out.billId, { amount: total, paid: true, paidAt: paidAtOf(date), slip: out.receiptKey });
+      save();
+    } else if (linkedBill && record(out.billYm, out.billId).paid) {
+      // Editing the payment keeps its bill month on the same amount and paid date.
+      setRecord(out.billYm, out.billId, date === d.date ? { amount: total } : { amount: total, paidAt: paidAtOf(date) });
       save();
     }
     if (out.walletId && money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }

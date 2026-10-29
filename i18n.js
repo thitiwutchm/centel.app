@@ -166,7 +166,7 @@ const I18N_EN = {
   'จ่ายด้วยสลิป': 'Pay with slip', 'อัปโหลดสลิปโอนเงิน AI อ่านยอดและวันที่ แล้วตัดบิลนี้ให้': 'Upload the transfer slip: AI reads the amount and date, then marks this bill paid',
   'สลิปการจ่าย': 'Payment slip', 'ดูสลิป': 'View slip', 'แนบสลิปการจ่าย': 'Attach payment slip', 'แนบสลิปแล้ว': 'Slip attached',
   'จ่าย {0} แล้ว {1}': 'Paid {0} {1}', 'จ่าย {0} แล้ว อ่านยอดจากสลิปไม่ได้ กรอกยอดเอง': 'Paid {0}. Could not read the amount from the slip, enter it yourself',
-  'อัปโหลดสลิปไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not upload the slip, try again', 'ตัดบิล': 'Pays bill', 'ไม่ใช่การจ่ายบิล': 'Not a bill payment',
+  'อัปโหลดสลิปไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not upload the slip, try again', 'ตัดบิล': 'Pays bill', 'บิล · {0}': 'Bill · {0}', 'รายการที่จ่าย': 'Paid with', 'เปิดบิล': 'Open bill', 'ไม่ใช่การจ่ายบิล': 'Not a bill payment',
   '🧾 ยอดตรงกับบิล {0} ({1}) จะตัดบิลนี้ให้เมื่อบันทึก': '🧾 Amount matches the bill {0} ({1}). It will be marked paid when you save',
   'แนบไฟล์แล้ว': 'File attached', 'แนบไฟล์ไม่สำเร็จ': 'Could not attach the file', 'กำลังดึง…': 'Fetching…', 'ยอด{0} {1} {2}': '{0} {1}: {2}',
   '(จดมิเตอร์ราววันที่ {0})': '(meter read around day {0})',

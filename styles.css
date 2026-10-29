@@ -790,6 +790,7 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
   transition: transform .12s ease;
 }
 .scan-btn:active { transform: scale(.97); }
+.bill-link-amt { flex: 0 0 auto; font-weight: 600; color: var(--text); }
 /* Bill month sheet: "Pay with slip" sits above the other pay buttons. */
 .scan-btn.pay-slip { width: 100%; margin: 4px 0 6px; }
 .pay-slip-hint { text-align: center; margin: 0 0 12px; }
