@@ -74,7 +74,7 @@ export async function lineWebhook(req, res) {
     const text = raw.trim().toLowerCase();
     try {
       const cmd = raw && noteCommand(ev.message);
-      if (cmd != null && src.userId) await lineReply(ev.replyToken, await noteFromLine(cmd, src.userId));
+      if (cmd && src.userId) { const reply = await noteFromLine(cmd, src.userId); if (reply) await lineReply(ev.replyToken, reply); }
       else if (id && (ev.type === 'join' || /^(group ?id|groupid|id|ไอดี|ไอดีกลุ่ม)$/.test(text))) {
         const who = ev.type === 'join' ? '' : src.userId;
         await lineReply(ev.replyToken, groupIdText(id, who, who ? await knownName(who) : ''));
@@ -89,16 +89,20 @@ export async function lineWebhook(req, res) {
 /* ---------- Notes typed into the group ---------- */
 
 // "ทำนัด 18:00 น 31 ตค ไปแข่งกีฬา", "เตือน พรุ่งนี้ 9 โมง จ่ายค่าเน็ต", "นัด หมอฟัน ศุกร์ 10:00",
-// or any line that @mentions the bot. Returns the note part, or null for other chat.
+// or any line that @mentions the bot. Returns { verb, text } (the command word and the
+// note part), or null for other chat.
 // The command word must stand alone, so everyday chat ("นัดกันกี่โมง") is left alone.
-const COMMAND = /^\s*(?:ทำนัด|นัดหมาย|ลงนัด|นัด|เตือน(?:ความจำ)?|จดไว้|จด|โน้ต|note|remind(?:\s+me)?)(?:\s+|\s*:\s*|$)/i;
+const COMMAND = /^\s*(ทำนัด|นัดหมาย|ลงนัด|นัด|เตือน(?:ความจำ)?|จดไว้|จด|โน้ต|note|remind(?:\s+me)?)(?:\s+|\s*:\s*|$)/i;
+// What the bot says it did: "รับทราบครับ ทำนัดให้ แม่เฟิร์น เรียบร้อยแล้ว". A note (จด) may have
+// no date; an appointment or reminder it cannot find a date in gets no answer.
+const verbOf = (w = '') => (/^(จด|โน้ต|note)/i.test(w) ? 'จด' : /^(เตือน|remind)/i.test(w) ? 'ตั้งเตือน' : 'ทำนัด');
 export function noteCommand(message) {
   let s = message.text || '';
   const self = (message.mention?.mentionees || []).filter((x) => x.isSelf);
   for (const x of [...self].sort((a, b) => b.index - a.index)) s = s.slice(0, x.index) + s.slice(x.index + x.length);
   const m = s.match(COMMAND);
   if (!m && !self.length) return null;
-  return (m ? s.slice(m[0].length) : s).trim();
+  return { verb: verbOf(m?.[1]), text: (m ? s.slice(m[0].length) : s).trim() };
 }
 
 const LEADS = [0, 120, 360, 1440, 2880];
@@ -118,15 +122,16 @@ async function appUserOf(lineUserId) {
 }
 
 // Saves the note for the person who typed it (shared with the partner when they have
-// one, so it shows in both apps) and returns the reply for the group. The free reader
-// goes first; the AI only reads lines it finds no date in.
-export async function noteFromLine(text0, lineUserId, now = new Date()) {
+// one, so it shows in both apps) and returns the reply for the group, or null to stay
+// silent when the line is not understood. The free reader goes first; the AI only reads
+// lines it finds no date in.
+export async function noteFromLine({ verb, text: text0 }, lineUserId, now = new Date()) {
   const who = await appUserOf(lineUserId);
   if (!who) {
     return ['ยังไม่รู้ว่า LINE นี้เป็นใครในแอป Centel 🙏', '', 'ใส่ LINE ID นี้ในแอป หน้า บัญชี › คนในกลุ่ม LINE แล้วเลือกว่าเป็นตัวเองหรือคู่', lineUserId].join('\n');
   }
   let cmd = text0;
-  if (!cmd) return 'พิมพ์ต่อท้ายได้เลย เช่น “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา”';
+  if (!cmd) return null;
   // "เตือนก่อน 2 ชม." / "ล่วงหน้า 1 วัน" picks the reminder; on time otherwise.
   let lead = 0;
   const lm = cmd.match(/(?:เตือน)?\s*(?:ก่อน|ล่วงหน้า)\s*(\d{1,2})\s*(ชม\.?|ชั่วโมง|วัน)/);
@@ -137,6 +142,7 @@ export async function noteFromLine(text0, lineUserId, now = new Date()) {
   let p = parseNote(cmd, now);
   let ai = false;
   if (!p.date) { const r = await aiReadNote(cmd, now); if (r?.date) { p = r; ai = true; } }
+  if (!p.date && verb !== 'จด') return null;
   const text = p.text.slice(0, 500);
   const remind = p.date ? lead : null;
   const { rows } = await pool.query(
@@ -144,10 +150,9 @@ export async function noteFromLine(text0, lineUserId, now = new Date()) {
      values ($1, $2, (select couple_id from couple_members where user_id = $2), $3, $4, $5, $6, $7) returning couple_id`,
     [crypto.randomUUID(), who.user_id, text, p.date || null, p.time || null, remind, remindAt(p.date, p.time, remind)]);
   console.log('line note', ai ? 'ai' : 'rules', p.date ? 'dated' : 'undated');
-  const lines = p.date
-    ? [`✅ นัดแล้ว ${thDay(p.date)}${p.time ? ` ${p.time}` : ''} ${text}`, `🔔 เตือน${LEAD_TEXT[lead]}${p.time ? '' : ' (นับจาก 9 โมงเช้าวันนั้น)'}`]
-    : [`📝 จดไว้แล้ว: ${text}`, 'ยังไม่มีวันที่ เปิดแอปเพื่อใส่วันและเวลาเตือนได้'];
-  lines.push(`👤 ${who.name}${rows[0].couple_id ? ' · แชร์กับคู่' : ''}`);
+  const lines = [`รับทราบครับ ${verb}ให้ ${who.name} เรียบร้อยแล้ว ✅`, `📝 ${text}`];
+  if (p.date) lines.push(`📅 ${thDay(p.date)}${p.time ? ` ${p.time} น.` : ''}`, `🔔 เตือน${LEAD_TEXT[lead]}${p.time ? '' : ' (นับจาก 9 โมงเช้าวันนั้น)'}`);
+  if (rows[0].couple_id) lines.push('🤝 แชร์กับคู่');
   return lines.join('\n');
 }
 
