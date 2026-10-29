@@ -63,6 +63,18 @@ test('notes: a reminder needs a date, and an unknown reminder is dropped', async
   assert.equal((await A('PUT', `/notes/${id2}`, { text: 'ซื้อนม', date: '2027-01-01', remind: 7 })).note.remind, null);
 });
 
+test('notes: a note keeps its end, and an end before the start is dropped', async () => {
+  const id = crypto.randomUUID();
+  let n = (await A('PUT', `/notes/${id}`, { text: 'ประชุม', date: '2026-11-30', time: '11:00', endTime: '12:00' })).note;
+  assert.deepEqual([n.endDate, n.endTime], ['', '12:00']);
+  n = (await A('PUT', `/notes/${id}`, { text: 'ประชุม', date: '2026-11-30', time: '11:00', endTime: '10:00' })).note;
+  assert.equal(n.endTime, '');
+  n = (await A('PUT', `/notes/${id}`, { text: 'ทริป', date: '2026-11-30', time: '', endDate: '2026-12-02', endTime: '10:00' })).note;
+  assert.deepEqual([n.endDate, n.endTime], ['2026-12-02', '']);
+  n = (await A('PUT', `/notes/${id}`, { text: 'ทริป', date: '2026-11-30', endDate: '2026-11-01' })).note;
+  assert.equal(n.endDate, '');
+});
+
 test('notes: a shared note is seen and ticked by the partner, but only the owner deletes it', async () => {
   await A('PUT', `/notes/${id1}`, { text: 'ไปเยี่ยมแม่ ลำพูน', date: '2027-02-01', remind: 0, remindAt: '2027-02-01T02:00:00Z', shared: true });
   const seen = (await notes(B)).find((n) => n.id === id1);

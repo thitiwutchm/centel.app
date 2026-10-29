@@ -18,7 +18,8 @@ const mock = http.createServer((req, res) => {
   req.on('end', () => {
     sent.push({ path: req.url, auth: req.headers.authorization, sig: req.headers['x-line-signature'], raw: b, body: JSON.parse(b || '{}') });
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.parse(b || '{}').to === 'C' + '0'.repeat(32) ? (res.statusCode = 400, '{"message":"bad"}') : '{}');
+    res.end(JSON.parse(b || '{}').to === 'C' + '0'.repeat(32) ? (res.statusCode = 400, '{"message":"bad"}')
+      : JSON.stringify({ sentMessages: [{ id: `sent-${JSON.parse(b || '{}').replyToken || sent.length}` }] }));
   });
 });
 
@@ -172,6 +173,44 @@ test('line: a note typed into the group is saved for the person who typed it', a
   assert.match(await say('จด ซื้อนม', mom, 'rt6'), /^รับทราบครับ จดให้ แม่เฟิร์น เรียบร้อยแล้ว ✅\n📝 ซื้อนม/);
   assert.equal(await say('ทำนัด ไปหาหมอ', mom, 'rt8'), undefined);
   assert.equal((await B('GET', '/bootstrap')).notes.some((x) => x.text === 'ไปหาหมอ'), false);
+});
+
+test('line: replying to the bot edits or cancels the note, without AI', async (t) => {
+  if (!on) return t.skip('API has no LINE');
+  const mom = (await A('GET', '/bootstrap')).linePeople.find((p) => p.who === 'partner').userId;
+  const say = async (text, tok, quoted) => {
+    // Ids are unique per run: the message table outlives a test run.
+    const token = `${run}${tok}`;
+    const quotedMessageId = quoted && quoted.replace(/^(sent-|u)/, `$1${run}`);
+    await hook({ events: [{ type: 'message', replyToken: token, message: { id: `u${token}`, type: 'text', text, quotedMessageId }, source: { type: 'group', groupId: gA, userId: mom } }] });
+    await wait(300);
+    const r = sent.find((s) => s.body.replyToken === token);
+    return r && { text: r.body.messages[0].text, id: `sent-${tok}` };
+  };
+  const made = await say('ทำนัด 31 ตค 18:00 ไปตลาดนัด', 'e1');
+  const note = () => B('GET', '/bootstrap').then((b) => b.notes.find((x) => x.text === 'ไปตลาดนัด'));
+  assert.equal((await note()).shared, true);
+  // KB's own words, as a reply to the bot's answer.
+  const r1 = await say('แก้ไขเป็นเตือนก่อน 2ชม และ ไม่ต้องแชร์กับแม่เฟิร์น', 'e2', made.id);
+  assert.match(r1.text, /^รับทราบครับ แก้ไขนัดให้ แม่เฟิร์น เรียบร้อยแล้ว ✅[\s\S]*เตือนล่วงหน้า 2 ชั่วโมง[\s\S]*🔒 ไม่แชร์/);
+  let n = await note();
+  assert.equal(n.remind, 120);
+  assert.equal(n.shared, false);
+  assert.equal(new Date(n.remindAt).toISOString().slice(11, 16), '09:00');
+  // No quote: "เลื่อน" moves the sender's latest note; a time alone keeps its date.
+  assert.match((await say('เลื่อนเป็น 19:30', 'e3')).text, /19:30 น\./);
+  n = await note();
+  assert.equal(n.time, '19:30');
+  assert.match(n.date, /-10-31$/);
+  // A range sets the start and the end.
+  assert.match((await say('เลื่อนเป็น 10:00-12:00', 'e6')).text, /10:00–12:00 น\./);
+  n = await note();
+  assert.deepEqual([n.time, n.endTime], ['10:00', '12:00']);
+  // Nothing understood: no answer, nothing changed.
+  assert.equal(await say('แก้ไข อะไรสักอย่าง', 'e4'), undefined);
+  // A reply to the typed line works too; ยกเลิก deletes it.
+  assert.match((await say('ยกเลิก', 'e5', 'ue1')).text, /ยกเลิกนัดให้ แม่เฟิร์น/);
+  assert.equal(await note(), undefined);
 });
 
 test('line: teardown', () => { mock.close(); });
