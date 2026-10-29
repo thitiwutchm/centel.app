@@ -166,9 +166,9 @@ export async function noteFromLine({ verb, text: text0 }, lineUserId, now = new 
   const text = p.text.slice(0, 500);
   const remind = p.date ? lead : null;
   const { rows } = await pool.query(
-    `insert into notes (id, owner_id, couple_id, text, date, time, remind, remind_at)
-     values ($1, $2, (select couple_id from couple_members where user_id = $2), $3, $4, $5, $6, $7) returning *`,
-    [crypto.randomUUID(), who.user_id, text, p.date || null, p.time || null, remind, remindAt(p.date, p.time, remind)]);
+    `insert into notes (id, owner_id, couple_id, text, date, time, end_time, remind, remind_at)
+     values ($1, $2, (select couple_id from couple_members where user_id = $2), $3, $4, $5, $6, $7, $8) returning *`,
+    [crypto.randomUUID(), who.user_id, text, p.date || null, p.time || null, (p.time && p.endTime) || null, remind, remindAt(p.date, p.time, remind)]);
   console.log('line note', ai ? 'ai' : 'rules', p.date ? 'dated' : 'undated');
   return { text: noteSummary(`รับทราบครับ ${verb}ให้ ${who.name} เรียบร้อยแล้ว ✅`, rows[0]), noteId: rows[0].id };
 }
@@ -176,12 +176,22 @@ export async function noteFromLine({ verb, text: text0 }, lineUserId, now = new 
 const unknownText = (lineUserId) => ['ยังไม่รู้ว่า LINE นี้เป็นใครในแอป Centel 🙏', '', 'ใส่ LINE ID นี้ในแอป หน้า บัญชี › คนในกลุ่ม LINE แล้วเลือกว่าเป็นตัวเองหรือคู่', lineUserId].join('\n');
 
 const noteDate = (n) => (n.date instanceof Date ? n.date.toISOString().slice(0, 10) : n.date || '');
+// "ส. 31 ต.ค. 10:00–12:00 น.", "ส. 31 ต.ค. – จ. 2 พ.ย. (ทั้งวัน)"
+function whenText(n, day = thDay) {
+  const date = noteDate(n);
+  const end = n.end_date instanceof Date ? n.end_date.toISOString().slice(0, 10) : n.end_date || '';
+  const t = n.time ? n.time.slice(0, 5) : '';
+  const et = n.end_time ? n.end_time.slice(0, 5) : '';
+  if (!t) return `${day(date)}${end ? ` – ${day(end)}` : ''}${end ? ' (ทั้งวัน)' : ''}`;
+  if (end) return `${day(date)} ${t} – ${day(end)}${et ? ` ${et}` : ''} น.`;
+  return `${day(date)} ${t}${et ? `–${et}` : ''} น.`;
+}
 function noteSummary(head, n) {
   const date = noteDate(n);
   const time = n.time ? n.time.slice(0, 5) : '';
   const lines = [head, `📝 ${n.text}`];
   if (date) {
-    lines.push(`📅 ${thDay(date)}${time ? ` ${time} น.` : ''}`);
+    lines.push(`📅 ${whenText(n)}`);
     lines.push(n.remind == null ? '🔕 ไม่เตือน' : `🔔 เตือน${LEAD_TEXT[n.remind] || `ล่วงหน้า ${n.remind} นาที`}${time ? '' : ' (นับจาก 9 โมงเช้าวันนั้น)'}`);
   }
   lines.push(n.couple_id ? '🤝 แชร์กับคู่' : '🔒 ไม่แชร์');
@@ -245,16 +255,19 @@ export async function noteEditFromLine({ noteId, body, cancel }, lineUserId, now
   const p = parseNote(rest, now);
   const date = p.date && !p.timeOnly ? p.date : noteDate(n);
   const time = p.time || (n.time ? n.time.slice(0, 5) : '');
+  // A new time without an end drops the old end; a new range sets both.
+  const endTime = p.time ? p.endTime || '' : n.end_time ? n.end_time.slice(0, 5) : '';
   const changed = l.lead !== undefined || (share !== undefined && n.mine) || (p.date && !p.timeOnly) || p.time;
   if (!changed || !date) return null;
   const remind = l.lead !== undefined ? l.lead : n.remind;
   const coupleSql = share === undefined || !n.mine ? 'couple_id' : share ? '(select couple_id from couple_members where user_id = owner_id)' : 'null';
   const at = remindAt(date, time, remind);
   const { rows } = await pool.query(
-    `update notes set date = $2, time = $3, remind = $4, remind_at = $5, couple_id = ${coupleSql},
+    `update notes set date = $2, time = $3, remind = $4, remind_at = $5, couple_id = ${coupleSql}, end_time = $6,
+       end_date = case when end_date > $2 then end_date end,
        notified_at = case when remind_at is not distinct from $5 then notified_at end, updated_at = now()
      where id = $1 returning *`,
-    [n.id, date, time || null, remind, at]);
+    [n.id, date, time || null, remind, at, (time && endTime) || null]);
   return { text: noteSummary(`รับทราบครับ แก้ไขนัดให้ ${who.name} เรียบร้อยแล้ว ✅`, rows[0]), noteId: n.id };
 }
 
@@ -264,8 +277,8 @@ const TH_DATE = new Intl.DateTimeFormat('th-TH-u-ca-buddhist', { weekday: 'long'
 const REMIND_TEXT = { 0: 'ถึงเวลาแล้ว', 60: 'อีก 1 ชั่วโมง', 120: 'อีก 2 ชั่วโมง', 180: 'อีก 3 ชั่วโมง', 360: 'อีก 6 ชั่วโมง', 1440: 'พรุ่งนี้', 2880: 'อีก 2 วัน', 4320: 'อีก 3 วัน' };
 
 export function reminderText(n) {
-  const [y, m, d] = n.date.split('-').map(Number);
-  const when = `${TH_DATE.format(new Date(Date.UTC(y, m - 1, d)))}${n.time ? ` · ${n.time.slice(0, 5)} น.` : ''}`;
+  const long = (ds) => { const [y, m, d] = ds.split('-').map(Number); return TH_DATE.format(new Date(Date.UTC(y, m - 1, d))); };
+  const when = n.end_date || n.end_time ? whenText(n, long).replace(/ (\d\d:\d\d)/, ' · $1') : `${long(noteDate(n))}${n.time ? ` · ${n.time.slice(0, 5)} น.` : ''}`;
   const lines = [`🔔 ${REMIND_TEXT[n.remind] || 'เตือนความจำ'}`, `📝 ${n.text}`, `📅 ${when}`];
   if (n.couple_id && n.owner_name) lines.push(`👤 จาก ${n.owner_name}`);
   return lines.join('\n');

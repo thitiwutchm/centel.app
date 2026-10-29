@@ -41,8 +41,18 @@ export function parseNote(raw, now = new Date()) {
   let s = ` ${raw} `;
   const take = (rx) => { const m = s.match(rx); if (m) s = s.replace(m[0], ' '); return m; };
   let time = '';
-  const hm = (h, m = 0) => { if (h >= 0 && h < 24 && m >= 0 && m < 60) time = `${pad(h)}:${pad(m)}`; };
+  let endTime = '';
+  const hhmm = (h, m = 0) => (h >= 0 && h < 24 && m >= 0 && m < 60 ? `${pad(h)}:${pad(m)}` : '');
+  const hm = (h, m = 0) => { time = hhmm(h, m); };
+  const ap = (h, x) => (h % 12) + (/pm/i.test(x) ? 12 : 0);
   let m;
+  // A range first: "10:00-12:00", "10.00 ถึง 12.00 น.", "11 AM - 12 PM", "11:00 am to 1:30 pm".
+  if ((m = take(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i))) {
+    hm(ap(+m[1], m[3] || m[6]), +(m[2] || 0)); endTime = hhmm(ap(+m[4], m[6]), +(m[5] || 0));
+  } else if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:น\.?)?\s*(?:-|–|ถึง|to)\s*(\d{1,2})[:.](\d{2})\s*(?:นาฬิกา|น\.?(?![\u0E01-\u0E4E]))?/i))) {
+    hm(+m[1], +m[2]); endTime = hhmm(+m[3], +m[4]);
+  }
+  if (time) { if (!endTime || endTime <= time) endTime = ''; m = null; } else
   if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:นาฬิกา|น\.?(?![ก-๎]))?/))) hm(+m[1], +m[2]);
   else if ((m = take(/(?:ตอน\s*)?เที่ยงคืน/))) hm(0);
   else if ((m = take(/(?:ตอน\s*)?เที่ยง(?:วัน)?/))) hm(12);
@@ -72,6 +82,12 @@ export function parseNote(raw, now = new Date()) {
     const y = yt ? noteYear(yt) : base.getUTCFullYear();
     date = day(y, mon, +m[1]);
     if (!yt && date < base) date = day(y + 1, mon, +m[1]);
+  } else if ((m = take(new RegExp(`(${NOTE_MONTHS.map((x) => `(${x})`).join('|')})\\s*(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?`, 'i')))) {
+    // "Nov 30", "Nov 30, 2026": month first, as English writes it.
+    const mon = m.slice(2, 14).findIndex(Boolean);
+    const y = m[15] ? noteYear(m[15]) : base.getUTCFullYear();
+    date = day(y, mon, +m[14]);
+    if (!m[15] && date < base) date = day(y + 1, mon, +m[14]);
   } else if ((m = take(/(?:วันที่|ที่|the)\s*(\d{1,2})(?!\d)(?:st|nd|rd|th)?/i)) && +m[1] >= 1 && +m[1] <= 31) {
     // "จันทร์ที่ 1": the next 1st that is a Monday, if one comes within a year; else the next 1st.
     const dd = +m[1];
@@ -91,10 +107,11 @@ export function parseNote(raw, now = new Date()) {
   // A time on its own means the next time it comes round: today, or tomorrow once past.
   const timeOnly = !date && !!time;
   if (timeOnly) date = addDays(time > `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}` ? 0 : 1);
-  const text = s.replace(/\s+/g, ' ').trim();
+  // Commas left between the words taken out ("…, Nov 30, 10 AM") go too.
+  const text = s.replace(/\s+/g, ' ').replace(/(\s*,)+\s*$/, '').replace(/^\s*,/, '').replace(/,(\s*,)+/g, ',').trim();
   // A line that is only a date or time ("19:30", an edit) keeps it; the words stay as the text.
   // timeOnly: the date was not in the words, only worked out from the time.
-  return { text: text || raw.trim(), date: date ? dateStr(date) : '', time, ...(timeOnly ? { timeOnly } : {}) };
+  return { text: text || raw.trim(), date: date ? dateStr(date) : '', time, endTime: time ? endTime : '', ...(timeOnly ? { timeOnly } : {}) };
 }
 
 // When the reminder is due: `remind` minutes before the note's time in Thailand,

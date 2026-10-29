@@ -202,6 +202,10 @@ test('line: replying to the bot edits or cancels the note, without AI', async (t
   n = await note();
   assert.equal(n.time, '19:30');
   assert.match(n.date, /-10-31$/);
+  // A range sets the start and the end.
+  assert.match((await say('เลื่อนเป็น 10:00-12:00', 'e6')).text, /10:00–12:00 น\./);
+  n = await note();
+  assert.deepEqual([n.time, n.endTime], ['10:00', '12:00']);
   // Nothing understood: no answer, nothing changed.
   assert.equal(await say('แก้ไข อะไรสักอย่าง', 'e4'), undefined);
   // A reply to the typed line works too; ยกเลิก deletes it.

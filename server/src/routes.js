@@ -438,7 +438,7 @@ router.delete('/labels/:id', wrap(async (req, res) => {
 const REMINDS = new Set([0, 120, 360, 1440, 2880, 60, 180, 4320]);
 const noteOut = (n) => ({
   id: n.id, ownerId: n.owner_id, shared: !!n.couple_id, text: n.text, date: n.date || '',
-  time: n.time ? n.time.slice(0, 5) : '', remind: n.remind, remindAt: n.remind_at, notifiedAt: n.notified_at || undefined,
+  time: n.time ? n.time.slice(0, 5) : '', endDate: n.end_date || '', endTime: n.end_time ? n.end_time.slice(0, 5) : '', remind: n.remind, remindAt: n.remind_at, notifiedAt: n.notified_at || undefined,
   done: n.done, doneAt: n.done_at || undefined, doneBy: n.done_by || undefined, createdAt: n.created_at,
 });
 
@@ -452,21 +452,24 @@ router.put('/notes/:id', wrap(async (req, res) => {
   if (!text) throw bad('bad_text');
   const date = isDate(b.date) ? b.date : null;
   const time = date && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.time || '') ? b.time : null;
+  // Ends: a later day and/or, on a timed note, a later time. Anything not after the start is dropped.
+  const endDate = date && isDate(b.endDate) && b.endDate > date ? b.endDate : null;
+  const endTime = time && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.endTime || '') && (endDate || b.endTime > time) ? b.endTime : null;
   const remind = date && REMINDS.has(b.remind) ? b.remind : null;
   const at = remind != null && b.remindAt && !Number.isNaN(Date.parse(b.remindAt)) ? new Date(b.remindAt) : null;
   const note = await asUser(uid(req), (db) => db.query(
-    `insert into notes (id, couple_id, text, date, time, remind, remind_at, done, done_at, done_by)
-       values ($1, case when $2 then my_couple() end, $3, $4, $5, $6, $7, $8, case when $8 then now() end, case when $8 then app_uid() end)
+    `insert into notes (id, couple_id, text, date, time, remind, remind_at, done, done_at, done_by, end_date, end_time)
+       values ($1, case when $2 then my_couple() end, $3, $4, $5, $6, $7, $8, case when $8 then now() end, case when $8 then app_uid() end, $9, $10)
      on conflict (id) do update set
        couple_id = case when notes.owner_id = app_uid() then excluded.couple_id else notes.couple_id end,
-       text = excluded.text, date = excluded.date, time = excluded.time, remind = excluded.remind, remind_at = excluded.remind_at,
+       text = excluded.text, date = excluded.date, time = excluded.time, end_date = excluded.end_date, end_time = excluded.end_time, remind = excluded.remind, remind_at = excluded.remind_at,
        notified_at = case when notes.remind_at is not distinct from excluded.remind_at then notes.notified_at end,
        done = excluded.done,
        done_at = case when excluded.done and not notes.done then now() when excluded.done then notes.done_at end,
        done_by = case when excluded.done and not notes.done then app_uid() when excluded.done then notes.done_by end,
        updated_at = now()
      returning *`,
-    [req.params.id, !!b.shared, text, date, time, remind, at, !!b.done]));
+    [req.params.id, !!b.shared, text, date, time, remind, at, !!b.done, endDate, endTime]));
   res.json({ note: noteOut(note.rows[0]) });
 }));
 

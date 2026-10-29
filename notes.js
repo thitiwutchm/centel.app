@@ -27,6 +27,9 @@ function notesAll() { return isCloud() ? (cloud.notes || (cloud.notes = [])) : l
 function noteById(id) { return notesAll().find((n) => n.id === id); }
 function noteMine(n) { return !isCloud() || !n.ownerId || n.ownerId === cloud.user.id; }
 
+// "09:30" → "10:30", stopping at 23:59: the end iOS suggests for a new start time.
+function addHour(t) { const [h, m] = t.split(':').map(Number); return h >= 23 ? '23:59' : `${pad(h + 1)}:${pad(m)}`; }
+
 function noteRemindAt(n) {
   if (!n.date || n.remind == null) return null;
   const d = parseDs(n.date);
@@ -44,7 +47,8 @@ function noteSave(n) {
     return;
   }
   upsert(cloud.notes || (cloud.notes = []), n);
-  cloudCall('PUT', `/notes/${n.id}`, { text: n.text, date: n.date || null, time: n.time || null, remind: n.remind, remindAt: n.remindAt, shared: !!n.shared, done: !!n.done });
+  cloudCall('PUT', `/notes/${n.id}`, { text: n.text, date: n.date || null, time: n.time || null, endDate: n.endDate || null, endTime: n.endTime || null,
+    remind: n.remind, remindAt: n.remindAt, shared: !!n.shared, done: !!n.done });
   calFeedChanged();
 }
 
@@ -90,8 +94,18 @@ function parseNote(raw, now = new Date()) {
   let s = ` ${raw} `;
   const take = (rx) => { const m = s.match(rx); if (m) s = s.replace(m[0], ' '); return m; };
   let time = '';
-  const hm = (h, m = 0) => { if (h >= 0 && h < 24 && m >= 0 && m < 60) time = `${pad(h)}:${pad(m)}`; };
+  let endTime = '';
+  const hhmm = (h, m = 0) => (h >= 0 && h < 24 && m >= 0 && m < 60 ? `${pad(h)}:${pad(m)}` : '');
+  const hm = (h, m = 0) => { time = hhmm(h, m); };
+  const ap = (h, x) => (h % 12) + (/pm/i.test(x) ? 12 : 0);
   let m;
+  // A range first: "10:00-12:00", "10.00 ถึง 12.00 น.", "11 AM - 12 PM", "11:00 am to 1:30 pm".
+  if ((m = take(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i))) {
+    hm(ap(+m[1], m[3] || m[6]), +(m[2] || 0)); endTime = hhmm(ap(+m[4], m[6]), +(m[5] || 0));
+  } else if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:น\.?)?\s*(?:-|–|ถึง|to)\s*(\d{1,2})[:.](\d{2})\s*(?:นาฬิกา|น\.?(?![\u0E01-\u0E4E]))?/i))) {
+    hm(+m[1], +m[2]); endTime = hhmm(+m[3], +m[4]);
+  }
+  if (time) { if (!endTime || endTime <= time) endTime = ''; m = null; } else
   if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:นาฬิกา|น\.?(?![\u0E01-\u0E4E]))?/))) hm(+m[1], +m[2]);
   else if ((m = take(/(?:ตอน\s*)?เที่ยงคืน/))) hm(0);
   else if ((m = take(/(?:ตอน\s*)?เที่ยง(?:วัน)?/))) hm(12);
@@ -121,6 +135,12 @@ function parseNote(raw, now = new Date()) {
     const y = yt ? noteYear(yt) : base.getFullYear();
     date = new Date(y, mon, +m[1]);
     if (!yt && date < base) date.setFullYear(y + 1);
+  } else if ((m = take(new RegExp(`(${NOTE_MONTHS.map((x) => `(${x})`).join('|')})\\s*(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?`, 'i')))) {
+    // "Nov 30", "Nov 30, 2026": month first, as English writes it.
+    const mon = m.slice(2, 14).findIndex(Boolean);
+    const y = m[15] ? noteYear(m[15]) : base.getFullYear();
+    date = new Date(y, mon, +m[14]);
+    if (!m[15] && date < base) date.setFullYear(y + 1);
   } else if ((m = take(/(?:วันที่|ที่|the)\s*(\d{1,2})(?!\d)(?:st|nd|rd|th)?/i)) && +m[1] >= 1 && +m[1] <= 31) {
     // "จันทร์ที่ 1": the next 1st that is a Monday, if one comes within a year; else the next 1st.
     const day = +m[1];
@@ -139,9 +159,10 @@ function parseNote(raw, now = new Date()) {
   }
   // A time on its own means the next time it comes round: today, or tomorrow once past.
   if (!date && time) date = addDays(time > `${pad(now.getHours())}:${pad(now.getMinutes())}` ? 0 : 1);
-  const text = s.replace(/\s+/g, ' ').trim();
-  if (!text) return { text: raw.trim(), date: '', time: '' };
-  return { text, date: date ? dateStr(date) : '', time };
+  // Commas left between the words taken out ("…, Nov 30, 10 AM") go too.
+  const text = s.replace(/\s+/g, ' ').replace(/(\s*,)+\s*$/, '').replace(/^\s*,/, '').replace(/,(\s*,)+/g, ',').trim();
+  if (!text) return { text: raw.trim(), date: '', time: '', endTime: '' };
+  return { text, date: date ? dateStr(date) : '', time, endTime: time ? endTime : '' };
 }
 
 /* ---------- Display ---------- */
@@ -169,7 +190,8 @@ function noteRow(n) {
   const from = isCloud() && n.shared && !noteMine(n);
   const sub = [
     w.rel ? `<span class="nrel ${w.cls}">${w.rel}</span>` : '',
-    n.time ? `<span>${svgIcon('clock', 'svg-i xs')}<span>${n.time} น.</span></span>` : '',
+    n.time ? `<span>${svgIcon('clock', 'svg-i xs')}<span>${n.time}${n.endTime ? `–${n.endTime}` : ''} น.</span></span>` : '',
+    n.endDate ? `<span>→ ${thShortDate(parseDs(n.endDate))}</span>` : '',
     n.date && n.remind != null && !n.done ? `<span>${svgIcon('bell', 'svg-i xs')}<span>${remindLabel(n.remind)}</span></span>` : '',
     n.shared ? `<span>🤝 <span>${from ? `จาก ${esc(partnerName())}` : 'แชร์กับคู่'}</span></span>` : '',
   ].filter(Boolean).join('');
@@ -277,10 +299,21 @@ function noteForm(n, preset = {}) {
     ${isNew ? '' : noteMine(d) ? '<button class="btn danger" id="nDel">ลบโน้ต</button>' : `<div class="muted small center">โน้ตนี้สร้างโดย ${esc(partnerName())}</div>`}
   `);
   const pick = (label, value, control) => `<label class="prow"><span class="pl">${label}</span><span class="pv">${value}${control ? svgIcon('updown', 'svg-i ud') : ''}</span>${control || ''}</label>`;
+  // As in iOS Calendar: Starts and Ends, each a date pill and a time pill, and an All-day switch.
+  const pill = (text, input, cls = '') => `<label class="dpill${cls}"><span>${text}</span>${input}</label>`;
+  const dayText = (ds) => { const t = parseDs(ds); return `${thShortDate(t)} ${t.getFullYear() + BE}`; };
   const rows = () => {
-    const dt = d.date ? parseDs(d.date) : null;
-    let h = pick('วันที่', dt ? `${TH_DOW_FULL[dt.getDay()]} ${thShortDate(dt)} ${dt.getFullYear() + BE}` : 'ไม่ระบุวัน', `<input type="date" data-nset="date" value="${d.date || ''}">`);
-    if (d.date) h += pick('เวลา', d.time ? `${d.time} น.` : 'ทั้งวัน', `<input type="time" data-nset="time" value="${d.time || ''}">`);
+    let h;
+    if (!d.date) {
+      h = `<div class="prow dt"><span class="pl">เริ่ม</span><span class="pills">${pill('ไม่ระบุวัน', `<input type="date" data-nset="date" value="">`, ' empty')}</span></div>`;
+    } else {
+      const allDay = !d.time;
+      h = `<div class="prow dt"><span class="pl">เริ่ม</span><span class="pills">${pill(dayText(d.date), `<input type="date" data-nset="date" value="${d.date}">`)}${allDay ? '' : pill(d.time, `<input type="time" data-nset="time" value="${d.time}">`)}</span></div>`;
+      const ed = d.endDate || d.date;
+      const et = d.endTime || (allDay ? '' : addHour(d.time));
+      h += `<div class="prow dt"><span class="pl">สิ้นสุด</span><span class="pills">${pill(dayText(ed), `<input type="date" data-nset="endDate" value="${ed}" min="${d.date}">`)}${allDay ? '' : pill(et, `<input type="time" data-nset="endTime" value="${et}">`, d.endTime ? '' : ' soft')}</span></div>`;
+      h += `<label class="prow"><span class="pl">${svgIcon('cal', 'svg-i xs')} ทั้งวัน</span><span class="switch"><input type="checkbox" data-nset="allDay" ${allDay ? 'checked' : ''}><span></span></span></label>`;
+    }
     // Always shown; picking a reminder on a note without a date puts it on today.
     const choices = NOTE_REMINDS_OLD.some(([k]) => k === d.remind) ? [...NOTE_REMINDS, NOTE_REMINDS_OLD.find(([k]) => k === d.remind)] : NOTE_REMINDS;
     h += pick('เตือน', `${svgIcon('bell', 'svg-i xs')} ${d.date ? remindLabel(d.remind) : 'ไม่เตือน'}`,
@@ -293,8 +326,18 @@ function noteForm(n, preset = {}) {
     const k = e.target.dataset.nset;
     if (!k) return;
     const v = e.target.value;
-    if (k === 'date') { const had = !!d.date; d.date = v; if (!v) { d.time = ''; d.remind = null; } else if (!had && d.remind == null) d.remind = 0; }
-    if (k === 'time') d.time = v;
+    if (k === 'date') {
+      const had = !!d.date;
+      d.date = v;
+      if (!v) { d.time = ''; d.endDate = ''; d.endTime = ''; d.remind = null; } else if (!had && d.remind == null) d.remind = 0;
+      if (d.endDate && d.endDate <= d.date) d.endDate = '';
+    }
+    if (k === 'time') { d.time = v; if (!d.endDate && d.endTime && d.endTime <= v) d.endTime = ''; }
+    if (k === 'endDate') d.endDate = v && v > d.date ? v : '';
+    if (k === 'endTime') d.endTime = v && (d.endDate || v > d.time) ? v : '';
+    if (k === 'allDay') {
+      if (e.target.checked) { d.time = ''; d.endTime = ''; } else { d.time = '09:00'; d.endTime = '10:00'; }
+    }
     if (k === 'remind') { d.remind = v === '' ? null : Number(v); if (d.remind != null && !d.date) d.date = dateStr(today()); }
     if (k === 'shared') d.shared = !!v;
     rows();
@@ -303,6 +346,7 @@ function noteForm(n, preset = {}) {
     const text = $('#nText').value.trim();
     if (!text) { toast('กรุณาพิมพ์สิ่งที่ต้องทำ'); $('#nText').focus(); return; }
     if (!d.date) { d.time = ''; d.remind = null; }
+    if (!d.time) d.endTime = '';
     noteSave({ ...d, text, ownerId: d.ownerId || (isCloud() ? cloud.user.id : undefined), createdAt: d.createdAt || new Date().toISOString() });
     toast(isNew ? 'เพิ่มโน้ตแล้ว' : 'บันทึกแล้ว');
     if (ui.notesOpen) notesSheet(); else closeSheet();
@@ -337,7 +381,7 @@ function noteQuick(form) {
   const raw = input.value.trim();
   if (!raw) return;
   const p = parseNote(raw);
-  noteSave({ id: newId(), text: p.text, date: p.date, time: p.time, remind: p.date ? 0 : null, shared: false, done: false,
+  noteSave({ id: newId(), text: p.text, date: p.date, time: p.time, endTime: p.endTime || '', remind: p.date ? 0 : null, shared: false, done: false,
     ownerId: isCloud() ? cloud.user.id : undefined, createdAt: new Date().toISOString() });
   toast(p.date ? `เพิ่มแล้ว · ${thShortDate(parseDs(p.date))}` : 'เพิ่มโน้ตแล้ว');
   if (ui.notesOpen && !$('#sheet').hidden) { notesSheet(); setTimeout(() => $('#naSheet') && $('#naSheet').focus(), 50); } else {
@@ -468,11 +512,13 @@ function notesIcs(stamp, alarm) {
     const day = parseDs(n.date);
     const ev = ['BEGIN:VEVENT', `UID:note-${n.id}@centel.app`, `DTSTAMP:${stamp}`];
     if (n.time) {
-      const [h, m] = n.time.split(':').map(Number);
-      const start = new Date(day); start.setHours(h, m, 0, 0);
-      ev.push(`DTSTART:${utc(start)}`, `DTEND:${utc(new Date(start.getTime() + 3600000))}`);
+      const at = (ds, t) => { const x = parseDs(ds); const [h, m] = t.split(':').map(Number); x.setHours(h, m, 0, 0); return x; };
+      const start = at(n.date, n.time);
+      // No end given: an hour, as before.
+      const end = n.endTime || n.endDate ? at(n.endDate || n.date, n.endTime || n.time) : new Date(start.getTime() + 3600000);
+      ev.push(`DTSTART:${utc(start)}`, `DTEND:${utc(end > start ? end : new Date(start.getTime() + 3600000))}`);
     } else {
-      const end = new Date(day); end.setDate(end.getDate() + 1);
+      const end = parseDs(n.endDate || n.date); end.setDate(end.getDate() + 1);
       ev.push(`DTSTART;VALUE=DATE:${icsDate(day)}`, `DTEND;VALUE=DATE:${icsDate(end)}`, 'TRANSP:TRANSPARENT');
     }
     ev.push(`SUMMARY:${icsEscape(`📝 ${n.text}`)}`);
