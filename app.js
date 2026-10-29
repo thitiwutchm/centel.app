@@ -1010,6 +1010,8 @@ function occurrenceSheet(id, ym) {
   const peaNeeded = !!b.pea && rec.amount == null && !o.paid;
   // Payment slips go through AI Slips, which needs the signed-in account's receipt storage.
   const slips = isCloud() && cloud.features.storage;
+  // The transaction this month was paid with; tapping it opens the transaction.
+  const payTx = o.paid ? billTxn(id, ym) : null;
 
   const history = [];
   for (let i = 1; i <= 6; i++) {
@@ -1051,6 +1053,7 @@ function occurrenceSheet(id, ym) {
       : `${slips ? `<button type="button" class="scan-btn pay-slip" id="oSlip">${SCAN_ICON}<span class="scan-text">จ่ายด้วยสลิป</span></button>
          <p class="hint pay-slip-hint">อัปโหลดสลิปโอนเงิน AI อ่านยอดและวันที่ แล้วตัดบิลนี้ให้</p>` : ''}
          ${peaNeeded ? '' : '<button class="btn ok" id="oPay">✓ จ่ายแล้ว</button>'}<button class="btn ghost" id="oSave">บันทึกยอด (ยังไม่จ่าย)</button>`}
+    ${payTx ? `<div class="section-title">รายการที่จ่าย</div><div class="list">${txItem(payTx, walletSet('total'))}</div>` : ''}
     ${o.paid && (rec.slip || slips) ? `<div class="section-title">สลิปการจ่าย</div>
     <div class="list">
       ${rec.slip
