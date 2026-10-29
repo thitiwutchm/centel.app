@@ -192,6 +192,32 @@ const SCAN_ICON = `<svg class="scan-ico" viewBox="0 0 24 24" fill="none" stroke-
   <path d="M18.5 2.5c.3 1.9 1 2.6 2.9 2.9-1.9.3-2.6 1-2.9 2.9-.3-1.9-1-2.6-2.9-2.9 1.9-.3 2.6-1 2.9-2.9z"/>
 </svg>`;
 
+// Rainbow neon dashed border that runs around the Scan receipt pill while a slip is read.
+// The rect is sized from the button so the dashes hug its rounded ends exactly.
+function scanning(btn, on) {
+  if (!btn || !btn.isConnected) return;
+  const text = btn.querySelector('.scan-text');
+  btn.querySelector('.scan-ring')?.remove();
+  btn.classList.toggle('scanning', on);
+  btn.setAttribute('aria-busy', on ? 'true' : 'false');
+  text.textContent = on ? 'กำลังอ่านสลิป…' : 'สแกนสลิป';
+  if (!on) return;
+  const w = btn.offsetWidth, h = btn.offsetHeight;
+  btn.insertAdjacentHTML('beforeend', `<svg class="scan-ring" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <defs>
+      <linearGradient id="scanGrad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#f59e6b"/><stop offset=".17" stop-color="#f2c94c"/><stop offset=".33" stop-color="#6cc04a"/>
+        <stop offset=".5" stop-color="#3fa3d9"/><stop offset=".67" stop-color="#5b6cf0"/><stop offset=".83" stop-color="#b25fd6"/><stop offset="1" stop-color="#d65fa8"/>
+      </linearGradient>
+      <filter id="scanGlow" x="-10%" y="-50%" width="120%" height="200%">
+        <feGaussianBlur stdDeviation="2.2" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <rect x="1.25" y="1.25" width="${w - 2.5}" height="${h - 2.5}" rx="${(h - 2.5) / 2}" pathLength="100"/>
+  </svg>`);
+}
+
 // Expense categories for AI Slips to choose from (the server falls back to the built-in list).
 function slipCats() {
   return catList().filter((c) => c.type === 'expense').map((c) => ({ id: c.id, name: c.label, parent: c.parent ? catById(c.parent).label : undefined }));
@@ -1430,7 +1456,10 @@ function txnForm(t, preset = {}) {
     const status = (html) => { $('#rcStatus').innerHTML = html ? `<p class="hint rc-status">${html}</p>` : ''; };
     const onFile = async (file) => {
       if (!file) return;
-      status('⏳ กำลังอัปโหลดและอ่านสลิป…');
+      // While the slip uploads and is read, a rainbow neon dashed line runs around the button.
+      const btn = $('#rcScan');
+      scanning(btn, true);
+      status('');
       try {
         const r = await uploadReceipt(file, money.labels.map((l) => l.name), slipCats());
         d.receiptKey = r.key;
@@ -1456,9 +1485,11 @@ function txnForm(t, preset = {}) {
         }[r.status] || '🧾 แนบรูปแล้ว');
       } catch (e) {
         status('❌ อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
+      } finally {
+        scanning(btn, false);
       }
     };
-    $('#rcScan').addEventListener('click', () => $('#rcIn').click());
+    $('#rcScan').addEventListener('click', () => { if (!$('#rcScan').classList.contains('scanning')) $('#rcIn').click(); });
     $('#rcIn').addEventListener('change', (e) => { onFile(e.target.files[0]); e.target.value = ''; });
     if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
   }
