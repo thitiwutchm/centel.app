@@ -74,6 +74,7 @@ function save() {
   }
   updateBadge();
   calFeedChanged(); // signed in with a calendar subscription: send the new calendar (calfeed.js)
+  pushAlertsChanged(); // notifications on: send this device's upcoming bill alerts (push.js)
 }
 
 /* ---------- Date helpers ---------- */
@@ -453,6 +454,7 @@ function renderSettings() {
       </div>
     </div>
     <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม)</p>
+    ${pushSettings()}
     ${calFeedSettings()}
     ${lineSettings()}
 
@@ -480,6 +482,7 @@ function renderSettings() {
   });
   $('#importFile').addEventListener('change', importData);
   lineSettingsBind();
+  pushSettingsBind();
   view.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.themePick === themeId()) return;
     setTheme(b.dataset.themePick);
@@ -1462,7 +1465,7 @@ document.addEventListener('keydown', (e) => {
 
 // Re-render when returning to the app so "today" and statuses stay current.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); } peaAutoTry(); }
+  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); pushAlertsChanged(); } peaAutoTry(); }
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -1473,4 +1476,5 @@ render();
 updateBadge();
 cloudStart();
 calFeedChanged();
+pushAlertsChanged();
 setTimeout(peaAutoTry, 1500);
