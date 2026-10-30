@@ -1052,17 +1052,26 @@ function exportCsv() {
 
 /* ---------- Report ---------- */
 
-function reportSheet(ym) {
-  ym = ym || ymOf(new Date());
+// What the report counts: the month's income/expense in the wallet and label
+// the รายการ tab is showing (all wallets elsewhere).
+function reportData(ym) {
   const S = walletSet(ui.tab === 'txns' ? ui.wallet : 'total');
   const lab = ui.tab === 'txns' ? labelById(ui.txLabel) : null;
   const list = txnsInMonth(ym).filter((t) => t.type !== 'transfer' && counts(t) && inSel(t, S) && (!lab || (t.labels || []).includes(lab.id)));
+  return { S, lab, list };
+}
+
+function reportKey(t, type) { return t.category ? catRootId(t.category, type) : '_review'; }
+
+function reportSheet(ym) {
+  ym = ym || ymOf(new Date());
+  const { S, lab, list } = reportData(ym);
   const { income, expense } = totalsIn(list, S);
   const bars = (type) => {
     // Sub-categories roll up into their parent; the split shows under the parent's bar.
     const by = {}, subs = {};
     list.filter((t) => t.type === type).forEach((t) => {
-      const k = t.category ? catRootId(t.category, type) : '_review';
+      const k = reportKey(t, type);
       by[k] = (by[k] || 0) + t.amount;
       const own = t.category && catById(t.category);
       if (own && own.id !== k) { subs[k] = subs[k] || {}; subs[k][own.id] = (subs[k][own.id] || 0) + t.amount; }
@@ -1075,8 +1084,8 @@ function reportSheet(ym) {
       const p = (v / sum) * 100;
       const split = Object.entries(subs[k] || {}).sort((a, b) => b[1] - a[1])
         .map(([id, x]) => `<div class="rep-sub"><span>${esc(catById(id).label)}</span><span>${baht(x)}</span></div>`).join('');
-      return `<div class="item rep">${circleIco(c)}<div class="main"><div class="rep-top"><span class="name">${esc(c.label)}</span><b>${baht(v)}</b></div>
-        <div class="rep-bar"><div style="width:${p}%;background:${c.color}"></div></div><div class="sub">${p.toFixed(1)}%</div>${split}</div></div>`;
+      return `<button class="item rep" data-action="report-cat" data-ym="${ym}" data-type="${type}" data-cat="${esc(k)}">${circleIco(c)}<div class="main"><div class="rep-top"><span class="name">${esc(c.label)}</span><b>${baht(v)}</b></div>
+        <div class="rep-bar"><div style="width:${p}%;background:${c.color}"></div></div><div class="sub">${p.toFixed(1)}%</div>${split}</div>${svgIcon('chev', 'svg-i sm rep-chev')}</button>`;
     }).join('')}</div>`;
   };
   openSheet(`
@@ -1091,6 +1100,66 @@ function reportSheet(ym) {
     </div>
     <div class="section-title">รายจ่ายตามหมวดหมู่</div>${bars('expense')}
     <div class="section-title">รายรับตามหมวดหมู่</div>${bars('income')}
+  `);
+}
+
+// One report row opened up: sub-category split, what was bought (grouped by
+// shop / note), and the transactions themselves. กลับ goes back to the report.
+function reportCatSheet(ym, type, k) {
+  const { S, lab, list: all } = reportData(ym);
+  const ofType = all.filter((t) => t.type === type);
+  const list = ofType.filter((t) => reportKey(t, type) === k);
+  const c = k === '_review' ? NO_CAT : catById(k) || catFallback(type);
+  const total = list.reduce((s, t) => s + t.amount, 0);
+  const typeSum = ofType.reduce((s, t) => s + t.amount, 0);
+  const pct = typeSum ? (total / typeSum) * 100 : 0;
+  const rows = (entries, sum) => `<div class="list">${entries.map(([ico, name, v, meta]) => {
+    const p = sum ? (v / sum) * 100 : 0;
+    return `<div class="item rep">${circleIco(ico)}<div class="main"><div class="rep-top"><span class="name">${name}</span><b>${baht(v)}</b></div>
+      <div class="rep-bar"><div style="width:${p}%;background:${ico.color}"></div></div><div class="sub">${p.toFixed(1)}%${meta ? ` · <span>${meta}</span>` : ''}</div></div></div>`;
+  }).join('')}</div>`;
+
+  // Sub-categories: the parent's own entries show as ไม่ระบุหมวดย่อย.
+  const subs = {};
+  list.forEach((t) => {
+    const own = t.category && catById(t.category);
+    const id = own && own.id !== k ? own.id : '_own';
+    subs[id] = subs[id] || { v: 0, n: 0 };
+    subs[id].v += t.amount; subs[id].n++;
+  });
+  const subRows = Object.entries(subs).sort((a, b) => b[1].v - a[1].v).map(([id, x]) => {
+    const sc = id === '_own' ? c : catById(id);
+    return [sc, id === '_own' ? 'ไม่ระบุหมวดย่อย' : esc(sc.label), x.v, `${x.n} รายการ`];
+  });
+  const showSubs = Object.keys(subs).some((id) => id !== '_own');
+
+  // What's inside: entries with the same shop (or note) add up together.
+  const items = {};
+  list.forEach((t) => {
+    const name = (t.merchant || t.note || '').trim();
+    const key = name.toLowerCase() || '_none';
+    items[key] = items[key] || { name, v: 0, n: 0, cat: txCat(t) };
+    items[key].v += t.amount; items[key].n++;
+  });
+  const itemList = Object.values(items).sort((a, b) => b.v - a.v);
+  const itemRows = itemList.map((x) => [x.cat, x.name ? esc(x.name) : 'ไม่ระบุร้าน/บันทึก', x.v, `${x.n} ครั้ง`]);
+  const showItems = itemList.length > 1 || (itemList[0] && itemList[0].name);
+
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="report" data-ym="${ym}">กลับ</button><h2>${thMonthYear(ym)}</h2><span style="width:40px"></span></div>
+    ${lab ? `<div class="chips"><span class="chip on lab">${svgIcon('tag', 'svg-i xs')}${esc(lab.name)}</span></div>` : ''}
+    <div class="card bd">
+      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(c.label)}</div></div></div>
+      <div class="bd-body">
+        <div class="bd-amt ${type === 'income' ? 'inc' : 'exp'}">${baht(total)}</div>
+        <div class="kv" style="padding:8px 2px 0"><span>${type === 'income' ? 'สัดส่วนของรายรับ' : 'สัดส่วนของรายจ่าย'}</span><b>${pct.toFixed(1)}%</b></div>
+        <div class="kv" style="padding:6px 2px 0"><span>จำนวน</span><span>${list.length} รายการ</span></div>
+      </div>
+    </div>
+    ${showSubs ? `<div class="section-title">หมวดย่อย</div>${rows(subRows, total)}` : ''}
+    ${showItems ? `<div class="section-title">สรุปตามร้าน/บันทึก</div>${rows(itemRows, total)}` : ''}
+    <div class="section-title">รายการ</div>
+    ${list.length ? dayGroups(list, S) : '<div class="card muted" style="text-align:center">ไม่มีรายการ</div>'}
   `);
 }
 
@@ -2264,6 +2333,7 @@ function moneyAction(action, el) {
     case 'label-filter': labelFilterSheet(); break;
     case 'csv': closeSheet(); exportCsv(); break;
     case 'report': reportSheet(el.dataset.ym); break;
+    case 'report-cat': reportCatSheet(el.dataset.ym, el.dataset.type, el.dataset.cat); break;
     case 'add-budget': budgetForm(); break;
     case 'add-budget-all': budgetForm(null, { category: 'all' }); break;
     case 'add-budget-shared': budgetForm(null, { scope: 'shared', category: 'all' }); break;
