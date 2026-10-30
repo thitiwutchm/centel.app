@@ -1439,8 +1439,11 @@ body::before {
 .ch-badge { min-width: 21px; height: 21px; padding: 0 6px; border-radius: 11px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
 
 body.ch-lock { overflow: hidden; }
+/* Once the room has slid in, the app underneath is hidden so nothing shows through the frosted
+   header or below the composer when the iOS keyboard pushes the page. */
+body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .ch-screen {
-  position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; color: var(--c-text);
+  position: fixed; top: 0; left: 0; right: 0; height: 100%; z-index: 60; overflow: hidden; display: flex; flex-direction: column; color: var(--c-text);
   background:
     radial-gradient(rgba(255, 255, 255, .09) 1.3px, transparent 1.5px) 0 0 / 20px 20px,
     linear-gradient(165deg, color-mix(in srgb, var(--bg) 82%, var(--c-accent)), var(--bg) 70%);
@@ -1449,9 +1452,10 @@ body.ch-lock { overflow: hidden; }
 :root[data-backdrop="light"] .ch-screen { background: radial-gradient(rgba(0, 0, 0, .045) 1.3px, transparent 1.5px) 0 0 / 20px 20px, linear-gradient(165deg, color-mix(in srgb, var(--bg) 88%, var(--c-accent)), var(--bg) 70%); }
 .ch-screen.in { transform: none; }
 .ch-head {
-  flex: none; display: flex; align-items: center; gap: 10px;
-  padding: calc(var(--safe-top) + 6px) 12px 8px; background: var(--sheet); border-bottom: 0.5px solid var(--c-line);
-  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
+  padding: calc(var(--safe-top) + 6px) 12px 8px; border-bottom: 0.5px solid var(--c-line);
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+  -webkit-backdrop-filter: saturate(1.8) blur(22px); backdrop-filter: saturate(1.8) blur(22px);
 }
 .ch-back { border: 0; background: none; color: var(--c-accent); padding: 4px; margin-left: -4px; display: grid; place-items: center; }
 .ch-title { flex: 1; min-width: 0; display: grid; }
@@ -1459,12 +1463,12 @@ body.ch-lock { overflow: hidden; }
 .ch-st { font-size: 12.5px; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .ch-st.typing, .ch-st.ok { color: var(--c-accent); }
 .ch-st.warn { color: var(--c-warn); }
-.ch-wall { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 10px 10px 8px; display: flex; flex-direction: column; gap: 3px; }
+.ch-wall { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: calc(var(--ch-head, 60px) + 10px) 10px 8px; scroll-padding-top: var(--ch-head, 60px); display: flex; flex-direction: column; gap: 3px; }
 .ch-loading { margin: auto; color: var(--on-bg-muted); font-size: 14px; }
 .ch-more { align-self: center; border: 0; border-radius: 14px; padding: 5px 12px; background: rgba(0, 0, 0, .22); color: #fff; font-size: 12.5px; margin-bottom: 6px; }
 .ch-empty { margin: auto; max-width: 280px; text-align: center; display: grid; justify-items: center; gap: 8px; padding: 18px; border-radius: 22px; background: rgba(0, 0, 0, .2); color: #fff; font-size: 13.5px; }
 :root[data-backdrop="light"] .ch-empty, :root[data-backdrop="light"] .ch-more { background: rgba(0, 0, 0, .06); color: var(--c-text); }
-.ch-day { align-self: center; margin: 8px 0 4px; position: sticky; top: 0; z-index: 1; }
+.ch-day { align-self: center; margin: 8px 0 4px; position: sticky; top: calc(var(--ch-head, 60px) + 6px); z-index: 1; }
 .ch-day span { display: inline-block; font-size: 12px; font-weight: 600; color: #fff; background: rgba(0, 0, 0, .24); padding: 2px 10px; border-radius: 11px; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 :root[data-backdrop="light"] .ch-day span { color: var(--c-muted); background: rgba(255, 255, 255, .75); }
 .ch-msg { display: flex; gap: 6px; align-items: flex-end; max-width: 86%; transition: transform .18s; }
@@ -1513,7 +1517,10 @@ body.ch-lock { overflow: hidden; }
 .ch-dots i:nth-child(3) { animation-delay: .3s; }
 @keyframes chBob { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-3px); opacity: 1; } }
 .ch-msg.swipe-ok .ch-b { box-shadow: 0 0 0 2px var(--c-accent-soft); }
-.ch-bottom { flex: none; background: var(--sheet); border-top: 0.5px solid var(--c-line); padding-bottom: max(8px, var(--safe-bottom)); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.ch-bottom { flex: none; border-top: 0.5px solid var(--c-line); padding-bottom: max(8px, var(--safe-bottom));
+  background: color-mix(in srgb, var(--bg) 74%, transparent); -webkit-backdrop-filter: saturate(1.8) blur(22px); backdrop-filter: saturate(1.8) blur(22px); }
+/* Keyboard up: the composer sits right on top of it, no home-indicator gap. */
+.ch-screen.kb .ch-bottom { padding-bottom: 6px; }
 .ch-chips { display: flex; gap: 6px; padding: 7px 10px 0; overflow-x: auto; scrollbar-width: none; }
 .ch-chips::-webkit-scrollbar { display: none; }
 .ch-chips button { flex: none; border: 0; border-radius: 14px; padding: 5px 11px; font-size: 13px; font-weight: 600; background: var(--c-accent-soft); color: var(--c-accent); }
