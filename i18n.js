@@ -211,7 +211,8 @@ const I18N_EN = {
   'ส่งออกรายการ (CSV)': 'Export transactions (CSV)', 'วันที่': 'Date', 'ประเภท': 'Type', 'กระเป๋าเงิน': 'Wallet', 'ไปยัง': 'To',
   'จำนวนเงิน': 'Amount', 'ร้านค้า': 'Merchant', 'ขอบเขต': 'Scope', 'ยอดรวมทั้งบิล': 'Bill total', 'สถานะ': 'Status',
   'รายจ่าย': 'Expense', 'รายรับ': 'Income', 'อนุมัติแล้ว': 'Approved', 'ไม่มีรายการ': 'No transactions',
-  'รายงาน {0}': 'Report {0}', 'คงเหลือสุทธิ': 'Net', 'รายจ่ายตามหมวดหมู่': 'Spending by category', 'รายรับตามหมวดหมู่': 'Income by category',
+  'รายงาน {0}': 'Report {0}', 'คงเหลือสุทธิ': 'Net', 'รายจ่ายตามหมวดหมู่': 'Spending by category', 'ไม่ระบุหมวดย่อย': 'No sub-category', 'สรุปตามร้าน/บันทึก': 'By shop / note', 'ไม่ระบุร้าน/บันทึก': 'No shop or note',
+  'สัดส่วนของรายจ่าย': 'Share of spending', 'สัดส่วนของรายรับ': 'Share of income', '{0} ครั้ง': '{0}×', 'รายรับตามหมวดหมู่': 'Income by category',
 
   // Budgets
   'เกินงบ {0}': 'Over by {0}', 'เหลือ {0}': '{0} left', 'สิ้นสุดแล้ว': 'Ended', 'เดือนหน้า': 'Next month', 'รวมทุกงบ': 'All budgets', 'งบร่วมทั้งหมด': 'All shared budgets',

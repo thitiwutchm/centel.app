@@ -1059,6 +1059,7 @@ body::before {
 .chips.sub-cats { margin: -6px 0 14px; }
 .chip.sub-pick { font-size: 13.5px; }
 .rep-sub { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); padding-top: 2px; }
+.rep-chev { color: var(--muted); flex: 0 0 auto; opacity: .7; }
 
 /* ---------- Schedule (repeating bills) ---------- */
 .sched-months { margin-bottom: 10px; }
