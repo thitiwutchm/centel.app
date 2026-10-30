@@ -966,7 +966,9 @@ function renderTxns() {
 }
 
 function txListHtml(sel) {
-  const S = walletSet(sel);
+  // Under ทั้งหมด the list shows every wallet's entries, also wallets kept out of the total
+  // (ไม่รวมในยอดรวม): those stay out of the balance only, not out of the day's spending.
+  const S = sel === 'total' ? Object.assign(new Set(money.wallets.map((w) => w.id)), { total: true }) : walletSet(sel);
   const q = ui.searchOpen ? ui.search.trim().toLowerCase() : '';
   if (q) {
     const hits = money.txns.filter((t) => touches(t, S) && txFilterOk(t) && [t.note, t.merchant, txCat(t).label, (walletById(t.walletId) || {}).name, String(t.amount), ...txLabels(t).map((l) => l.name)]
