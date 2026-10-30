@@ -1,5 +1,5 @@
 // Bump CACHE when shipping changes so installed apps pick up the new files.
-const CACHE = 'billplanner-v58';
+const CACHE = 'billplanner-v59';
 const ASSETS = [
   './',
   'index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   'cloud.js',
   'money.js',
   'notes.js',
+  'chat.js',
   'app.js',
   'billfiles.js',
   'gmail.js',
@@ -70,7 +71,7 @@ self.addEventListener('notificationclick', (e) => {
   const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     const open = list.find((c) => c.url.startsWith(self.location.origin));
-    if (open) return open.focus();
+    if (open) { open.postMessage({ type: 'open', url }); return open.focus(); }
     return self.clients.openWindow(url);
   }));
 });

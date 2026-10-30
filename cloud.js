@@ -154,6 +154,7 @@ async function cloudRefresh() {
     try { localStorage.setItem(CLOUD_KEY, JSON.stringify(b)); } catch (e) { /* full */ }
     render();
     if (needNickname() && $('#sheet').hidden) nicknameSheet();
+    chatBoot();
     return b;
   } catch (e) {
     if (e.status === 401) {
@@ -182,6 +183,7 @@ function cloudSignedOut() {
   cloud.line = null;
   cloud.linePeople = [];
   cloud.ids = new Set();
+  chatBoot();
   try { localStorage.removeItem(CLOUD_KEY); } catch (e) { /* ignore */ }
   money = loadMoney();
   ui.wallet = 'total';

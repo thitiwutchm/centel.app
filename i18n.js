@@ -449,6 +449,22 @@ const I18N_EN = {
   'ต้องเข้าสู่ระบบก่อน': 'Sign in first', 'ยังไม่ได้อนุญาตการแจ้งเตือน': 'Notifications were not allowed',
   'เปิดการแจ้งเตือนแล้ว': 'Notifications on', 'ปิดการแจ้งเตือนแล้ว': 'Notifications off', 'เปิดการแจ้งเตือนไม่สำเร็จ': 'Could not turn on notifications',
   'ส่งแล้ว ดูการแจ้งเตือนบนเครื่อง': 'Sent, check your notifications', 'ไม่พบเครื่องที่เปิดการแจ้งเตือน ลองปิดแล้วเปิดใหม่': 'No device with notifications on. Turn it off and on again',
+
+  // Chat mini app (chat.js)
+  'แชท': 'Chat', 'บ้านเรา': 'Our home', 'ผู้ช่วย Centel': 'Centel assistant', 'ผู้ช่วย': 'Assistant', 'ข้อความ': 'Message',
+  'พิมพ์ข้อความ': 'Type a message', 'ส่ง': 'Send', 'กลับ': 'Back', 'ตอบกลับ': 'Reply', 'คัดลอก': 'Copy', 'คัดลอกแล้ว': 'Copied',
+  'ผู้ช่วยออนไลน์': 'Assistant online', 'ผู้ช่วยออฟไลน์': 'Assistant offline', 'ยังไม่ได้เชื่อม Mac': 'Mac not connected',
+  'ผู้ช่วยกำลังพิมพ์…': 'Assistant is typing…', '{0} กำลังพิมพ์…': '{0} is typing…', 'ผู้ช่วยออฟไลน์ · จะตอบเมื่อ Mac เปิด': 'Assistant offline · answers when the Mac is on',
+  'ข้อความถูกลบ': 'Message deleted', 'แก้ไขแล้ว': 'edited', 'ดูข้อความก่อนหน้า': 'Earlier messages', 'กำลังโหลด…': 'Loading…',
+  'เรื่อง': 'What', 'เมื่อ': 'When', 'เสร็จแล้ว': 'Done', 'ไม่ระบุวัน': 'No date', 'ลบแล้ว': 'Deleted', 'เปิดดู / แก้ไข': 'Open / edit',
+  'คุณ:': 'You:', 'ตอบกลับ {0}': 'Reply to {0}', 'แก้ไขข้อความ': 'Edit message', 'ยกเลิกการตอบกลับ': 'Cancel reply', 'ยกเลิกการแก้ไข': 'Cancel edit',
+  'บิลที่ยังไม่จ่าย': 'Unpaid bills', 'สรุปค่าใช้จ่ายเดือนนี้': 'This month\'s spending', 'งบเหลือเท่าไหร่': 'Budget left', 'นัดที่จะถึง': 'Upcoming',
+  'คุยกันได้เลย เรียก @ผู้ช่วย ให้ช่วยได้': 'Chat here, call @ผู้ช่วย for help', 'ถามเรื่องบิล งบ หรือสั่งทำนัดได้เลย': 'Ask about bills and budgets, or make an appointment',
+  'ผู้ช่วย AI ในแชท': 'Chat assistant (AI)', 'Hermes บน Mac': 'Hermes on Mac', 'ออนไลน์': 'Online', 'ออฟไลน์': 'Offline', 'ยังไม่ได้เชื่อม': 'Not connected',
+  'เครื่อง': 'Device', 'ติดตั้งบน Mac (ครั้งเดียว)': 'Install on the Mac (once)', 'เปิด Terminal แล้ววางคำสั่งนี้': 'Open Terminal and paste this command',
+  'คัดลอกคำสั่ง': 'Copy command', '🔑 เชื่อม Mac ที่รัน Hermes Agent': '🔑 Connect the Mac running Hermes Agent',
+  '🔑 สร้าง token ใหม่ (ตัวเก่าจะใช้ไม่ได้)': '🔑 New token (the old one stops working)', 'ยกเลิกการเชื่อม Mac เครื่องนี้': 'Disconnect this Mac',
+  'ยกเลิกการเชื่อม Mac?': 'Disconnect the Mac?', 'ยกเลิกการเชื่อมแล้ว': 'Disconnected', 'ยกเลิกการเชื่อม': 'Disconnect',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

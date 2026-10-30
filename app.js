@@ -457,6 +457,7 @@ function renderSettings() {
     ${pushSettings()}
     ${calFeedSettings()}
     ${lineSettings()}
+    ${chatSettings()}
 
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
@@ -483,6 +484,7 @@ function renderSettings() {
   $('#importFile').addEventListener('change', importData);
   lineSettingsBind();
   pushSettingsBind();
+  chatSettingsBind();
   view.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.themePick === themeId()) return;
     setTheme(b.dataset.themePick);
