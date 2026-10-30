@@ -178,7 +178,8 @@ async function addMessage({ id = crypto.randomUUID(), room, me, senderId = null,
 function notify(me, room, m, title) {
   const to = audience(me, room).filter((id) => id !== m.senderId && !isOpen(id));
   if (!to.length) return;
-  const body = m.text.length > 140 ? `${m.text.slice(0, 140)}…` : m.text;
+  const plain = m.ai ? m.text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s+/gm, '') : m.text;
+  const body = plain.length > 140 ? `${plain.slice(0, 140)}…` : plain;
   pushTo(to, { title, body, url: `/#chat-${room}`, tag: `chat-${room}` }).catch((e) => console.error('chat push', e.message));
 }
 

@@ -1463,11 +1463,19 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .ch-st { font-size: 12.5px; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .ch-st.typing, .ch-st.ok { color: var(--c-accent); }
 .ch-st.warn { color: var(--c-warn); }
-.ch-wall { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: calc(var(--ch-head, 60px) + 10px) 10px 8px; scroll-padding-top: var(--ch-head, 60px); display: flex; flex-direction: column; gap: 3px; }
+/* Glass sits on the navy backdrop, so its header reads like the app's top bar: white text. */
+:root:not([data-backdrop]) .ch-head { background: color-mix(in srgb, var(--bg) 74%, transparent); }
+:root:not([data-backdrop]) .ch-title b { color: #fff; }
+:root:not([data-backdrop]) .ch-st:not(.typing):not(.ok):not(.warn) { color: rgba(255, 255, 255, .7); }
+.ch-txt code { font: 13.5px ui-monospace, Menlo, monospace; background: color-mix(in srgb, currentColor 10%, transparent); padding: 1px 4px; border-radius: 5px; }
+.ch-wall { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 0 10px 8px; scroll-padding-top: var(--ch-head, 60px); display: flex; flex-direction: column; gap: 3px; }
 .ch-loading { margin: auto; color: var(--on-bg-muted); font-size: 14px; }
 .ch-more { align-self: center; border: 0; border-radius: 14px; padding: 5px 12px; background: rgba(0, 0, 0, .22); color: #fff; font-size: 12.5px; margin-bottom: 6px; }
 .ch-empty { margin: auto; max-width: 280px; text-align: center; display: grid; justify-items: center; gap: 8px; padding: 18px; border-radius: 22px; background: rgba(0, 0, 0, .2); color: #fff; font-size: 13.5px; }
 :root[data-backdrop="light"] .ch-empty, :root[data-backdrop="light"] .ch-more { background: rgba(0, 0, 0, .06); color: var(--c-text); }
+.ch-wall::before { content: ''; flex: none; height: calc(var(--ch-head, 60px) + 10px); }
+/* Safari measures sticky offsets from inside the wall's padding, Chrome from its edge, so the wall has
+   no top padding (the spacer above makes room for the header) and both put the chip under the header. */
 .ch-day { align-self: center; margin: 8px 0 4px; position: sticky; top: calc(var(--ch-head, 60px) + 6px); z-index: 1; }
 .ch-day span { display: inline-block; font-size: 12px; font-weight: 600; color: #fff; background: rgba(0, 0, 0, .24); padding: 2px 10px; border-radius: 11px; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 :root[data-backdrop="light"] .ch-day span { color: var(--c-muted); background: rgba(255, 255, 255, .75); }
