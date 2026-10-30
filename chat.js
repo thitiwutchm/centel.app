@@ -606,7 +606,9 @@ async function chatSend(text) {
 const chatRec = { mr: null, stream: null, chunks: [], t0: 0, timer: null };
 const CHAT_REC_MAX = 60;
 
+// The mic shows only once a Mac with Whisper has checked in; otherwise a recording would never be heard.
 function chatCanRecord() {
+  if (!(chat.state && chat.state.bridge && chat.state.bridge.voice)) return false;
   return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 }
 
@@ -672,7 +674,9 @@ async function chatVoiceSend(room, blob) {
     if (r) r.pending = null;
     chat.speakRoom = null;
     chatRenderWall();
-    toast(e.message === 'bad_audio' ? 'เสียงสั้นหรือยาวเกินไป (ไม่เกิน 1 นาที)' : cloudErr(e));
+    if (e.message === 'no_voice' && chat.state) { chat.state.bridge.voice = false; chatRenderHead(); }
+    toast(e.message === 'bad_audio' ? 'เสียงสั้นหรือยาวเกินไป (ไม่เกิน 1 นาที)'
+      : e.message === 'no_voice' ? 'Mac ยังฟังเสียงไม่ได้ (ต้องติดตั้ง Whisper ก่อน) พิมพ์ถามแทนได้เลยครับ' : cloudErr(e));
   }
 }
 

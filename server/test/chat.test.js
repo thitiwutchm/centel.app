@@ -252,29 +252,41 @@ test('chat: a long poll wakes when a question arrives, and the stream delivers e
 test('chat: a spoken question is heard on the Mac, then answered', async () => {
   const id = crypto.randomUUID();
   const audio = crypto.randomBytes(4000).toString('base64');
+  const sttNext = async (wait) => fetch(API + `/api/bridge/next?wait=${wait}`, { headers: { authorization: `Bearer ${token}`, 'x-bridge-caps': 'stt' } });
+  // No Mac that can hear yet: no mic, and a recording is turned away instead of waiting forever.
+  assert.equal((await B('GET', '/chat/state')).bridge.voice, false);
+  const no = await B('POST', '/chat/voice', { id, room: 'ai', audio, mime: 'audio/mp4' });
+  assert.equal(no.status, 409);
+  assert.equal((await sttNext(0)).status, 204);
+  assert.equal((await B('GET', '/chat/state')).bridge.voice, true);
   assert.equal((await B('POST', '/chat/voice', { id, room: 'ai', audio: 'abc', mime: 'audio/mp4' })).status, 400);
   const v = await B('POST', '/chat/voice', { id, room: 'ai', audio, mime: 'audio/mp4' });
   assert.equal(v.ok, true);
   assert.equal((await B('GET', '/chat/state')).rooms.ai.pending, 'listening');
-  // A bridge that cannot transcribe does not get it.
-  assert.equal((await bridge(token, 'GET', '/next?wait=0')).status, 204);
-  const res = await fetch(API + '/api/bridge/next?wait=2', { headers: { authorization: `Bearer ${token}`, 'x-bridge-caps': 'stt' } });
-  const job = await res.json();
+  const job = await (await sttNext(2)).json();
   assert.equal(job.kind, 'transcribe');
   assert.equal(job.audio, audio);
   const done = await bridge(token, 'POST', `/jobs/${job.id}`, { text: '  งบอาหารเหลือ   เท่าไหร่ ' });
   assert.equal(done.message.id, id);
   assert.equal(done.message.text, 'งบอาหารเหลือ เท่าไหร่');
   assert.equal(done.message.action.type, 'voice');
-  const reply = await bridge(token, 'GET', '/next?wait=2');
+  const reply = await (await sttNext(2)).json();
   assert.equal(reply.kind, 'reply');
   assert.equal(reply.messages.at(-1).content, 'งบอาหารเหลือ เท่าไหร่');
-  await bridge(token, 'POST', `/jobs/${reply.id}`, { reply: 'ยังไม่ได้ตั้งงบครับ' });
+  await (await fetch(API + `/api/bridge/jobs/${reply.id}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-bridge-caps': 'stt', 'content-type': 'application/json' }, body: JSON.stringify({ reply: 'ยังไม่ได้ตั้งงบครับ' }) })).json();
   // Nothing heard: the room is told.
   await B('POST', '/chat/voice', { id: crypto.randomUUID(), room: 'ai', audio, mime: 'audio/webm' });
-  const j2 = await (await fetch(API + '/api/bridge/next?wait=2', { headers: { authorization: `Bearer ${token}`, 'x-bridge-caps': 'stt' } })).json();
-  await bridge(token, 'POST', `/jobs/${j2.id}`, { text: '' });
+  const j2 = await (await sttNext(2)).json();
+  await fetch(API + `/api/bridge/jobs/${j2.id}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-bridge-caps': 'stt', 'content-type': 'application/json' }, body: JSON.stringify({ text: '' }) });
   assert.match((await B('GET', '/chat/messages?room=ai')).messages.at(-1).text, /ฟังไม่ชัด/);
+  // The Mac comes back without Whisper: a waiting recording is dropped with a note, not left hanging.
+  await sttNext(0);
+  await B('POST', '/chat/voice', { id: crypto.randomUUID(), room: 'ai', audio, mime: 'audio/mp4' });
+  assert.equal((await bridge(token, 'GET', '/next?wait=0')).status, 204);
+  const st = await B('GET', '/chat/state');
+  assert.equal(st.rooms.ai.pending, null);
+  assert.equal(st.bridge.voice, false);
+  assert.match((await B('GET', '/chat/messages?room=ai')).messages.at(-1).text, /Whisper/);
 });
 
 test('chat: revoking the token stops the bridge', async () => {
