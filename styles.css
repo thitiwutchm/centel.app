@@ -1464,6 +1464,11 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
   position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
   padding: calc(var(--safe-top) + 6px) 12px 8px; border-bottom: 0.5px solid var(--c-line);
 }
+/* iOS 26 home-screen apps blur a band just under the status bar (about 22pt below the safe area),
+   which caught the title row; keep the header's content below it. */
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) { .ch-head { padding-top: calc(var(--safe-top) + 24px); } }
+}
 .ch-back { border: 0; background: none; color: var(--c-accent); padding: 4px; margin-left: -4px; display: grid; place-items: center; }
 .ch-title { flex: 1; min-width: 0; display: grid; }
 .ch-title b { font-size: 16px; }
