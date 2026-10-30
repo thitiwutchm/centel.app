@@ -272,6 +272,9 @@ async function openChat(room) {
   el.hidden = false;
   document.body.classList.add('ch-lock');
   requestAnimationFrame(() => el.classList.add('in'));
+  clearTimeout(chat.coverTimer);
+  chat.coverTimer = setTimeout(() => { if (chat.open) document.body.classList.add('ch-covered'); }, 280);
+  chatFitStart();
   try { history.replaceState(null, '', `#chat-${room}`); } catch (e) { /* file:// */ }
   chatRenderHead();
   chatBindScreen(el);
@@ -289,10 +292,45 @@ async function openChat(room) {
   chatMarkRead();
 }
 
+/* iOS keeps the layout viewport full height when the keyboard opens and scrolls the page instead,
+   so the room follows the visual viewport: it is exactly as tall as the visible area and the composer
+   sits flush on the keyboard. */
+function chatFit() {
+  const el = document.getElementById('chatScreen');
+  if (!el || !chat.open) return;
+  const head = el.querySelector('.ch-head');
+  if (head) el.style.setProperty('--ch-head', `${head.offsetHeight}px`);
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const wall = document.getElementById('chWall');
+  const atEnd = wall && wall.scrollHeight - wall.scrollTop - wall.clientHeight < 40;
+  const kb = window.innerHeight - vv.height > 120;
+  el.style.height = `${Math.round(vv.height)}px`;
+  el.style.top = `${Math.round(vv.offsetTop)}px`;
+  el.classList.toggle('kb', kb);
+  if (atEnd) wall.scrollTop = wall.scrollHeight;
+}
+
+function chatFitStart() {
+  chatFitStop();
+  chatFit();
+  const vv = window.visualViewport;
+  if (vv) { vv.addEventListener('resize', chatFit); vv.addEventListener('scroll', chatFit); }
+  window.addEventListener('resize', chatFit);
+}
+
+function chatFitStop() {
+  const vv = window.visualViewport;
+  if (vv) { vv.removeEventListener('resize', chatFit); vv.removeEventListener('scroll', chatFit); }
+  window.removeEventListener('resize', chatFit);
+}
+
 function closeChat() {
   const el = document.getElementById('chatScreen');
   chat.open = null;
-  document.body.classList.remove('ch-lock');
+  clearTimeout(chat.coverTimer);
+  chatFitStop();
+  document.body.classList.remove('ch-lock', 'ch-covered');
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
   if (el) { el.classList.remove('in'); setTimeout(() => { if (!chat.open) el.remove(); }, 260); }
   render();
