@@ -151,11 +151,17 @@ async function appUserOf(lineUserId) {
 // one, so it shows in both apps) and returns the reply for the group, or null to stay
 // silent when the line is not understood. The free reader goes first; the AI only reads
 // lines it finds no date in.
-export async function noteFromLine({ verb, text: text0 }, lineUserId, now = new Date()) {
+export async function noteFromLine(command, lineUserId, now = new Date()) {
   const who = await appUserOf(lineUserId);
   if (!who) {
     return { text: unknownText(lineUserId) };
   }
+  return saveNoteCommand(command, who, now);
+}
+
+// The same, for an app user typing the command in the in-app chat (chat.js):
+// who is { user_id, name }. Returns { text, noteId, note } or null.
+export async function saveNoteCommand({ verb, text: text0 }, who, now = new Date()) {
   let cmd = text0;
   if (!cmd) return null;
   // "เตือนก่อน 2 ชม." / "ล่วงหน้า 1 วัน" picks the reminder; on time otherwise.
@@ -173,7 +179,7 @@ export async function noteFromLine({ verb, text: text0 }, lineUserId, now = new 
      values ($1, $2, (select couple_id from couple_members where user_id = $2), $3, $4, $5, $6, $7, $8) returning *`,
     [crypto.randomUUID(), who.user_id, text, p.date || null, p.time || null, (p.time && p.endTime) || null, remind, remindAt(p.date, p.time, remind)]);
   console.log('line note', ai ? 'ai' : 'rules', p.date ? 'dated' : 'undated');
-  return { text: noteSummary(`รับทราบครับ ${verb}ให้ ${who.name} เรียบร้อยแล้ว ✅`, rows[0]), noteId: rows[0].id };
+  return { text: noteSummary(`รับทราบครับ ${verb}ให้ ${who.name} เรียบร้อยแล้ว ✅`, rows[0]), noteId: rows[0].id, note: rows[0] };
 }
 
 const unknownText = (lineUserId) => ['ยังไม่รู้ว่า LINE นี้เป็นใครในแอป Centel 🙏', '', 'ใส่ LINE ID นี้ในแอป หน้า บัญชี › คนในกลุ่ม LINE แล้วเลือกว่าเป็นตัวเองหรือคู่', lineUserId].join('\n');

@@ -785,6 +785,8 @@ function renderHome() {
       ${wallets}
     </div>
 
+    ${chatCard()}
+
     ${notesCard()}
 
     ${coupleCard()}

@@ -3,6 +3,7 @@ import { migrate, pool } from './db.js';
 import { loadUser, csrfGuard } from './auth.js';
 import routes from './routes.js';
 import { lineWebhook, startReminders } from './line.js';
+import chatRoutes, { bridgeRouter, startChatJobs } from './chat.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -15,6 +16,9 @@ app.get('/api/health', async (_req, res) => {
   await pool.query('select 1');
   res.json({ ok: true });
 });
+// The Mac bridge signs in with its own token (Authorization: Bearer), not the cookie.
+app.use('/api/bridge', bridgeRouter);
+app.use('/api/chat', loadUser, csrfGuard, chatRoutes);
 app.use('/api', loadUser, csrfGuard, routes);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 
@@ -35,3 +39,4 @@ const port = Number(process.env.PORT || 3000);
 await migrate();
 app.listen(port, () => console.log(`centel api on :${port}`));
 startReminders();
+startChatJobs();
