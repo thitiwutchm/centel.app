@@ -1475,6 +1475,20 @@ document.addEventListener('visibilitychange', () => {
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // The iPhone keeps a home-screen app alive for days, so a new version is looked for each time the
+  // app comes back to the screen, and once it is in, the page reloads the next time it is put away
+  // or brought back (never while someone is mid-way through a screen).
+  let fresh = false;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return; // first install: nothing old to replace
+    fresh = true;
+    if (document.hidden) location.reload();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (fresh) { location.reload(); return; }
+    if (!document.hidden) navigator.serviceWorker.getRegistration().then((r) => r && r.update()).catch(() => {});
+  });
 }
 
 render();
