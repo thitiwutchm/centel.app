@@ -1548,7 +1548,8 @@ function txnForm(t, preset = {}) {
         const x = r.result;
         if (x) {
           if (x.amount) $('#tAmount').value = x.amount;
-          if (x.date) { $('#tDate').value = x.date; paintDate(); }
+          // The transaction goes on the slip's own day; a date after today is a misread, so today stays.
+          if (x.date && x.date <= dateStr(new Date())) { $('#tDate').value = x.date; paintDate(); }
           if (x.merchant) $('#tMerchant').value = x.merchant;
           if (x.note && !$('#tNote').value) $('#tNote').value = x.note;
           if (x.reference) d.slipRef = x.reference;
@@ -1577,6 +1578,8 @@ function txnForm(t, preset = {}) {
           failed: '⚠️ อ่านสลิปไม่สำเร็จ แนบรูปไว้แล้ว กรุณากรอกข้อมูลเอง',
           skipped: '🧾 แนบรูปแล้ว (ยังไม่ได้เปิดการอ่านสลิปอัตโนมัติ)',
         }[r.status] || '🧾 แนบรูปแล้ว');
+        const onDay = $('#tDate').value;
+        if (onDay && onDay !== dateStr(new Date())) $('#rcStatus').insertAdjacentHTML('beforeend', `<p class="hint rc-status">📅 วันที่ตามสลิป ${thDate(onDay)} รายการจะอยู่ในวันนั้น ไม่ใช่วันนี้ แก้วันที่ได้ด้านบน</p>`);
         if (billHit) $('#rcStatus').insertAdjacentHTML('beforeend', `<p class="hint rc-status">🧾 ยอดตรงกับบิล ${esc(billHit.bill.name)} (${thMonthYear(billHit.ym)}) จะตัดบิลนี้ให้เมื่อบันทึก</p>`);
       } catch (e) {
         status('❌ อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
