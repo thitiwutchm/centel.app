@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { parseNote } from '../src/noteparse.js';
 
 const API = process.env.API_URL || 'http://localhost:3999';
 const run = crypto.randomBytes(4).toString('hex');
@@ -194,6 +195,16 @@ test('chat: questions go to the Mac and the answer comes back, with a note', asy
   assert.equal(j0.status, 200);
   assert.match(j0.messages.at(-1).content, /สวัสดีครับ/);
   await bridge(token, 'POST', `/jobs/${j0.id}`, { reply: 'สวัสดีครับ' });
+
+  // A date written in the question wins when the model's note is a day out.
+  await send(A, 'couple', '@ผู้ช่วย แจ้งเตือน วันที่ 2 November มีนัดล้างแอร์ 9:00 am แจ้งเตือนล่วงหน้า 1 วัน');
+  const jd = await bridge(token, 'GET', '/next?wait=2');
+  const off = await bridge(token, 'POST', `/jobs/${jd.id}`, {
+    reply: '<centel-note>{"text": "นัดล้างแอร์", "date": "2026-11-01", "time": "08:00", "remind": 1440}</centel-note>',
+  });
+  assert.equal(off.message.action.note.date, parseNote('วันที่ 2 November').date);
+  assert.match(off.message.action.note.date, /-11-02$/);
+  assert.equal(off.message.action.note.time, '09:00');
 
   // In the couple room: @ผู้ช่วย asks, and a failed answer says so.
   await send(A, 'couple', '@ผู้ช่วย สรุปรายจ่ายเดือนนี้');
