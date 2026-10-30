@@ -155,6 +155,15 @@ test('chat: questions go to the Mac and the answer comes back, with a note', asy
   assert.equal((await A('GET', '/chat/messages?room=ai')).messages.length, 0);
   assert.equal((await bridge(token, 'POST', `/jobs/${job.id}`, { reply: 'again' })).status, 404);
 
+  // A bare @ผู้ช่วย followed by the question still asks.
+  await send(A, 'couple', '@ผู้ช่วย');
+  assert.equal((await bridge(token, 'GET', '/next?wait=0')).status, 204);
+  await send(A, 'couple', 'สวัสดีครับ');
+  const j0 = await bridge(token, 'GET', '/next?wait=2');
+  assert.equal(j0.status, 200);
+  assert.match(j0.messages.at(-1).content, /สวัสดีครับ/);
+  await bridge(token, 'POST', `/jobs/${j0.id}`, { reply: 'สวัสดีครับ' });
+
   // In the couple room: @ผู้ช่วย asks, and a failed answer says so.
   await send(A, 'couple', '@ผู้ช่วย สรุปรายจ่ายเดือนนี้');
   const j2 = await bridge(token, 'GET', '/next?wait=2');

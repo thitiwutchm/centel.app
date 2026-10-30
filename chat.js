@@ -273,7 +273,16 @@ async function openChat(room) {
   document.body.classList.add('ch-lock');
   requestAnimationFrame(() => el.classList.add('in'));
   clearTimeout(chat.coverTimer);
-  chat.coverTimer = setTimeout(() => { if (chat.open) document.body.classList.add('ch-covered'); }, 280);
+  // After the slide: hide the app underneath and switch the frosted bars on. iOS paints what is in
+  // the bars while the room is still moving as a blurry layer and never repaints it, so the blur only
+  // starts once the room has stopped.
+  chat.coverTimer = setTimeout(() => {
+    if (!chat.open) return;
+    document.body.classList.add('ch-covered');
+    el.classList.add('settled');
+    const head = el.querySelector('.ch-head');
+    if (head) { head.innerHTML = head.innerHTML; chatRenderHead(); }
+  }, 300);
   chatFitStart();
   try { history.replaceState(null, '', `#chat-${room}`); } catch (e) { /* file:// */ }
   chatRenderHead();
@@ -332,7 +341,7 @@ function closeChat() {
   chatFitStop();
   document.body.classList.remove('ch-lock', 'ch-covered');
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
-  if (el) { el.classList.remove('in'); setTimeout(() => { if (!chat.open) el.remove(); }, 260); }
+  if (el) { el.classList.remove('in', 'settled'); setTimeout(() => { if (!chat.open) el.remove(); }, 260); }
   render();
 }
 

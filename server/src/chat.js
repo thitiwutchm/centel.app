@@ -210,8 +210,15 @@ router.post('/messages', rateLimit(120, 60000), wrap(async (req, res) => {
   notify(me, room, m, room === 'couple' ? me.name : AI_NAME);
 
   // The assistant's part.
-  const called = room === 'ai' || replyAi || MENTION.test(text);
   const plain = text.replace(MENTIONS, ' ').replace(/\s+/g, ' ').trim();
+  let called = room === 'ai' || replyAi || MENTION.test(text);
+  // A bare "@ผู้ช่วย" sent on its own calls the assistant for the sender's next message.
+  if (!called) {
+    const prev = (await pool.query(
+      `select text, sender_id from chat_messages where ${roomSql(room)} and id <> $2 and created_at > now() - interval '5 minutes'
+       order by created_at desc limit 1`, [roomKey(me, room), m.id])).rows[0];
+    called = !!prev && prev.sender_id === me.id && MENTION.test(prev.text) && !prev.text.replace(MENTIONS, '').trim();
+  }
   const cmd = noteCommand({ text: plain });
   let assistant = null;
   if (cmd && cmd.text) {

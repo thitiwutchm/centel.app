@@ -1451,6 +1451,8 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 }
 :root[data-backdrop="light"] .ch-screen { background: radial-gradient(rgba(0, 0, 0, .045) 1.3px, transparent 1.5px) 0 0 / 20px 20px, linear-gradient(165deg, color-mix(in srgb, var(--bg) 88%, var(--c-accent)), var(--bg) 70%); }
 .ch-screen.in { transform: none; }
+.ch-screen.settled { transition: none; }
+.ch-screen:not(.settled) .ch-head, .ch-screen:not(.settled) .ch-bottom { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .ch-head {
   position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
   padding: calc(var(--safe-top) + 6px) 12px 8px; border-bottom: 0.5px solid var(--c-line);
