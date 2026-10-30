@@ -78,10 +78,36 @@ function chatConnect() {
     chatEvent(ev);
   };
   es.addEventListener('ping', () => { chat.lastEvent = Date.now(); });
-  es.onopen = () => { chat.lastEvent = Date.now(); };
+  es.onopen = () => { chat.lastEvent = Date.now(); chatView(); };
   es.onerror = () => {
     if (es.readyState === 2) { chat.es = null; setTimeout(chatConnect, 5000); }
   };
+}
+
+// Tell the server whether the app is on screen: when it is, new messages show as a banner here
+// instead of a push. Repeated every minute while visible; a hidden or closed app gets pushes.
+function chatView() {
+  if (!chatReady()) return;
+  const visible = document.visibilityState === 'visible';
+  fetch('/api/chat/view', {
+    method: 'POST', credentials: 'same-origin', keepalive: true,
+    headers: { 'content-type': 'application/json', 'x-centel': '1' },
+    body: JSON.stringify({ visible }),
+  }).catch(() => {});
+}
+
+// A message for a room that is not open while the app is on screen.
+function chatBanner(room, m) {
+  document.querySelector('.ch-banner')?.remove();
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'ch-banner';
+  el.innerHTML = `${room === 'couple' ? chatGroupAvatar('ch-grp sm') : `<span class="ch-av-wrap sm">${chatAvatar('ai', 'ch-av sm')}</span>`}
+    <span><b>${esc(chatName(m))}</b><span translate="no">${esc(chatPlain(m).slice(0, 120))}</span></span>`;
+  el.addEventListener('click', () => { el.remove(); openChat(room); });
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('in'));
+  setTimeout(() => { el.classList.remove('in'); setTimeout(() => el.remove(), 300); }, 4500);
 }
 
 function chatDisconnect() {
@@ -112,7 +138,9 @@ function chatEvent(ev) {
       if (!st.last || String(m.at) >= String(st.last.at)) st.last = m;
       const mine = m.senderId === cloud.user.id && !m.ai;
       const seen = chat.open === ev.room && document.visibilityState === 'visible';
-      if (!mine && !seen && !m.editedAt && !m.deleted && !m.reactionsOnly) st.unread = (st.unread || 0) + (chatIsNew(ev.room, m) ? 1 : 0);
+      const fresh = !mine && !seen && !m.editedAt && !m.deleted && !m.reactionsOnly && chatIsNew(ev.room, m);
+      if (fresh) st.unread = (st.unread || 0) + 1;
+      if (fresh && chat.open !== ev.room && document.visibilityState === 'visible') chatBanner(ev.room, m);
       if (m.ai) st.pending = null;
     }
     if (chat.open === ev.room) { chatRenderWall(); chatMarkRead(); }
@@ -793,7 +821,9 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-chat-open]');
   if (b) openChat(b.dataset.chatOpen);
 });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chatCatchUp(); });
+document.addEventListener('visibilitychange', () => { chatView(); if (document.visibilityState === 'visible') chatCatchUp(); });
+window.addEventListener('pagehide', chatView);
+setInterval(() => { if (document.visibilityState === 'visible') chatView(); }, 60000);
 setInterval(() => { if (document.visibilityState === 'visible' && chatReady() && Date.now() - chat.lastEvent > 50000) chatCatchUp(); }, 20000);
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => {

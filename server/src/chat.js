@@ -71,6 +71,12 @@ const msgOut = (m) => ({
 
 const streams = new Map(); // user id → Set of open SSE responses
 const isOpen = (id) => (streams.get(id)?.size || 0) > 0;
+// Whether the app is on screen, as each client reports it (and repeats every minute while visible).
+// A phone that went to the background can keep its stream open for a while, so an open stream alone
+// does not mean the person would see a new message.
+const views = new Map(); // user id → { visible, at }
+const VIEW_FRESH_MS = Number(process.env.CHAT_VIEW_FRESH_MS || 90000);
+const onScreen = (id) => { const v = views.get(id); return !!v && v.visible && isOpen(id) && Date.now() - v.at < VIEW_FRESH_MS; };
 function emit(userIds, ev) {
   const data = `data: ${JSON.stringify(ev)}\n\n`;
   for (const id of new Set(userIds)) for (const res of streams.get(id) || []) res.write(data);
@@ -187,7 +193,8 @@ async function addMessage({ id = crypto.randomUUID(), room, me, senderId = null,
 
 // A push to whoever in the room has no app open (the sender never gets one).
 function notify(me, room, m, title) {
-  const to = audience(me, room).filter((id) => id !== m.senderId && !isOpen(id));
+  // Everyone else gets a push unless the app is on their screen; then the app shows its own banner.
+  const to = audience(me, room).filter((id) => id !== m.senderId && !onScreen(id));
   if (!to.length) return;
   const plain = m.ai ? m.text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s+/gm, '') : m.text;
   const body = plain.length > 140 ? `${plain.slice(0, 140)}…` : plain;
@@ -310,6 +317,11 @@ router.post('/read', wrap(async (req, res) => {
     [me.id, room]);
   emit(audience(me, room), { type: 'read', room, userId: me.id, at: rows[0].last_read });
   res.json({ at: rows[0].last_read });
+}));
+
+router.post('/view', wrap(async (req, res) => {
+  views.set(req.user.id, { visible: !!req.body?.visible, at: Date.now() });
+  res.json({ ok: true });
 }));
 
 router.post('/typing', wrap(async (req, res) => {

@@ -85,6 +85,11 @@ test('chat: the couple can rename their room', async () => {
   assert.equal((await A('GET', '/chat/state')).rooms.couple.name, null);
 });
 
+test('chat: the app reports whether it is on screen', async () => {
+  assert.equal((await A('POST', '/chat/view', { visible: true })).ok, true);
+  assert.equal((await A('POST', '/chat/view', { visible: false })).ok, true);
+});
+
 test('chat: edit, delete and reactions', async () => {
   const { message: m } = await send(A, 'couple', 'ซื้อนม');
   assert.equal((await B('PUT', `/chat/messages/${m.id}`, { text: 'evil' })).status, 403);
