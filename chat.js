@@ -359,11 +359,24 @@ function chatName(m) {
   return m.senderId === cloud.user.id ? (cloud.user.nickname || cloud.user.name) : partnerName();
 }
 
-// Text the person typed: escaped, newlines kept, @ผู้ช่วย and links highlighted.
-function chatText(s) {
-  return esc(s)
+// Text the person typed: escaped, newlines kept, @ผู้ช่วย and links highlighted. The assistant
+// writes a little Markdown: **bold**, `code`, # headings and - bullets are shown, not printed.
+function chatText(s, ai) {
+  let h = esc(s);
+  if (ai) {
+    h = h.replace(/^#{1,6}\s+(.+)$/gm, '<b>$1</b>')
+      .replace(/^\s*[-*]\s+/gm, '• ')
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  }
+  return h
     .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
     .replace(/@(ผู้ช่วย|ai|hermes|bot)/gi, '<span class="ch-mention">@$1</span>');
+}
+
+// One line of a message for a quote or a reply bar, without Markdown marks.
+function chatPlain(m) {
+  return m.ai ? m.text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s+/gm, '').replace(/`/g, '') : m.text;
 }
 
 function chatDayLabel(ds) {
@@ -410,14 +423,14 @@ function chatBubble(m, r, first, last) {
   const reacts = Object.entries(m.reactions || {}).reduce((acc, [uid, e]) => ((acc[e] = acc[e] || []).push(uid), acc), {});
   const reactHtml = Object.keys(reacts).length ? `<div class="ch-reacts">${Object.entries(reacts).map(([e, ids]) =>
     `<button type="button" class="ch-react${ids.includes(cloud.user.id) ? ' on' : ''}" data-chat-react="${esc(m.id)}" data-emoji="${e}">${e}${ids.length > 1 ? ` ${ids.length}` : ''}</button>`).join('')}</div>` : '';
-  const body = m.deleted ? '<i class="ch-del">ข้อความถูกลบ</i>' : `<span class="ch-txt" translate="no">${chatText(m.text)}</span>`;
+  const body = m.deleted ? '<i class="ch-del">ข้อความถูกลบ</i>' : `<span class="ch-txt" translate="no">${chatText(m.text, m.ai)}</span>`;
   const action = m.action && m.action.type === 'note' ? chatNoteCard(m.action.note) : '';
   return `
     <div class="ch-msg ${kind}${last ? ' last' : ''}${first ? ' first' : ''}" data-mid="${esc(m.id)}">
       ${mine ? '' : `<span class="ch-av-slot">${last ? chatAvatar(kind === 'ai' ? 'ai' : 'partner', 'ch-av sm') : ''}</span>`}
       <div class="ch-b">
         ${showName ? `<div class="ch-who ${kind}">${esc(chatName(m))}${m.ai ? ' <span class="ch-ai-tag">AI</span>' : ''}</div>` : ''}
-        ${q ? `<button type="button" class="ch-quote" data-chat-jump="${esc(q.id)}"><b>${esc(chatName(q))}</b><span translate="no">${esc(q.deleted ? 'ข้อความถูกลบ' : q.text.slice(0, 80))}</span></button>` : ''}
+        ${q ? `<button type="button" class="ch-quote" data-chat-jump="${esc(q.id)}"><b>${esc(chatName(q))}</b><span translate="no">${esc(q.deleted ? 'ข้อความถูกลบ' : chatPlain(q).slice(0, 80))}</span></button>` : ''}
         ${body}${action}
         <span class="ch-meta">${m.editedAt && !m.deleted ? 'แก้ไขแล้ว ' : ''}${chatTime(m.at)}${chatTicks(m, r)}</span>
         ${reactHtml}
@@ -505,7 +518,7 @@ function chatSetReply(id) {
   const r = chat.rooms[chat.open];
   const m = id && r && r.msgs.find((x) => x.id === id);
   bar.hidden = !m;
-  bar.innerHTML = m ? `<div><b>ตอบกลับ ${esc(chatName(m))}</b><span translate="no">${esc(m.text.slice(0, 90))}</span></div><button type="button" data-chat="unreply" aria-label="ยกเลิกการตอบกลับ">✕</button>` : '';
+  bar.innerHTML = m ? `<div><b>ตอบกลับ ${esc(chatName(m))}</b><span translate="no">${esc(chatPlain(m).slice(0, 90))}</span></div><button type="button" data-chat="unreply" aria-label="ยกเลิกการตอบกลับ">✕</button>` : '';
   if (m) document.getElementById('chInput').focus();
 }
 
