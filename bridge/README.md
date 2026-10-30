@@ -26,6 +26,19 @@
 ตั้ง Mac ไม่ให้หลับตอนเสียบสายชาร์จ (System Settings › Battery/Energy) ไม่อย่างนั้นผู้ช่วยจะขึ้นว่าออฟไลน์
 คำถามที่ค้างจะรอ 30 นาที ส่วนคำสั่ง ทำนัด / เตือน / จด ทำงานบนเซิร์ฟเวอร์เสมอแม้ Mac ปิด
 
+## คุยด้วยเสียง (ไม่บังคับ)
+
+ปุ่มไมค์ในห้องผู้ช่วยอัดเสียงบน iPhone แล้วให้ Mac แปลงเป็นข้อความด้วย [whisper.cpp](https://github.com/ggml-org/whisper.cpp) ก่อนส่งให้ผู้ช่วย
+คำตอบจะถูกอ่านออกเสียงบน iPhone
+
+```
+brew install whisper-cpp ffmpeg
+curl -L -o ~/.centel-bridge/ggml-large-v3-turbo.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+launchctl kickstart -k gui/$(id -u)/app.centel.bridge
+```
+log จะขึ้นว่า `voice on` ถ้าไม่มี whisper ตัวเชื่อมจะรับเฉพาะข้อความที่พิมพ์
+
 ## ตั้งค่า (`~/.centel-bridge.env`)
 
 | ตัวแปร | ค่าเริ่มต้น | |
@@ -34,6 +47,8 @@
 | `HERMES_URL` | `http://127.0.0.1:8642/v1` | ใช้ Ollama ตรงๆ ได้: `http://127.0.0.1:11434/v1` |
 | `HERMES_KEY` | | `API_SERVER_KEY` ของ Hermes |
 | `HERMES_MODEL` | `hermes-agent` | Ollama: เช่น `hermes3` |
+| `WHISPER_MODEL` | `~/.centel-bridge/ggml-large-v3-turbo.bin` | ไฟล์โมเดล whisper.cpp (เล็กกว่า: `ggml-small.bin`) |
+| `WHISPER_LANG` | `auto` | หรือ `th` ถ้าพูดไทยอย่างเดียว |
 
 ความปลอดภัย: ข้อความในแชทถูกส่งให้ Hermes บน Mac ควรปิด toolset ที่สั่ง terminal / แก้ไฟล์ของ Hermes
 สำหรับงานนี้ (`hermes tools`) เพราะคนในแชทไม่ควรสั่งเครื่อง Mac ได้

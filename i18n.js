@@ -454,7 +454,7 @@ const I18N_EN = {
   'แชท': 'Chat', 'บ้านเรา': 'Our home', 'แก้ชื่อห้อง': 'Rename room', 'ชื่อห้อง': 'Room name', 'ผู้ช่วย Centel': 'Centel assistant', 'ผู้ช่วย': 'Assistant', 'ข้อความ': 'Message',
   'พิมพ์ข้อความ': 'Type a message', 'ส่ง': 'Send', 'กลับ': 'Back', 'ตอบกลับ': 'Reply', 'คัดลอก': 'Copy', 'คัดลอกแล้ว': 'Copied',
   'ผู้ช่วยออนไลน์': 'Assistant online', 'ผู้ช่วยออฟไลน์': 'Assistant offline', 'ยังไม่ได้เชื่อม Mac': 'Mac not connected',
-  'ผู้ช่วยกำลังพิมพ์…': 'Assistant is typing…', '{0} กำลังพิมพ์…': '{0} is typing…', 'ผู้ช่วยออฟไลน์ · จะตอบเมื่อ Mac เปิด': 'Assistant offline · answers when the Mac is on',
+  'ผู้ช่วยกำลังพิมพ์…': 'Assistant is typing…', 'ผู้ช่วยกำลังฟังเสียง…': 'Assistant is listening…', 'พูด': 'Speak', 'แตะ ↑ เพื่อส่ง': 'Tap ↑ to send', 'อ่านออกเสียง': 'Read aloud', 'ข้อความเสียง': 'Voice message', 'อัดเสียงไม่สำเร็จ': 'Recording failed', 'เปิดไมค์ไม่ได้ ลองอนุญาตไมโครโฟนให้แอปก่อน': 'Could not use the mic. Allow microphone access first', 'เสียงสั้นหรือยาวเกินไป (ไม่เกิน 1 นาที)': 'Too short or too long (1 minute max)', '{0} กำลังพิมพ์…': '{0} is typing…', 'ผู้ช่วยออฟไลน์ · จะตอบเมื่อ Mac เปิด': 'Assistant offline · answers when the Mac is on',
   'ข้อความถูกลบ': 'Message deleted', 'แก้ไขแล้ว': 'edited', 'ดูข้อความก่อนหน้า': 'Earlier messages', 'กำลังโหลด…': 'Loading…',
   'เรื่อง': 'What', 'เมื่อ': 'When', 'เสร็จแล้ว': 'Done', 'ไม่ระบุวัน': 'No date', 'ลบแล้ว': 'Deleted', 'เปิดดู / แก้ไข': 'Open / edit',
   'คุณ:': 'You:', 'ตอบกลับ {0}': 'Reply to {0}', 'แก้ไขข้อความ': 'Edit message', 'ยกเลิกการตอบกลับ': 'Cancel reply', 'ยกเลิกการแก้ไข': 'Cancel edit',

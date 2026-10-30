@@ -9,13 +9,18 @@ It only makes outgoing requests, so nothing on the Mac is opened to the internet
   3. posts the answer back to /api/bridge/jobs/<id>.
 Any OpenAI-compatible server works too (Ollama: HERMES_URL=http://127.0.0.1:11434/v1,
 HERMES_MODEL=hermes3). Settings come from the environment or ~/.centel-bridge.env.
+Voice questions are turned into text on this Mac with whisper.cpp (brew install whisper-cpp
+ffmpeg, plus a model file in WHISPER_MODEL); without them the bridge only takes typed questions.
 Python 3.8+ standard library only.
 """
 
 import json
 import os
 import platform
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -42,6 +47,19 @@ HERMES_KEY = os.environ.get("HERMES_KEY", "")
 HERMES_MODEL = os.environ.get("HERMES_MODEL", "hermes-agent")
 HERMES_TIMEOUT = int(os.environ.get("HERMES_TIMEOUT", "240"))
 INFO = f"{platform.node()[:40]} · {HERMES_MODEL}"
+WHISPER_CMD = os.environ.get("WHISPER_CMD", "whisper-cli")
+WHISPER_MODEL = os.path.expanduser(os.environ.get("WHISPER_MODEL", "~/.centel-bridge/ggml-large-v3-turbo.bin"))
+WHISPER_LANG = os.environ.get("WHISPER_LANG", "auto")
+# launchd starts with a bare PATH, so look where Homebrew puts things too.
+TOOL_PATH = os.pathsep.join([os.environ.get("PATH", ""), "/opt/homebrew/bin", "/usr/local/bin"])
+
+
+def tool(name):
+    return shutil.which(name, path=TOOL_PATH)
+
+
+def can_transcribe():
+    return bool(tool(WHISPER_CMD) and tool("ffmpeg") and os.path.exists(WHISPER_MODEL))
 
 
 def log(*a):
@@ -61,8 +79,10 @@ def call(method, url, body=None, headers=None, timeout=60):
 
 
 def centel(method, path, body=None, timeout=60):
-    return call(method, CENTEL_URL + path, body,
-                {"authorization": f"Bearer {TOKEN}", "x-bridge-info": INFO}, timeout)
+    headers = {"authorization": f"Bearer {TOKEN}", "x-bridge-info": INFO}
+    if STT:
+        headers["x-bridge-caps"] = "stt"
+    return call(method, CENTEL_URL + path, body, headers, timeout)
 
 
 def ask_hermes(messages):
@@ -73,16 +93,45 @@ def ask_hermes(messages):
     return (out["choices"][0]["message"].get("content") or "").strip()
 
 
+def transcribe(job):
+    """Recording (m4a/webm from the phone) → 16 kHz wav → whisper.cpp → text."""
+    import base64
+    with tempfile.TemporaryDirectory() as d:
+        src, wav = os.path.join(d, "in.audio"), os.path.join(d, "in.wav")
+        with open(src, "wb") as f:
+            f.write(base64.b64decode(job["audio"]))
+        subprocess.run([tool("ffmpeg"), "-loglevel", "error", "-y", "-i", src, "-ar", "16000", "-ac", "1", wav],
+                       check=True, timeout=60)
+        out = subprocess.run([tool(WHISPER_CMD), "-m", WHISPER_MODEL, "-l", WHISPER_LANG, "-nt", "-np", "-f", wav],
+                             check=True, timeout=180, capture_output=True, text=True)
+        return " ".join(line.strip() for line in out.stdout.splitlines() if line.strip())
+
+
+STT = False
+
+
 def main():
+    global STT
     if not TOKEN.startswith("cb_"):
         sys.exit(f"Set CENTEL_TOKEN (from Centel › บัญชี › ผู้ช่วย AI) in {ENV_FILE}")
-    log(f"centel bridge → {CENTEL_URL}, Hermes at {HERMES_URL} ({HERMES_MODEL})")
+    STT = can_transcribe()
+    log(f"centel bridge → {CENTEL_URL}, Hermes at {HERMES_URL} ({HERMES_MODEL}), voice {'on' if STT else 'off'}")
     backoff = 2
     while True:
         try:
             status, job = centel("GET", "/api/bridge/next?wait=25", timeout=45)
             backoff = 2
             if status == 204 or not job:
+                continue
+            if job.get("kind") == "transcribe":
+                log("voice", job["id"][:8])
+                try:
+                    text = transcribe(job)
+                    centel("POST", f"/api/bridge/jobs/{job['id']}", {"text": text})
+                    log("heard", job["id"][:8], f"{len(text)} chars")
+                except Exception as e:
+                    log("whisper failed:", e)
+                    centel("POST", f"/api/bridge/jobs/{job['id']}", {"error": str(e)[:300]})
                 continue
             log("question", job["id"][:8])
             try:
