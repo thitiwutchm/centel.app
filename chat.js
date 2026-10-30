@@ -134,6 +134,8 @@ function chatEvent(ev) {
     chatUpsert(ev.room, m);
     const room = chat.rooms[ev.room];
     if (m.ai && room) room.pending = null;
+    // A spoken question gets its answer read out.
+    if (m.ai && ev.room === chat.speakRoom && chat.open === ev.room && !m.editedAt && !m.deleted) { chat.speakRoom = null; chatSpeak(chatPlain(m)); }
     if (st) {
       if (!st.last || String(m.at) >= String(st.last.at)) st.last = m;
       const mine = m.senderId === cloud.user.id && !m.ai;
@@ -303,6 +305,8 @@ async function openChat(room) {
       <div class="ch-replybar" id="chReplyBar" hidden></div>
       <form class="ch-composer" id="chForm" autocomplete="off">
         <textarea id="chInput" rows="1" placeholder="ข้อความ" aria-label="พิมพ์ข้อความ" enterkeyhint="send"></textarea>
+        <div class="ch-rec" id="chRec" hidden><button type="button" class="ch-rec-x" data-chat="rec-cancel" aria-label="ยกเลิก">✕</button><i></i><span id="chRecTime">0:00</span><small>แตะ ↑ เพื่อส่ง</small></div>
+        ${room === 'ai' && chatCanRecord() ? '<button type="button" class="ch-mic" data-chat="rec" aria-label="พูด"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>' : ''}
         <button type="submit" class="ch-send" aria-label="ส่ง"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </form>
     </div>`;
@@ -410,6 +414,8 @@ function chatRename(btn) {
 
 function closeChat() {
   const el = document.getElementById('chatScreen');
+  chatRecStop(false);
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
   chat.open = null;
   clearTimeout(chat.coverTimer);
   chatFitStop();
@@ -426,6 +432,7 @@ function chatStatusText() {
   const online = chat.state && chat.state.bridge && chat.state.bridge.online;
   const set = chat.state && chat.state.bridge && chat.state.bridge.set;
   if (r && r.pending === 'typing') return `<span class="ch-st typing">${CHAT_AI_NAME}กำลังพิมพ์…</span>`;
+  if (r && r.pending === 'listening' && online) return `<span class="ch-st typing">${CHAT_AI_NAME}กำลังฟังเสียง…</span>`;
   if (r && r.pending && !online) return `<span class="ch-st warn">${CHAT_AI_NAME}ออฟไลน์ · จะตอบเมื่อ Mac เปิด</span>`;
   if (room === 'couple' && Date.now() - chat.partnerTyping < 5000) return `<span class="ch-st typing">${esc(partnerName())} กำลังพิมพ์…</span>`;
   const ai = !set ? 'ยังไม่ได้เชื่อม Mac' : online ? 'ผู้ช่วยออนไลน์' : 'ผู้ช่วยออฟไลน์';
@@ -506,7 +513,8 @@ function chatBubble(m, r, first, last) {
   const reacts = Object.entries(m.reactions || {}).reduce((acc, [uid, e]) => ((acc[e] = acc[e] || []).push(uid), acc), {});
   const reactHtml = Object.keys(reacts).length ? `<div class="ch-reacts">${Object.entries(reacts).map(([e, ids]) =>
     `<button type="button" class="ch-react${ids.includes(cloud.user.id) ? ' on' : ''}" data-chat-react="${esc(m.id)}" data-emoji="${e}">${e}${ids.length > 1 ? ` ${ids.length}` : ''}</button>`).join('')}</div>` : '';
-  const body = m.deleted ? '<i class="ch-del">ข้อความถูกลบ</i>' : `<span class="ch-txt" translate="no">${chatText(m.text, m.ai)}</span>`;
+  const voice = m.action && m.action.type === 'voice' ? '<span class="ch-voice-ic" aria-label="ข้อความเสียง">🎤</span>' : '';
+  const body = m.deleted ? '<i class="ch-del">ข้อความถูกลบ</i>' : `<span class="ch-txt" translate="no">${voice}${chatText(m.text, m.ai)}</span>`;
   const action = m.action && m.action.type === 'note' ? chatNoteCard(m.action.note) : '';
   return `
     <div class="ch-msg ${kind}${last ? ' last' : ''}${first ? ' first' : ''}" data-mid="${esc(m.id)}">
@@ -593,6 +601,95 @@ async function chatSend(text) {
   chatRenderWall(true);
 }
 
+/* ---------- Voice: record a question, hear the answer ---------- */
+
+const chatRec = { mr: null, stream: null, chunks: [], t0: 0, timer: null };
+const CHAT_REC_MAX = 60;
+
+function chatCanRecord() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+}
+
+async function chatRecStart() {
+  if (chatRec.mr) return;
+  // iPhone only lets a page speak after a tap, so the first (silent) words are said here.
+  if ('speechSynthesis' in window) { try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) { /* ignore */ } }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { toast('เปิดไมค์ไม่ได้ ลองอนุญาตไมโครโฟนให้แอปก่อน'); return; }
+  const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+  const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  Object.assign(chatRec, { mr, stream, chunks: [], t0: Date.now() });
+  mr.ondataavailable = (e) => { if (e.data && e.data.size) chatRec.chunks.push(e.data); };
+  mr.start();
+  const form = document.getElementById('chForm');
+  form.classList.add('rec');
+  document.getElementById('chRec').hidden = false;
+  const tick = () => {
+    const sec = Math.floor((Date.now() - chatRec.t0) / 1000);
+    const t = document.getElementById('chRecTime');
+    if (t) t.textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    if (sec >= CHAT_REC_MAX) chatRecStop(true);
+  };
+  chatRec.timer = setInterval(tick, 250);
+}
+
+function chatRecStop(send) {
+  const { mr, stream } = chatRec;
+  if (!mr) return;
+  clearInterval(chatRec.timer);
+  const room = chat.open;
+  mr.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    const blob = new Blob(chatRec.chunks, { type: mr.mimeType || 'audio/mp4' });
+    chatRec.chunks = [];
+    if (send && room && Date.now() - chatRec.t0 > 700) chatVoiceSend(room, blob);
+  };
+  chatRec.mr = null;
+  try { mr.stop(); } catch (e) { /* already stopped */ }
+  const form = document.getElementById('chForm');
+  if (form) form.classList.remove('rec');
+  const rec = document.getElementById('chRec');
+  if (rec) rec.hidden = true;
+}
+
+async function chatVoiceSend(room, blob) {
+  const audio = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  }).catch(() => '');
+  if (!audio) { toast('อัดเสียงไม่สำเร็จ'); return; }
+  const r = chat.rooms[room];
+  if (r) r.pending = 'listening';
+  chat.speakRoom = room;
+  chatRenderWall(true);
+  chatRenderHead();
+  try {
+    const out = await api('POST', '/chat/voice', { id: crypto.randomUUID(), room, audio, mime: blob.type || 'audio/mp4', context: chatContext('', room) });
+    if (!out.online) { if (chat.state) chat.state.bridge.online = false; chatRenderHead(); }
+  } catch (e) {
+    if (r) r.pending = null;
+    chat.speakRoom = null;
+    chatRenderWall();
+    toast(e.message === 'bad_audio' ? 'เสียงสั้นหรือยาวเกินไป (ไม่เกิน 1 นาที)' : cloudErr(e));
+  }
+}
+
+// Read text aloud in Thai or English, whichever it mostly is.
+function chatSpeak(text) {
+  if (!('speechSynthesis' in window) || !text) return;
+  const clean = text.replace(/[*_`#>]/g, '').replace(/https?:\/\/\S+/g, '').slice(0, 1200);
+  const thai = (clean.match(/[\u0E00-\u0E7F]/g) || []).length > clean.length * 0.2;
+  const u = new SpeechSynthesisUtterance(clean);
+  u.lang = thai ? 'th-TH' : 'en-US';
+  const voice = speechSynthesis.getVoices().find((v) => v.lang && v.lang.replace('_', '-').startsWith(thai ? 'th' : 'en'));
+  if (voice) u.voice = voice;
+  u.rate = thai ? 1 : 1.02;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+
 function chatSetReply(id) {
   chat.reply = id;
   if (id) chat.edit = null;
@@ -635,6 +732,7 @@ function chatMenu(id) {
     <div class="ch-menu-emo">${emojis.map((e) => `<button type="button" data-menu-react="${e}" class="${m.reactions && m.reactions[cloud.user.id] === e ? 'on' : ''}">${e}</button>`).join('')}</div>
     <button type="button" data-menu="reply">ตอบกลับ</button>
     <button type="button" data-menu="copy">คัดลอก</button>
+    ${m.ai && 'speechSynthesis' in window ? '<button type="button" data-menu="speak">อ่านออกเสียง</button>' : ''}
     ${mine ? '<button type="button" data-menu="edit">แก้ไข</button>' : ''}
     ${canDel ? '<button type="button" data-menu="delete" class="bad">ลบ</button>' : ''}
   </div>`;
@@ -649,6 +747,7 @@ function chatMenu(id) {
     const a = b.dataset.menu;
     if (a === 'reply') chatSetReply(id);
     else if (a === 'edit') chatSetEdit(id);
+    else if (a === 'speak') chatSpeak(chatPlain(m));
     else if (a === 'copy') {
       try { await navigator.clipboard.writeText(m.text); toast('คัดลอกแล้ว'); } catch (err) { toast('คัดลอกไม่ได้'); }
     } else if (a === 'delete') {
@@ -665,13 +764,18 @@ async function chatReact(id, emoji) {
 function chatBindScreen(el) {
   const form = el.querySelector('#chForm');
   const input = el.querySelector('#chInput');
-  form.addEventListener('submit', (e) => { e.preventDefault(); const v = input.value; input.value = ''; chatGrow(input); chatSend(v); });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (chatRec.mr) { chatRecStop(true); return; }
+    const v = input.value; input.value = ''; chatGrow(input); chatSend(v); form.classList.remove('typed');
+  });
   input.addEventListener('keydown', (e) => {
     // Enter sends on a keyboard; on iPhone the return key adds a line and the arrow sends.
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(hover: hover)').matches) { e.preventDefault(); form.requestSubmit(); }
   });
   input.addEventListener('input', () => {
     chatGrow(input);
+    form.classList.toggle('typed', !!input.value.trim());
     if (chat.open === 'couple' && Date.now() - chat.typingSent > 3000 && input.value.trim()) {
       chat.typingSent = Date.now();
       api('POST', '/chat/typing', { room: 'couple' }).catch(() => {});
@@ -683,6 +787,8 @@ function chatBindScreen(el) {
     if (b) {
       const a = b.dataset.chat;
       if (a === 'close') closeChat();
+      else if (a === 'rec') chatRecStart();
+      else if (a === 'rec-cancel') chatRecStop(false);
       else if (a === 'rename') chatRename(b);
       else if (a === 'unreply') chatSetReply(null);
       else if (a === 'unedit') chatSetEdit(null);

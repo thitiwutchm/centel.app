@@ -131,9 +131,11 @@ async function reads(me, room) {
 
 async function pending(me, room) {
   const { rows } = await pool.query(
-    `select status from chat_jobs where room = $1 and ${room === 'couple' ? 'couple_id' : 'user_id'} = $2
+    `select status, kind from chat_jobs where room = $1 and ${room === 'couple' ? 'couple_id' : 'user_id'} = $2
        and status in ('queued', 'taken') order by created_at desc limit 1`, [room, roomKey(me, room)]);
-  return rows[0] ? (rows[0].status === 'taken' ? 'typing' : 'queued') : null;
+  if (!rows[0]) return null;
+  if (rows[0].kind === 'transcribe') return 'listening';
+  return rows[0].status === 'taken' ? 'typing' : 'queued';
 }
 
 // Home card and room list: last message and unread count per room, and the assistant's state.
@@ -204,6 +206,64 @@ function notify(me, room, m, title) {
 const jobWaiters = new Set();
 function wakeBridges() { for (const w of jobWaiters) w(); }
 
+// The assistant's part of a new message: a note command is saved at once; a question for the
+// assistant (its room, @ผู้ช่วย, or a reply to it) becomes a job for the Mac.
+async function assistantPart(me, room, m, { replyAi = false, context = null } = {}) {
+  const text = m.text;
+  const plain = text.replace(MENTIONS, ' ').replace(/\s+/g, ' ').trim();
+  let called = room === 'ai' || replyAi || MENTION.test(text);
+  // A bare "@ผู้ช่วย" sent on its own calls the assistant for the sender's next message.
+  if (!called) {
+    const prev = (await pool.query(
+      `select text, sender_id from chat_messages where ${roomSql(room)} and id <> $2 and created_at > now() - interval '5 minutes'
+       order by created_at desc limit 1`, [roomKey(me, room), m.id])).rows[0];
+    called = !!prev && prev.sender_id === me.id && MENTION.test(prev.text) && !prev.text.replace(MENTIONS, '').trim();
+  }
+  const cmd = noteCommand({ text: plain });
+  let assistant = null;
+  if (cmd && cmd.text) {
+    const done = await saveNoteCommand(cmd, { user_id: me.id, name: me.name }).catch((e) => { console.error('chat note', e.message); return null; });
+    if (done && done.note) {
+      // The card shows the details, so the bubble keeps only the first line of the LINE answer.
+      assistant = await addMessage({ room, me, ai: true, text: done.text.split('\n')[0], replyTo: room === 'couple' ? m.id : null, action: { type: 'note', note: noteOut(done.note) } });
+      emit([me.id, me.partnerId].filter(Boolean), { type: 'note', note: noteOut(done.note) });
+    }
+  }
+  if (!assistant && called && plain) {
+    const ctx = context && typeof context === 'object' ? JSON.stringify(context).slice(0, 20000) : null;
+    await pool.query(
+      'insert into chat_jobs (id, message_id, user_id, room, couple_id, context) values ($1, $2, $3, $4, $5, $6)',
+      [crypto.randomUUID(), m.id, me.id, room, room === 'couple' ? me.coupleId : null, ctx]);
+    const online = (await bridgeState(me)).online;
+    emit(audience(me, room), { type: 'ai', room, state: online ? 'queued' : 'offline' });
+    wakeBridges();
+  }
+  return assistant;
+}
+
+// A spoken question: the recording waits for the Mac, which turns it into text (Whisper); that
+// text then goes in as the person's message and is answered like a typed one.
+const VOICE_MAX = 1.5 * 1024 * 1024;
+router.post('/voice', rateLimit(30, 60000), wrap(async (req, res) => {
+  const me = await whoIs(req.user.id);
+  const b = req.body || {};
+  const room = String(b.room || '');
+  roomOk(me, room);
+  if (!isUuid(b.id)) throw bad('bad_id');
+  const mime = /^audio\/[a-z0-9.+-]+(;.*)?$/i.test(b.mime || '') ? String(b.mime).slice(0, 60) : null;
+  const audio = Buffer.from(String(b.audio || ''), 'base64');
+  if (!mime || audio.length < 1000 || audio.length > VOICE_MAX) throw bad('bad_audio');
+  const context = { msgId: b.id, context: b.context && typeof b.context === 'object' ? b.context : null };
+  await pool.query(
+    `insert into chat_jobs (id, user_id, room, couple_id, context, kind, audio, audio_mime)
+     values ($1, $2, $3, $4, $5, 'transcribe', $6, $7)`,
+    [crypto.randomUUID(), me.id, room, room === 'couple' ? me.coupleId : null, JSON.stringify(context).slice(0, 25000), audio, mime]);
+  const online = (await bridgeState(me)).online;
+  emit(audience(me, room), { type: 'ai', room, state: online ? 'listening' : 'offline' });
+  wakeBridges();
+  res.json({ ok: true, online });
+}));
+
 router.post('/messages', rateLimit(120, 60000), wrap(async (req, res) => {
   const me = await whoIs(req.user.id);
   const b = req.body || {};
@@ -226,36 +286,7 @@ router.post('/messages', rateLimit(120, 60000), wrap(async (req, res) => {
   }
   const m = await addMessage({ id: b.id, room, me, senderId: me.id, text, replyTo });
   notify(me, room, m, room === 'couple' ? me.name : AI_NAME);
-
-  // The assistant's part.
-  const plain = text.replace(MENTIONS, ' ').replace(/\s+/g, ' ').trim();
-  let called = room === 'ai' || replyAi || MENTION.test(text);
-  // A bare "@ผู้ช่วย" sent on its own calls the assistant for the sender's next message.
-  if (!called) {
-    const prev = (await pool.query(
-      `select text, sender_id from chat_messages where ${roomSql(room)} and id <> $2 and created_at > now() - interval '5 minutes'
-       order by created_at desc limit 1`, [roomKey(me, room), m.id])).rows[0];
-    called = !!prev && prev.sender_id === me.id && MENTION.test(prev.text) && !prev.text.replace(MENTIONS, '').trim();
-  }
-  const cmd = noteCommand({ text: plain });
-  let assistant = null;
-  if (cmd && cmd.text) {
-    const done = await saveNoteCommand(cmd, { user_id: me.id, name: me.name }).catch((e) => { console.error('chat note', e.message); return null; });
-    if (done && done.note) {
-      // The card shows the details, so the bubble keeps only the first line of the LINE answer.
-      assistant = await addMessage({ room, me, ai: true, text: done.text.split('\n')[0], replyTo: room === 'couple' ? m.id : null, action: { type: 'note', note: noteOut(done.note) } });
-      emit([me.id, me.partnerId].filter(Boolean), { type: 'note', note: noteOut(done.note) });
-    }
-  }
-  if (!assistant && called && plain) {
-    const context = b.context && typeof b.context === 'object' ? JSON.stringify(b.context).slice(0, 20000) : null;
-    await pool.query(
-      'insert into chat_jobs (id, message_id, user_id, room, couple_id, context) values ($1, $2, $3, $4, $5, $6)',
-      [crypto.randomUUID(), m.id, me.id, room, room === 'couple' ? me.coupleId : null, context]);
-    const online = (await bridgeState(me)).online;
-    emit(audience(me, room), { type: 'ai', room, state: online ? 'queued' : 'offline' });
-    wakeBridges();
-  }
+  const assistant = await assistantPart(me, room, m, { replyAi, context: b.context });
   res.json({ message: m, assistant });
 }));
 
@@ -363,16 +394,19 @@ bridgeRouter.use(wrap(async (req, _res, next) => {
     [hashToken(m[1]), String(req.get('x-bridge-info') || '').slice(0, 120) || null]);
   if (!rows[0]) throw bad('unauthorized', 401);
   const me = await whoIs(rows[0].user_id);
-  req.bridge = { userId: me.id, users: [me.id, me.partnerId].filter(Boolean) };
+  // Older bridges cannot transcribe, so they only get typed questions.
+  const stt = /\bstt\b/.test(String(req.get('x-bridge-caps') || ''));
+  req.bridge = { userId: me.id, users: [me.id, me.partnerId].filter(Boolean), stt };
   next();
 }));
 
-async function takeJob(users) {
+async function takeJob({ users, stt }) {
   const { rows } = await pool.query(
     `update chat_jobs set status = 'taken', taken_at = now()
      where id = (select id from chat_jobs where status = 'queued' and user_id = any($1) and created_at > now() - make_interval(mins => $2)
+                   and ($3 or kind = 'reply')
                  order by created_at for update skip locked limit 1)
-     returning *`, [users, JOB_TTL_MIN]);
+     returning *`, [users, JOB_TTL_MIN, stt]);
   return rows[0] || null;
 }
 
@@ -381,7 +415,7 @@ bridgeRouter.get('/next', wrap(async (req, res) => {
   const w = Number(req.query.wait ?? 25);
   const wait = Math.min(Math.max(Number.isFinite(w) ? w : 25, 0), 25) * 1000;
   const until = Date.now() + wait;
-  let job = await takeJob(req.bridge.users);
+  let job = await takeJob(req.bridge);
   while (!job && Date.now() < until) {
     let closed = false;
     await new Promise((resolve) => {
@@ -391,12 +425,13 @@ bridgeRouter.get('/next', wrap(async (req, res) => {
       req.once('close', () => { closed = true; done(); });
     });
     if (closed || res.writableEnded) return;
-    job = await takeJob(req.bridge.users);
+    job = await takeJob(req.bridge);
   }
   if (!job) return res.status(204).end();
   const asker = await whoIs(job.user_id);
+  if (job.kind === 'transcribe') return res.json({ id: job.id, kind: 'transcribe', mime: job.audio_mime, audio: job.audio.toString('base64') });
   emit(audience(asker, job.room), { type: 'ai', room: job.room, state: 'typing' });
-  res.json({ id: job.id, messages: await buildPrompt(job, asker) });
+  res.json({ id: job.id, kind: 'reply', messages: await buildPrompt(job, asker) });
 }));
 
 // The answer for a job: { reply } or { error }. A <centel-note>{…}</centel-note> block in
@@ -406,6 +441,7 @@ bridgeRouter.post('/jobs/:id', wrap(async (req, res) => {
   const job = (await pool.query("select * from chat_jobs where id = $1 and status = 'taken' and user_id = any($2)", [req.params.id, req.bridge.users])).rows[0];
   if (!job) throw bad('not_found', 404);
   const asker = await whoIs(job.user_id);
+  if (job.kind === 'transcribe') return res.json(await transcribed(job, asker, req.body || {}));
   const raw = String(req.body?.reply || '').slice(0, 12000);
   if (!raw.trim()) {
     await pool.query("update chat_jobs set status = 'failed' where id = $1", [job.id]);
@@ -424,6 +460,24 @@ bridgeRouter.post('/jobs/:id', wrap(async (req, res) => {
   notify(asker, job.room, m, AI_NAME);
   res.json({ ok: true, message: m });
 }));
+
+// The Mac's text for a voice question becomes the person's message (marked as spoken), then the
+// assistant answers it as usual.
+async function transcribed(job, asker, body) {
+  const text = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT);
+  await pool.query("update chat_jobs set status = $2, audio = null where id = $1", [job.id, text ? 'done' : 'failed']);
+  if (!text) {
+    if (body.error) console.error('bridge transcribe failed', String(body.error).slice(0, 300));
+    await addMessage({ room: job.room, me: asker, ai: true, text: 'ขอโทษครับ ฟังไม่ชัด ลองพูดใหม่อีกครั้งนะครับ 🎤' });
+    return { ok: true };
+  }
+  const ctx = job.context || {};
+  const id = isUuid(ctx.msgId) && !(await pool.query('select 1 from chat_messages where id = $1', [ctx.msgId])).rows[0] ? ctx.msgId : crypto.randomUUID();
+  const m = await addMessage({ id, room: job.room, me: asker, senderId: asker.id, text, action: { type: 'voice' } });
+  notify(asker, job.room, m, job.room === 'couple' ? asker.name : AI_NAME);
+  await assistantPart(asker, job.room, m, { context: ctx.context });
+  return { ok: true, message: m };
+}
 
 const NOTE_TAG = /<centel-note>([\s\S]*?)<\/centel-note>/i;
 const LEADS = new Set([0, 120, 360, 1440, 2880]);
@@ -539,7 +593,7 @@ export function startChatJobs() {
       // A job a bridge took but never answered goes back in the queue once.
       await pool.query("update chat_jobs set status = 'queued', taken_at = null where status = 'taken' and taken_at < now() - interval '3 minutes' and created_at > now() - interval '10 minutes'");
       const { rows } = await pool.query(
-        `update chat_jobs set status = 'failed' where status in ('queued', 'taken') and created_at < now() - make_interval(mins => $1) returning *`, [JOB_TTL_MIN]);
+        `update chat_jobs set status = 'failed', audio = null where status in ('queued', 'taken') and created_at < now() - make_interval(mins => $1) returning *`, [JOB_TTL_MIN]);
       for (const job of rows) {
         const asker = await whoIs(job.user_id).catch(() => null);
         if (!asker) continue;
