@@ -1452,12 +1452,17 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 :root[data-backdrop="light"] .ch-screen { background: radial-gradient(rgba(0, 0, 0, .045) 1.3px, transparent 1.5px) 0 0 / 20px 20px, linear-gradient(165deg, color-mix(in srgb, var(--bg) 88%, var(--c-accent)), var(--bg) 70%); }
 .ch-screen.in { transform: none; }
 .ch-screen.settled { transition: none; }
-.ch-screen:not(.settled) .ch-head, .ch-screen:not(.settled) .ch-bottom { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.ch-screen:not(.settled) .ch-head::before, .ch-screen:not(.settled) .ch-bottom::before { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* The frosted glass of the header and composer is a layer behind their content, not on the bar itself:
+   iOS draws the children of a backdrop-filter element blurry, so the title and avatars stay out of it. */
+.ch-head::before, .ch-bottom::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+  -webkit-backdrop-filter: saturate(1.8) blur(22px); backdrop-filter: saturate(1.8) blur(22px);
+}
 .ch-head {
   position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
   padding: calc(var(--safe-top) + 6px) 12px 8px; border-bottom: 0.5px solid var(--c-line);
-  background: color-mix(in srgb, var(--bg) 74%, transparent);
-  -webkit-backdrop-filter: saturate(1.8) blur(22px); backdrop-filter: saturate(1.8) blur(22px);
 }
 .ch-back { border: 0; background: none; color: var(--c-accent); padding: 4px; margin-left: -4px; display: grid; place-items: center; }
 .ch-title { flex: 1; min-width: 0; display: grid; }
@@ -1466,7 +1471,6 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .ch-st.typing, .ch-st.ok { color: var(--c-accent); }
 .ch-st.warn { color: var(--c-warn); }
 /* Glass sits on the navy backdrop, so its header reads like the app's top bar: white text. */
-:root:not([data-backdrop]) .ch-head { background: color-mix(in srgb, var(--bg) 74%, transparent); }
 :root:not([data-backdrop]) .ch-title b { color: #fff; }
 :root:not([data-backdrop]) .ch-st:not(.typing):not(.ok):not(.warn) { color: rgba(255, 255, 255, .7); }
 .ch-txt code { font: 13.5px ui-monospace, Menlo, monospace; background: color-mix(in srgb, currentColor 10%, transparent); padding: 1px 4px; border-radius: 5px; }
@@ -1527,8 +1531,7 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .ch-dots i:nth-child(3) { animation-delay: .3s; }
 @keyframes chBob { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-3px); opacity: 1; } }
 .ch-msg.swipe-ok .ch-b { box-shadow: 0 0 0 2px var(--c-accent-soft); }
-.ch-bottom { flex: none; border-top: 0.5px solid var(--c-line); padding-bottom: max(8px, var(--safe-bottom));
-  background: color-mix(in srgb, var(--bg) 74%, transparent); -webkit-backdrop-filter: saturate(1.8) blur(22px); backdrop-filter: saturate(1.8) blur(22px); }
+.ch-bottom { flex: none; position: relative; z-index: 2; border-top: 0.5px solid var(--c-line); padding-bottom: max(8px, var(--safe-bottom)); }
 /* Keyboard up: the composer sits right on top of it, no home-indicator gap. */
 .ch-screen.kb .ch-bottom { padding-bottom: 6px; }
 .ch-chips { display: flex; gap: 6px; padding: 7px 10px 0; overflow-x: auto; scrollbar-width: none; }
