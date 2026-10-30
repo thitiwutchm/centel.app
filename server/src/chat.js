@@ -3,7 +3,7 @@ import express from 'express';
 import { pool } from './db.js';
 import { requireUser, rateLimit } from './auth.js';
 import { pushTo } from './push.js';
-import { noteCommand, saveNoteCommand } from './line.js';
+import { noteCommand, saveNoteCommand, reminderHooks, REMIND_TEXT } from './line.js';
 import { remindAt, thaiToday } from './noteparse.js';
 import { noteOut } from './routes.js';
 
@@ -522,6 +522,16 @@ async function buildPrompt(job, asker) {
 }
 
 /* ---------- Questions nobody answered ---------- */
+
+// A due to-do reminder also lands in the chat, like the LINE group gets it: shared notes in the
+// couple room, personal ones in the owner's assistant room. The push already went out (line.js).
+reminderHooks.push(async (n) => {
+  const me = await whoIs(n.owner_id);
+  const room = n.couple_id && n.couple_id === me.coupleId ? 'couple' : 'ai';
+  const lines = [`🔔 ${REMIND_TEXT[n.remind] || 'เตือนความจำ'}`];
+  if (room === 'couple') lines.push(`👥 ${[me.name, me.partnerName].filter(Boolean).map((x) => `@${x}`).join(' ')}`);
+  await addMessage({ room, me, ai: true, text: lines.join('\n'), action: { type: 'note', note: noteOut(n) } });
+});
 
 export function startChatJobs() {
   const tick = async () => {

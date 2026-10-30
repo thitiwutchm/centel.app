@@ -124,6 +124,23 @@ test('chat: a ทำนัด line becomes a shared note at once', async () => {
   assert.ok(notes.some((n) => n.id === r.assistant.action.note.id));
 });
 
+test('chat: a due reminder lands in the couple room', async () => {
+  // Five minutes ago in Bangkok, so the next reminder tick sends it.
+  const t = new Date(Date.now() + 7 * 3600e3 - 5 * 60e3);
+  const hhmm = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
+  const date = `${t.getUTCDate()}/${t.getUTCMonth() + 1}/${t.getUTCFullYear()}`;
+  const r = await send(B, 'couple', `ทำนัด ${date} ${hhmm} รับลูกที่โรงเรียน เตือนตรงเวลา`);
+  assert.equal(r.assistant.action.note.remind, 0);
+  let hit;
+  for (let i = 0; i < 40 && !hit; i++) {
+    await new Promise((res) => setTimeout(res, 250));
+    hit = (await A('GET', '/chat/messages?room=couple')).messages.find((m) => m.ai && /^🔔 ถึงเวลาแล้ว/.test(m.text));
+  }
+  assert.ok(hit, 'reminder posted');
+  assert.match(hit.text, /@พ่อบุ๊ค|@แม่เฟิร์น/);
+  assert.equal(hit.action.note.text, 'รับลูกที่โรงเรียน');
+});
+
 let token;
 test('chat: the bridge token is shown once and checked', async () => {
   assert.equal((await A('GET', '/chat/bridge')).set, false);
