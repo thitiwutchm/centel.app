@@ -4,7 +4,7 @@ import { pool } from './db.js';
 import { requireUser, rateLimit } from './auth.js';
 import { pushTo } from './push.js';
 import { noteCommand, saveNoteCommand, reminderHooks, REMIND_TEXT } from './line.js';
-import { remindAt, thaiToday } from './noteparse.js';
+import { parseNote, remindAt, thaiToday } from './noteparse.js';
 import { noteOut } from './routes.js';
 
 /* In-app chat (chat.js in the PWA). Two rooms per person: 'couple', shared by the two
@@ -479,6 +479,15 @@ async function transcribed(job, asker, body) {
   return { ok: true, message: m };
 }
 
+// The date and time the person wrote in the question, read the same way as the LINE group.
+async function askedWhen(job) {
+  if (!job.message_id) return {};
+  const q = (await pool.query('select text from chat_messages where id = $1', [job.message_id])).rows[0];
+  if (!q) return {};
+  const p = parseNote(String(q.text || '').replace(/@\S+/g, ' '));
+  return p.date && !p.timeOnly ? { date: p.date, time: p.time || null } : {};
+}
+
 const NOTE_TAG = /<centel-note>([\s\S]*?)<\/centel-note>/i;
 const LEADS = new Set([0, 120, 360, 1440, 2880]);
 async function applyActions(raw, job, asker) {
@@ -490,8 +499,12 @@ async function applyActions(raw, job, asker) {
   try { a = JSON.parse(m[1].trim()); } catch (e) { return { text, note: null }; }
   const noteText = String(a.text || '').trim().slice(0, 500);
   if (!noteText) return { text, note: null };
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(a.date || '') ? a.date : null;
-  const time = date && /^([01]\d|2[0-3]):[0-5]\d$/.test(a.time || '') ? a.time : null;
+  let date = /^\d{4}-\d{2}-\d{2}$/.test(a.date || '') ? a.date : null;
+  let time = date && /^([01]\d|2[0-3]):[0-5]\d$/.test(a.time || '') ? a.time : null;
+  // A small model on the Mac can be a day out ("วันที่ 2 November" saved on the 1st), so a date or
+  // time written plainly in the question wins over the model's.
+  const said = await askedWhen(job);
+  if (said.date) { date = said.date; if (said.time) time = said.time; }
   const remind = date ? (LEADS.has(a.remind) ? a.remind : 0) : null;
   const { rows } = await pool.query(
     `insert into notes (id, owner_id, couple_id, text, date, time, remind, remind_at)
