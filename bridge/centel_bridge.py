@@ -11,18 +11,24 @@ Any OpenAI-compatible server works too (Ollama: HERMES_URL=http://127.0.0.1:1143
 HERMES_MODEL=hermes3). Settings come from the environment or ~/.centel-bridge.env.
 Voice questions are turned into text on this Mac with whisper.cpp (brew install whisper-cpp
 ffmpeg, plus a model file in WHISPER_MODEL); without them the bridge only takes typed questions.
+In the เลขาช่วยเหลือ room (jobs with "web": true) the model can also search the web (DuckDuckGo)
+and read a page, for live things like showtimes or the news, unless WEB_TOOLS=0; the model must
+support tool calls (qwen3 does). The app's own assistant room never gets the web.
 Python 3.8+ standard library only.
 """
 
+import html
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ENV_FILE = os.path.expanduser("~/.centel-bridge.env")
@@ -50,6 +56,7 @@ INFO = f"{platform.node()[:40]} · {HERMES_MODEL}"
 WHISPER_CMD = os.environ.get("WHISPER_CMD", "whisper-cli")
 WHISPER_MODEL = os.path.expanduser(os.environ.get("WHISPER_MODEL", "~/.centel-bridge/ggml-large-v3-turbo.bin"))
 WHISPER_LANG = os.environ.get("WHISPER_LANG", "auto")
+WEB_TOOLS = os.environ.get("WEB_TOOLS", "1").lower() not in ("0", "false", "off", "no")
 # launchd starts with a bare PATH, so look where Homebrew puts things too.
 TOOL_PATH = os.pathsep.join([os.environ.get("PATH", ""), "/opt/homebrew/bin", "/usr/local/bin"])
 
@@ -85,12 +92,97 @@ def centel(method, path, body=None, timeout=60):
     return call(method, CENTEL_URL + path, body, headers, timeout)
 
 
-def ask_hermes(messages):
+# Web tools the model may call: a search and a page reader. Only reads public pages; nothing on the Mac.
+TOOLS = [
+    {"type": "function", "function": {
+        "name": "web_search",
+        "description": "Search the web for current information (showtimes, news, opening hours, prices, weather). Returns titles, links and snippets.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Search words, Thai or English"}}, "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "read_page",
+        "description": "Read the text of a web page found by web_search.",
+        "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}}},
+]
+BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
+
+def fetch_text(url, data=None, timeout=20):
+    req = urllib.request.Request(url, data=data, headers={"user-agent": BROWSER_UA, "accept-language": "th,en;q=0.8"})
+    with urllib.request.urlopen(req, timeout=timeout) as res:
+        return res.read(2_000_000).decode(res.headers.get_content_charset() or "utf-8", "replace")
+
+
+def strip_html(s):
+    s = re.sub(r"(?is)<(script|style|noscript|svg|head)[^>]*>.*?</\1>", " ", s)
+    s = re.sub(r"(?s)<[^>]+>", " ", s)
+    return re.sub(r"\s+", " ", html.unescape(s)).strip()
+
+
+def web_search(query):
+    page = fetch_text("https://html.duckduckgo.com/html/", urllib.parse.urlencode({"q": query, "kl": "th-th"}).encode())
+    out = []
+    for m in re.finditer(r'(?s)class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>.*?class="result__snippet"[^>]*>(.*?)</a>', page):
+        link = html.unescape(m.group(1))
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
+        link = q.get("uddg", [link])[0]
+        out.append(f"- {strip_html(m.group(2))}\n  {link}\n  {strip_html(m.group(3))}")
+        if len(out) >= 6:
+            break
+    return "\n".join(out) or "ไม่พบผลการค้นหา"
+
+
+def read_page(url):
+    if not re.match(r"^https?://", url or ""):
+        return "ลิงก์ไม่ถูกต้อง"
+    return strip_html(fetch_text(url))[:6000] or "หน้านี้ไม่มีข้อความ"
+
+
+def run_tool(name, args):
+    try:
+        if name == "web_search":
+            return web_search(str(args.get("query", ""))[:200])
+        if name == "read_page":
+            return read_page(str(args.get("url", "")))
+        return "ไม่มีเครื่องมือนี้"
+    except Exception as e:  # a dead site should not end the answer
+        return f"ใช้ไม่ได้: {e}"
+
+
+def chat(messages, tools):
     headers = {"authorization": f"Bearer {HERMES_KEY}"} if HERMES_KEY else {}
-    _, out = call("POST", HERMES_URL + "/chat/completions",
-                  {"model": HERMES_MODEL, "messages": messages, "stream": False},
-                  headers, HERMES_TIMEOUT)
-    return (out["choices"][0]["message"].get("content") or "").strip()
+    body = {"model": HERMES_MODEL, "messages": messages, "stream": False}
+    if tools:
+        body["tools"] = TOOLS
+    _, out = call("POST", HERMES_URL + "/chat/completions", body, headers, HERMES_TIMEOUT)
+    return out["choices"][0]["message"]
+
+
+def ask_hermes(messages, web=False):
+    messages = list(messages)
+    tools = web and WEB_TOOLS
+    for _ in range(5):
+        try:
+            msg = chat(messages, tools)
+        except urllib.error.HTTPError as e:
+            if tools and e.code in (400, 404, 422, 500):  # a server without tool calls: ask plainly
+                tools = False
+                continue
+            raise
+        calls = msg.get("tool_calls") or []
+        if not calls:
+            return (msg.get("content") or "").strip()
+        messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
+        for c in calls:
+            fn = c.get("function") or {}
+            try:
+                args = json.loads(fn.get("arguments") or "{}") if isinstance(fn.get("arguments"), str) else (fn.get("arguments") or {})
+            except ValueError:
+                args = {}
+            log("tool", fn.get("name"), json.dumps(args, ensure_ascii=False)[:120])
+            messages.append({"role": "tool", "tool_call_id": c.get("id", ""), "name": fn.get("name"),
+                             "content": run_tool(fn.get("name"), args)})
+    # Out of rounds: one last answer without tools.
+    return (chat(messages, False).get("content") or "").strip()
 
 
 def transcribe(job):
@@ -115,7 +207,7 @@ def main():
     if not TOKEN.startswith("cb_"):
         sys.exit(f"Set CENTEL_TOKEN (from Centel › บัญชี › ผู้ช่วย AI) in {ENV_FILE}")
     STT = can_transcribe()
-    log(f"centel bridge → {CENTEL_URL}, Hermes at {HERMES_URL} ({HERMES_MODEL}), voice {'on' if STT else 'off'}")
+    log(f"centel bridge → {CENTEL_URL}, Hermes at {HERMES_URL} ({HERMES_MODEL}), voice {'on' if STT else 'off'}, web {'on' if WEB_TOOLS else 'off'}")
     backoff = 2
     while True:
         try:
@@ -135,7 +227,7 @@ def main():
                 continue
             log("question", job["id"][:8])
             try:
-                reply = ask_hermes(job["messages"])
+                reply = ask_hermes(job["messages"], bool(job.get("web")))
                 centel("POST", f"/api/bridge/jobs/{job['id']}", {"reply": reply})
                 log("answered", job["id"][:8], f"{len(reply)} chars")
             except Exception as e:  # Hermes down or slow: tell the chat instead of going quiet.

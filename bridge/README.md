@@ -39,6 +39,17 @@ launchctl kickstart -k gui/$(id -u)/app.centel.bridge
 ```
 log จะขึ้นว่า `voice on` ถ้าไม่มี whisper ตัวเชื่อมจะรับเฉพาะข้อความที่พิมพ์
 
+## เลขาช่วยเหลือ (ค้นเว็บ)
+
+ห้อง "เลขาช่วยเหลือ" ใช้โมเดลตัวเดียวกัน แต่ตอบได้ทุกเรื่อง และค้นเว็บได้ (DuckDuckGo + อ่านหน้าเว็บ) สำหรับข้อมูลสด เช่น รอบหนัง ข่าว อากาศ
+โมเดลต้องเรียกเครื่องมือ (tool calls) ได้ เช่น qwen3 ผ่าน Ollama (`HERMES_URL=http://127.0.0.1:11434/v1`) ห้องผู้ช่วย Centel ไม่ได้ใช้เว็บ
+อัปเดตตัวเชื่อมโดยไม่แตะไฟล์ตั้งค่า:
+```
+curl -fsSL https://centel.app/bridge/centel_bridge.py -o ~/.centel-bridge/centel_bridge.py
+launchctl kickstart -k gui/$(id -u)/app.centel.bridge
+```
+log จะขึ้นว่า `web on` และบรรทัด `tool web_search …` ตอนค้น ปิดได้ด้วย `WEB_TOOLS=0`
+
 ## ตั้งค่า (`~/.centel-bridge.env`)
 
 | ตัวแปร | ค่าเริ่มต้น | |
@@ -48,6 +59,7 @@ log จะขึ้นว่า `voice on` ถ้าไม่มี whisper ต�
 | `HERMES_KEY` | | `API_SERVER_KEY` ของ Hermes |
 | `HERMES_MODEL` | `hermes-agent` | Ollama: เช่น `hermes3` |
 | `WHISPER_MODEL` | `~/.centel-bridge/ggml-large-v3-turbo.bin` | ไฟล์โมเดล whisper.cpp (เล็กกว่า: `ggml-small.bin`) |
+| `WEB_TOOLS` | `1` | `0` ปิดการค้นเว็บของเลขาช่วยเหลือ |
 | `WHISPER_LANG` | `auto` | หรือ `th` ถ้าพูดไทยอย่างเดียว |
 
 ความปลอดภัย: ข้อความในแชทถูกส่งให้ Hermes บน Mac ควรปิด toolset ที่สั่ง terminal / แก้ไฟล์ของ Hermes

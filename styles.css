@@ -1420,6 +1420,10 @@ body::before {
 .ch-av img { width: 100%; height: 100%; object-fit: cover; }
 .ch-av.ai { background: radial-gradient(circle at 30% 30%, #9ce6ff, transparent 55%), conic-gradient(from 200deg, #7c5cff, #1fb6ff, #3fd18a, #7c5cff); }
 .ch-av.ai::after { content: ""; width: 36%; height: 36%; border-radius: 50%; background: rgba(255, 255, 255, .88); box-shadow: 0 0 10px #fff; }
+/* เลขาช่วยเหลือ: warm orb with a small globe, so it reads apart from the app assistant. */
+.ch-av.sec { background: radial-gradient(circle at 30% 30%, #ffe3a3, transparent 55%), conic-gradient(from 160deg, #ff8a3d, #ffc93c, #ff5f8f, #ff8a3d); }
+.ch-av.sec::after { content: "🌐"; font-size: 22px; line-height: 1; filter: drop-shadow(0 0 4px rgba(255, 255, 255, .8)); }
+.ch-av.sm.sec::after { font-size: 15px; }
 .ch-av.sm { width: 30px; height: 30px; font-size: 12px; }
 .ch-av.xs { width: 27px; height: 27px; font-size: 11px; border: 2px solid var(--card); position: absolute; }
 .ch-grp { position: relative; width: 44px; height: 44px; }
