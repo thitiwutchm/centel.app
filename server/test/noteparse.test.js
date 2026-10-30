@@ -30,6 +30,16 @@ test('noteparse: time ranges and English month-first dates', () => {
   assert.deepEqual(p('31 ตค 18:00-09:00 x'), { text: 'x', date: '2026-10-31', time: '18:00' });
 });
 
+test('noteparse: as typed in the group, over several lines', () => {
+  assert.deepEqual(p('นัดตรวจครรภ์แม่เฟิร์น\n\nMon, Nov 30, 11:00 AM - 12:00 PM\n\n'), { text: 'นัดตรวจครรภ์แม่เฟิร์น', date: '2026-11-30', time: '11:00', endTime: '12:00' });
+  assert.deepEqual(p('คุยกับหลิง\n\nMon, Nov 2, 1pm\n\n'), { text: 'คุยกับหลิง', date: '2026-11-02', time: '13:00' });
+  // "วันนี้ 4:30" at 9 in the morning is the afternoon; at 3 in the morning it is 04:30.
+  const at = (s, iso) => parseNote(s, new Date(iso));
+  assert.equal(at('วันนี้เวลา 4:30 น. เอาไม้ไปฝากขาย', '2026-10-30T02:22:00Z').time, '16:30');
+  assert.equal(at('วันนี้เวลา 4:30 น. เอาไม้ไปฝากขาย', '2026-10-29T20:00:00Z').time, '04:30');
+  assert.equal(at('วันนี้เวลา 4:30 น. เอาไม้ไปฝากขาย', '2026-10-30T02:22:00Z').text, 'เอาไม้ไปฝากขาย');
+});
+
 test('noteparse: reminder time is in Thai time', () => {
   assert.equal(remindAt('2026-10-31', '18:00', 0).toISOString(), '2026-10-31T11:00:00.000Z');
   assert.equal(remindAt('2026-10-31', '', 60).toISOString(), '2026-10-31T01:00:00.000Z');
