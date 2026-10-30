@@ -110,7 +110,7 @@ router.get('/stream', (req, res) => {
 
 async function bridgeState(me) {
   const ids = [me.id, me.partnerId].filter(Boolean);
-  const { rows } = await pool.query('select user_id, created_at, last_seen, info from bridge_tokens where user_id = any($1)', [ids]);
+  const { rows } = await pool.query('select user_id, created_at, last_seen, info, caps from bridge_tokens where user_id = any($1)', [ids]);
   const seen = rows.map((r) => r.last_seen).filter(Boolean).map((d) => +new Date(d));
   const last = seen.length ? Math.max(...seen) : 0;
   const mine = rows.find((r) => r.user_id === me.id);
@@ -118,6 +118,8 @@ async function bridgeState(me) {
     online: !!last && Date.now() - last < BRIDGE_ONLINE_MS,
     lastSeen: last ? new Date(last).toISOString() : null,
     set: rows.length > 0,
+    // Voice needs Whisper on the Mac; the last thing a bridge reported is what counts.
+    voice: rows.some((r) => /\bstt\b/.test(r.caps || '')),
     mine: mine ? { createdAt: mine.created_at, lastSeen: mine.last_seen, info: mine.info || undefined } : null,
   };
 }
@@ -253,6 +255,7 @@ router.post('/voice', rateLimit(30, 60000), wrap(async (req, res) => {
   const mime = /^audio\/[a-z0-9.+-]+(;.*)?$/i.test(b.mime || '') ? String(b.mime).slice(0, 60) : null;
   const audio = Buffer.from(String(b.audio || ''), 'base64');
   if (!mime || audio.length < 1000 || audio.length > VOICE_MAX) throw bad('bad_audio');
+  if (!(await bridgeState(me)).voice) throw bad('no_voice', 409);
   const context = { msgId: b.id, context: b.context && typeof b.context === 'object' ? b.context : null };
   await pool.query(
     `insert into chat_jobs (id, user_id, room, couple_id, context, kind, audio, audio_mime)
@@ -389,16 +392,33 @@ router.delete('/bridge', wrap(async (req, res) => {
 bridgeRouter.use(wrap(async (req, _res, next) => {
   const m = /^Bearer\s+(cb_[A-Za-z0-9_-]{32})$/.exec(req.get('authorization') || '');
   if (!m) throw bad('unauthorized', 401);
+  const caps = String(req.get('x-bridge-caps') || '').slice(0, 60);
   const { rows } = await pool.query(
-    'update bridge_tokens set last_seen = now(), info = coalesce($2, info) where token_hash = $1 returning user_id',
-    [hashToken(m[1]), String(req.get('x-bridge-info') || '').slice(0, 120) || null]);
+    'update bridge_tokens set last_seen = now(), info = coalesce($2, info), caps = $3 where token_hash = $1 returning user_id',
+    [hashToken(m[1]), String(req.get('x-bridge-info') || '').slice(0, 120) || null, caps]);
   if (!rows[0]) throw bad('unauthorized', 401);
   const me = await whoIs(rows[0].user_id);
   // Older bridges cannot transcribe, so they only get typed questions.
-  const stt = /\bstt\b/.test(String(req.get('x-bridge-caps') || ''));
+  const stt = /\bstt\b/.test(caps);
   req.bridge = { userId: me.id, users: [me.id, me.partnerId].filter(Boolean), stt };
+  if (!stt) await dropVoice(req.bridge.users);
   next();
 }));
+
+// A Mac that is on but cannot hear (no Whisper) would leave a voice question waiting forever, so it
+// is dropped with a note to type instead, unless another bridge for the couple can still hear.
+const NO_VOICE_TEXT = 'ขอโทษครับ Mac ยังฟังเสียงไม่ได้ (ยังไม่ได้ติดตั้ง Whisper) พิมพ์ถามแทนได้เลยครับ ⌨️';
+async function dropVoice(users) {
+  const other = (await pool.query("select 1 from bridge_tokens where user_id = any($1) and caps ~ '\\mstt\\M' and last_seen > now() - make_interval(secs => $2) limit 1",
+    [users, BRIDGE_ONLINE_MS / 1000])).rows[0];
+  if (other) return;
+  const { rows } = await pool.query(
+    "update chat_jobs set status = 'failed', audio = null where kind = 'transcribe' and status = 'queued' and user_id = any($1) returning *", [users]);
+  for (const job of rows) {
+    const asker = await whoIs(job.user_id).catch(() => null);
+    if (asker) await addMessage({ room: job.room, me: asker, ai: true, text: NO_VOICE_TEXT });
+  }
+}
 
 async function takeJob({ users, stt }) {
   const { rows } = await pool.query(
@@ -610,7 +630,9 @@ export function startChatJobs() {
       for (const job of rows) {
         const asker = await whoIs(job.user_id).catch(() => null);
         if (!asker) continue;
-        await addMessage({ room: job.room, me: asker, ai: true, replyTo: job.message_id, text: 'ขอโทษครับ ตอนนั้นผู้ช่วยออฟไลน์อยู่ (Mac ปิดหรือหลับ) เลยตอบไม่ทัน ถามใหม่ได้เลยครับ' });
+        await addMessage({ room: job.room, me: asker, ai: true, replyTo: job.message_id, text: job.kind === 'transcribe'
+          ? 'ขอโทษครับ ข้อความเสียงนั้นไม่ได้ถูกฟัง (Mac ปิด หลับ หรือยังไม่ได้ติดตั้ง Whisper) พิมพ์ถามแทนได้เลยครับ'
+          : 'ขอโทษครับ ตอนนั้นผู้ช่วยออฟไลน์อยู่ (Mac ปิดหรือหลับ) เลยตอบไม่ทัน ถามใหม่ได้เลยครับ' });
       }
       if (rows.length) wakeBridges();
     } catch (e) { console.error('chat jobs', e.message); }
