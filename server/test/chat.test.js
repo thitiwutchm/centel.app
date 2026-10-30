@@ -76,6 +76,15 @@ test('chat: the couple room is shared, private to the two, with unread and read 
   assert.equal((await send(A, 'nope', 'x')).status, 400);
 });
 
+test('chat: the couple can rename their room', async () => {
+  assert.equal((await A('GET', '/chat/state')).rooms.couple.name, null);
+  assert.equal((await A('PUT', '/chat/room', { name: '  บ้าน  ลำพูน ' })).name, 'บ้าน ลำพูน');
+  assert.equal((await B('GET', '/chat/state')).rooms.couple.name, 'บ้าน ลำพูน');
+  assert.equal((await C('PUT', '/chat/room', { name: 'x' })).status, 409);
+  assert.equal((await B('PUT', '/chat/room', { name: '' })).name, null);
+  assert.equal((await A('GET', '/chat/state')).rooms.couple.name, null);
+});
+
 test('chat: edit, delete and reactions', async () => {
   const { message: m } = await send(A, 'couple', 'ซื้อนม');
   assert.equal((await B('PUT', `/chat/messages/${m.id}`, { text: 'evil' })).status, 403);

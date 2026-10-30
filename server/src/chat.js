@@ -144,7 +144,18 @@ router.get('/state', wrap(async (req, res) => {
       [k, me.id, r.me])).rows[0].n;
     out.rooms[room] = { last: last ? msgOut(last) : null, unread, reads: r, pending: await pending(me, room) };
   }
+  if (me.coupleId) out.rooms.couple.name = (await pool.query('select chat_name from couples where id = $1', [me.coupleId])).rows[0]?.chat_name || null;
   res.json(out);
+}));
+
+// Rename the shared room; an empty name goes back to the default.
+router.put('/room', wrap(async (req, res) => {
+  const me = await whoIs(req.user.id);
+  roomOk(me, 'couple');
+  const name = String(req.body?.name || '').replace(/\s+/g, ' ').trim().slice(0, 40) || null;
+  await pool.query('update couples set chat_name = $2 where id = $1', [me.coupleId, name]);
+  emit(audience(me, 'couple'), { type: 'room', room: 'couple', name });
+  res.json({ name });
 }));
 
 // One page of a room, oldest first: the newest 60, or 60 before `before`, or everything after `after`.
