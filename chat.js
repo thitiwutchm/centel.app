@@ -2,20 +2,25 @@
 
 /* Chat mini app (Telegram style). Signed in only: the room "บ้านเรา" is shared by the two
    linked accounts, and each person also has a private room with the assistant
-   (ผู้ช่วย, Hermes Agent running on the family's Mac through bridge/). Messages live on
+   (ผู้ช่วย, Hermes Agent running on the family's Mac through bridge/) and a private room with
+   เลขาช่วยเหลือ, the same Mac model for anything at all, with web search. Messages live on
    the server (/api/chat, server/src/chat.js); one EventSource per device brings new
    messages, edits, reactions, read marks, typing and the assistant's state.
    "@ผู้ช่วย" (or replying to it) asks the assistant in the shared room; "ทำนัด / เตือน / จด …"
    lines become notes at once. Loaded after notes.js; app.js helpers are used at run time. */
 
-const CHAT_ROOMS = ['couple', 'ai'];
+const CHAT_ROOMS = ['couple', 'ai', 'sec'];
 const CHAT_AI_NAME = 'ผู้ช่วย';
+const CHAT_SEC_NAME = 'เลขา';
+const CHAT_SEC_QUICK = ['รอบหนังวันนี้', 'อากาศพรุ่งนี้', 'ข่าวเด่นวันนี้', 'แปลเป็นภาษาอังกฤษ'];
+const chatAiName = (room) => (room === 'sec' ? CHAT_SEC_NAME : CHAT_AI_NAME);
+const chatAiKind = (room) => (room === 'sec' ? 'sec' : 'ai');
 const CHAT_MENTION = /@(?:ผู้ช่วย|ai|hermes|bot)/i;
 const CHAT_QUICK = ['บิลที่ยังไม่จ่าย', 'สรุปค่าใช้จ่ายเดือนนี้', 'งบเหลือเท่าไหร่', 'นัดที่จะถึง'];
 
 const chat = {
   state: null, // /chat/state: { rooms: { couple, ai }, bridge, reactions }
-  rooms: { couple: null, ai: null }, // loaded rooms: { msgs, reads, pending, more }
+  rooms: { couple: null, ai: null, sec: null }, // loaded rooms: { msgs, reads, pending, more }
   open: null, // room on screen
   es: null,
   lastEvent: 0,
@@ -30,7 +35,7 @@ const chat = {
 /* ---------- Server ---------- */
 
 function chatReady() { return isCloud() && !!cloud.user; }
-function chatRooms() { return cloud.coupleId ? CHAT_ROOMS : ['ai']; }
+function chatRooms() { return cloud.coupleId ? CHAT_ROOMS : ['ai', 'sec']; }
 
 async function chatLoadState() {
   if (!chatReady()) return;
@@ -102,7 +107,7 @@ function chatBanner(room, m) {
   const el = document.createElement('button');
   el.type = 'button';
   el.className = 'ch-banner';
-  el.innerHTML = `${room === 'couple' ? chatGroupAvatar('ch-grp sm') : `<span class="ch-av-wrap sm">${chatAvatar('ai', 'ch-av sm')}</span>`}
+  el.innerHTML = `${room === 'couple' ? chatGroupAvatar('ch-grp sm') : `<span class="ch-av-wrap sm">${chatAvatar(chatAiKind(room), 'ch-av sm')}</span>`}
     <span><b>${esc(chatName(m))}</b><span translate="no">${esc(chatPlain(m).slice(0, 120))}</span></span>`;
   el.addEventListener('click', () => { el.remove(); openChat(room); });
   document.body.appendChild(el);
@@ -207,7 +212,7 @@ function chatPeople() {
 }
 
 function chatAvatar(kind, cls = 'ch-av') {
-  if (kind === 'ai') return `<span class="${cls} ai" aria-hidden="true"></span>`;
+  if (kind === 'ai' || kind === 'sec') return `<span class="${cls} ${kind}" aria-hidden="true"></span>`;
   const u = kind === 'me' ? cloud.user : cloud.partner;
   return `<span class="${cls} ${kind}${userImg(u) ? ' has-img' : ''}" aria-hidden="true">${userFace(u)}</span>`;
 }
@@ -217,6 +222,7 @@ function chatGroupAvatar(cls = 'ch-grp') {
 }
 
 function chatRoomName(room) {
+  if (room === 'sec') return 'เลขาช่วยเหลือ';
   if (room !== 'couple') return 'ผู้ช่วย Centel';
   const name = chat.state && chat.state.rooms && chat.state.rooms.couple && chat.state.rooms.couple.name;
   return name ? `<span translate="no">${esc(name)}</span>` : 'บ้านเรา';
@@ -247,12 +253,12 @@ function chatRow(room) {
   const unread = (st && st.unread) || 0;
   const online = chat.state && chat.state.bridge && chat.state.bridge.online;
   const busy = st && st.pending;
-  const pv = busy && online ? `<span class="ch-typing-txt">${CHAT_AI_NAME}กำลังพิมพ์…</span>` : `<span translate="no">${esc(chatPreview(room, last))}</span>`;
+  const pv = busy && online ? `<span class="ch-typing-txt">${chatAiName(room)}กำลังพิมพ์…</span>` : `<span translate="no">${esc(chatPreview(room, last))}</span>`;
   return `
     <button class="item ch-row" data-chat-open="${room}">
-      ${room === 'couple' ? chatGroupAvatar() : `<span class="ch-av-wrap${online ? ' on' : ''}">${chatAvatar('ai', 'ch-av')}</span>`}
+      ${room === 'couple' ? chatGroupAvatar() : `<span class="ch-av-wrap${online ? ' on' : ''}">${chatAvatar(chatAiKind(room), 'ch-av')}</span>`}
       <div class="main">
-        <div class="name">${chatRoomName(room)}${room === 'ai' ? ' <span class="ch-ai-tag">AI</span>' : ''}</div>
+        <div class="name">${chatRoomName(room)}${room !== 'couple' ? ' <span class="ch-ai-tag">AI</span>' : ''}</div>
         <div class="sub ch-pv">${pv}</div>
       </div>
       <div class="ch-rt"><span>${last ? chatWhen(last.at) : ''}</span>${unread ? `<span class="ch-badge">${unread > 99 ? '99+' : unread}</span>` : ''}</div>
@@ -297,16 +303,16 @@ async function openChat(room) {
     <header class="ch-head">
       <button class="ch-back" data-chat="close" aria-label="กลับ"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <div class="ch-title">${room === 'couple' ? `<button type="button" class="ch-name" data-chat="rename" aria-label="แก้ชื่อห้อง"><b id="chName">${chatRoomName(room)}</b><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>` : `<b>${chatRoomName(room)}</b>`}<span id="chStatus"></span></div>
-      ${room === 'couple' ? chatGroupAvatar('ch-grp sm') : `<span class="ch-av-wrap sm">${chatAvatar('ai', 'ch-av sm')}</span>`}
+      ${room === 'couple' ? chatGroupAvatar('ch-grp sm') : `<span class="ch-av-wrap sm">${chatAvatar(chatAiKind(room), 'ch-av sm')}</span>`}
     </header>
     <div class="ch-wall" id="chWall"><div class="ch-loading">กำลังโหลด…</div></div>
     <div class="ch-bottom">
-      <div class="ch-chips" id="chChips">${(room === 'ai' ? CHAT_QUICK : ['@ผู้ช่วย', ...CHAT_QUICK.map((q) => `@ผู้ช่วย ${q}`)]).map((q) => `<button type="button" data-chat-chip="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+      <div class="ch-chips" id="chChips">${(room === 'sec' ? CHAT_SEC_QUICK : room === 'ai' ? CHAT_QUICK : ['@ผู้ช่วย', ...CHAT_QUICK.map((q) => `@ผู้ช่วย ${q}`)]).map((q) => `<button type="button" data-chat-chip="${esc(q)}">${esc(q)}</button>`).join('')}</div>
       <div class="ch-replybar" id="chReplyBar" hidden></div>
       <form class="ch-composer" id="chForm" autocomplete="off">
         <textarea id="chInput" rows="1" placeholder="ข้อความ" aria-label="พิมพ์ข้อความ" enterkeyhint="send"></textarea>
         <div class="ch-rec" id="chRec" hidden><button type="button" class="ch-rec-x" data-chat="rec-cancel" aria-label="ยกเลิก">✕</button><i></i><span id="chRecTime">0:00</span><small>แตะ ↑ เพื่อส่ง</small></div>
-        ${room === 'ai' && chatCanRecord() ? '<button type="button" class="ch-mic" data-chat="rec" aria-label="พูด"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>' : ''}
+        ${room !== 'couple' && chatCanRecord() ? '<button type="button" class="ch-mic" data-chat="rec" aria-label="พูด"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>' : ''}
         <button type="submit" class="ch-send" aria-label="ส่ง"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </form>
     </div>`;
@@ -431,11 +437,11 @@ function chatStatusText() {
   const r = chat.rooms[room];
   const online = chat.state && chat.state.bridge && chat.state.bridge.online;
   const set = chat.state && chat.state.bridge && chat.state.bridge.set;
-  if (r && r.pending === 'typing') return `<span class="ch-st typing">${CHAT_AI_NAME}กำลังพิมพ์…</span>`;
-  if (r && r.pending === 'listening' && online) return `<span class="ch-st typing">${CHAT_AI_NAME}กำลังฟังเสียง…</span>`;
-  if (r && r.pending && !online) return `<span class="ch-st warn">${CHAT_AI_NAME}ออฟไลน์ · จะตอบเมื่อ Mac เปิด</span>`;
+  if (r && r.pending === 'typing') return `<span class="ch-st typing">${chatAiName(room)}กำลังพิมพ์…</span>`;
+  if (r && r.pending === 'listening' && online) return `<span class="ch-st typing">${chatAiName(room)}กำลังฟังเสียง…</span>`;
+  if (r && r.pending && !online) return `<span class="ch-st warn">${chatAiName(room)}ออฟไลน์ · จะตอบเมื่อ Mac เปิด</span>`;
   if (room === 'couple' && Date.now() - chat.partnerTyping < 5000) return `<span class="ch-st typing">${esc(partnerName())} กำลังพิมพ์…</span>`;
-  const ai = !set ? 'ยังไม่ได้เชื่อม Mac' : online ? 'ผู้ช่วยออนไลน์' : 'ผู้ช่วยออฟไลน์';
+  const ai = !set ? 'ยังไม่ได้เชื่อม Mac' : `${chatAiName(room)}${online ? 'ออนไลน์' : 'ออฟไลน์'}`;
   if (room === 'couple') return `<span class="ch-st">${cloud.partner ? `${esc(partnerName())} · ` : ''}${ai}</span>`;
   return `<span class="ch-st${online ? ' ok' : ''}">${ai}</span>`;
 }
@@ -445,7 +451,7 @@ function chatRenderHead() {
 }
 
 function chatName(m) {
-  if (m.ai) return CHAT_AI_NAME;
+  if (m.ai) return chatAiName(m.room);
   return m.senderId === cloud.user.id ? (cloud.user.nickname || cloud.user.name) : partnerName();
 }
 
@@ -518,7 +524,7 @@ function chatBubble(m, r, first, last) {
   const action = m.action && m.action.type === 'note' ? chatNoteCard(m.action.note) : '';
   return `
     <div class="ch-msg ${kind}${last ? ' last' : ''}${first ? ' first' : ''}" data-mid="${esc(m.id)}">
-      ${mine ? '' : `<span class="ch-av-slot">${last ? chatAvatar(kind === 'ai' ? 'ai' : 'partner', 'ch-av sm') : ''}</span>`}
+      ${mine ? '' : `<span class="ch-av-slot">${last ? chatAvatar(kind === 'ai' ? chatAiKind(chat.open) : 'partner', 'ch-av sm') : ''}</span>`}
       <div class="ch-b">
         ${showName ? `<div class="ch-who ${kind}">${esc(chatName(m))}${m.ai ? ' <span class="ch-ai-tag">AI</span>' : ''}</div>` : ''}
         ${q ? `<button type="button" class="ch-quote" data-chat-jump="${esc(q.id)}"><b>${esc(chatName(q))}</b><span translate="no">${esc(q.deleted ? 'ข้อความถูกลบ' : chatPlain(q).slice(0, 80))}</span></button>` : ''}
@@ -554,7 +560,7 @@ function chatRenderWall(jump) {
     html += chatBubble(m, r, !close(prev, m), !close(m, next));
   });
   if (r.pending === 'typing' || (r.pending && chat.state && chat.state.bridge.online)) {
-    html += `<div class="ch-msg ai last first"><span class="ch-av-slot">${chatAvatar('ai', 'ch-av sm')}</span><div class="ch-b"><span class="ch-dots"><i></i><i></i><i></i></span></div></div>`;
+    html += `<div class="ch-msg ai last first"><span class="ch-av-slot">${chatAvatar(chatAiKind(chat.open), 'ch-av sm')}</span><div class="ch-b"><span class="ch-dots"><i></i><i></i><i></i></span></div></div>`;
   }
   wall.innerHTML = html;
   if (nearBottom) wall.scrollTop = wall.scrollHeight;
@@ -564,7 +570,7 @@ function chatRenderWall(jump) {
 /* ---------- Sending ---------- */
 
 function chatContext(text, room) {
-  if (room !== 'ai' && !CHAT_MENTION.test(text) && !chat.reply) return undefined;
+  if (room === 'couple' && !CHAT_MENTION.test(text) && !chat.reply) return undefined;
   const ctx = {};
   try {
     ctx.bills = occurrences(ymOf(new Date())).map((o) => ({ name: o.bill.name, amount: o.amount || 0, due: dateStr(o.due), paid: o.paid }));
@@ -728,7 +734,7 @@ function chatMenu(id) {
   const m = r && r.msgs.find((x) => x.id === id);
   if (!m || m.deleted || m.sending) return;
   const mine = !m.ai && m.senderId === cloud.user.id;
-  const canDel = mine || (m.ai && chat.open === 'ai');
+  const canDel = mine || (m.ai && chat.open !== 'couple');
   const emojis = (chat.state && chat.state.reactions) || ['👍', '❤️', '😂', '😮', '😢', '🙏'];
   const layer = document.createElement('div');
   layer.className = 'ch-menu-layer';
@@ -920,7 +926,7 @@ function chatBoot() {
   chatLoadState().then(() => {
     if (!chat.booted) {
       chat.booted = true;
-      const m = /^#chat-(couple|ai)$/.exec(location.hash);
+      const m = /^#chat-(couple|ai|sec)$/.exec(location.hash);
       if (m) openChat(m[1]);
     }
     if (ui.tab === 'account') render();
@@ -937,7 +943,7 @@ setInterval(() => { if (document.visibilityState === 'visible') chatView(); }, 6
 setInterval(() => { if (document.visibilityState === 'visible' && chatReady() && Date.now() - chat.lastEvent > 50000) chatCatchUp(); }, 20000);
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => {
-    const m = e.data && e.data.type === 'open' && /#chat-(couple|ai)$/.exec(e.data.url || '');
+    const m = e.data && e.data.type === 'open' && /#chat-(couple|ai|sec)$/.exec(e.data.url || '');
     if (m) openChat(m[1]);
   });
 }

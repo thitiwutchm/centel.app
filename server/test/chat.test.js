@@ -48,7 +48,7 @@ test('chat: setup a couple and an outsider', async () => {
 
 test('chat: the couple room is shared, private to the two, with unread and read marks', async () => {
   const st0 = await A('GET', '/chat/state');
-  assert.deepEqual(Object.keys(st0.rooms).sort(), ['ai', 'couple']);
+  assert.deepEqual(Object.keys(st0.rooms).sort(), ['ai', 'couple', 'sec']);
   assert.equal((await C('GET', '/chat/state')).rooms.couple, undefined);
   assert.equal((await send(C, 'couple', 'hi')).status, 409);
 
@@ -287,6 +287,28 @@ test('chat: a spoken question is heard on the Mac, then answered', async () => {
   assert.equal(st.rooms.ai.pending, null);
   assert.equal(st.bridge.voice, false);
   assert.match((await B('GET', '/chat/messages?room=ai')).messages.at(-1).text, /Whisper/);
+});
+
+test('chat: เลขาช่วยเหลือ is a private room for anything, with the web', async () => {
+  assert.ok('sec' in (await B('GET', '/chat/state')).rooms);
+  await send(B, 'sec', 'รอบหนังเซ็นทรัลเฟสติวัลเชียงใหม่วันนี้');
+  const job = await bridge(token, 'GET', '/next?wait=2');
+  assert.equal(job.kind, 'reply');
+  assert.equal(job.web, true);
+  assert.match(job.messages[0].content, /เลขาช่วยเหลือ/);
+  assert.match(job.messages[0].content, /web_search/);
+  assert.doesNotMatch(job.messages[0].content, /รายจ่ายเดือน/);
+  assert.equal(job.messages.at(-1).content, 'รอบหนังเซ็นทรัลเฟสติวัลเชียงใหม่วันนี้');
+  const ans = await bridge(token, 'POST', `/jobs/${job.id}`, { reply: 'มีรอบ 13:00 กับ 16:30 ครับ' });
+  assert.equal(ans.ok, true);
+  const page = await B('GET', '/chat/messages?room=sec');
+  assert.equal(page.messages.length, 2);
+  assert.equal((await A('GET', '/chat/messages?room=sec')).messages.length, 0);
+  // The app assistant's own room does not get the web.
+  await send(B, 'ai', 'สวัสดี');
+  const j2 = await bridge(token, 'GET', '/next?wait=2');
+  assert.equal(j2.web, false);
+  await bridge(token, 'POST', `/jobs/${j2.id}`, { reply: 'สวัสดีครับ' });
 });
 
 test('chat: revoking the token stops the bridge', async () => {

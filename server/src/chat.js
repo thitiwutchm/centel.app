@@ -7,8 +7,9 @@ import { noteCommand, saveNoteCommand, reminderHooks, REMIND_TEXT } from './line
 import { parseNote, remindAt, thaiToday } from './noteparse.js';
 import { noteOut } from './routes.js';
 
-/* In-app chat (chat.js in the PWA). Two rooms per person: 'couple', shared by the two
-   linked accounts, and 'ai', a private room with the assistant. New messages, edits,
+/* In-app chat (chat.js in the PWA). Rooms per person: 'couple', shared by the two
+   linked accounts, 'ai', a private room with the app's assistant, and 'sec' (เลขาช่วยเหลือ),
+   a private room with the same Mac model for anything at all, allowed to search the web. New messages, edits,
    read marks and typing reach open apps through one Server-Sent Events stream per
    device (/api/chat/stream); a partner with no app open gets a Web Push.
 
@@ -25,12 +26,14 @@ export const bridgeRouter = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status, expose: true });
 const isUuid = (s) => typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
-const ROOMS = new Set(['couple', 'ai']);
+const ROOMS = new Set(['couple', 'ai', 'sec']);
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '👌'];
 const MAX_TEXT = 4000;
 const JOB_TTL_MIN = Number(process.env.CHAT_JOB_TTL_MIN) || 30;
 const BRIDGE_ONLINE_MS = 75000;
 const AI_NAME = 'ผู้ช่วย';
+const SEC_NAME = 'เลขา';
+const aiName = (room) => (room === 'sec' ? SEC_NAME : AI_NAME);
 // "@ผู้ช่วย", "@ai", "@hermes" call the assistant in the couple room.
 const MENTION = /@(?:ผู้ช่วย|ai|hermes|bot)/i;
 const MENTIONS = new RegExp(MENTION.source, 'gi');
@@ -58,7 +61,7 @@ function roomOk(me, room) {
   if (room === 'couple' && !me.coupleId) throw bad('no_partner', 409);
 }
 // SQL for "messages in this room as seen by me": $1 = couple id or user id.
-const roomSql = (room) => (room === 'couple' ? "room = 'couple' and couple_id = $1" : "room = 'ai' and owner_id = $1");
+const roomSql = (room) => (room === 'couple' ? "room = 'couple' and couple_id = $1" : `room = '${room === 'sec' ? 'sec' : 'ai'}' and owner_id = $1`);
 const roomKey = (me, room) => (room === 'couple' ? me.coupleId : me.id);
 
 const msgOut = (m) => ({
@@ -144,7 +147,7 @@ async function pending(me, room) {
 router.get('/state', wrap(async (req, res) => {
   const me = await whoIs(req.user.id);
   const out = { rooms: {}, bridge: await bridgeState(me), reactions: REACTIONS };
-  for (const room of me.coupleId ? ['couple', 'ai'] : ['ai']) {
+  for (const room of me.coupleId ? ['couple', 'ai', 'sec'] : ['ai', 'sec']) {
     const k = roomKey(me, room);
     const last = (await pool.query(`select * from chat_messages where ${roomSql(room)} order by created_at desc limit 1`, [k])).rows[0];
     const r = await reads(me, room);
@@ -213,7 +216,7 @@ function wakeBridges() { for (const w of jobWaiters) w(); }
 async function assistantPart(me, room, m, { replyAi = false, context = null } = {}) {
   const text = m.text;
   const plain = text.replace(MENTIONS, ' ').replace(/\s+/g, ' ').trim();
-  let called = room === 'ai' || replyAi || MENTION.test(text);
+  let called = room !== 'couple' || replyAi || MENTION.test(text);
   // A bare "@ผู้ช่วย" sent on its own calls the assistant for the sender's next message.
   if (!called) {
     const prev = (await pool.query(
@@ -288,7 +291,7 @@ router.post('/messages', rateLimit(120, 60000), wrap(async (req, res) => {
     return res.json({ message: msgOut(dup) });
   }
   const m = await addMessage({ id: b.id, room, me, senderId: me.id, text, replyTo });
-  notify(me, room, m, room === 'couple' ? me.name : AI_NAME);
+  notify(me, room, m, room === 'couple' ? me.name : aiName(room));
   const assistant = await assistantPart(me, room, m, { replyAi, context: b.context });
   res.json({ message: m, assistant });
 }));
@@ -317,7 +320,7 @@ router.delete('/messages/:id', wrap(async (req, res) => {
   const me = await whoIs(req.user.id);
   const r = await ownMessage(me, req.params.id);
   // Your own messages, and the assistant's in your private room.
-  if (!(r.sender_id === me.id && !r.from_ai) && !(r.from_ai && r.room === 'ai')) throw bad('forbidden', 403);
+  if (!(r.sender_id === me.id && !r.from_ai) && !(r.from_ai && r.room !== 'couple')) throw bad('forbidden', 403);
   const { rows } = await pool.query("update chat_messages set deleted_at = now(), text = '', action = null where id = $1 returning *", [r.id]);
   const m = msgOut(rows[0]);
   emit(audience(me, r.room), { type: 'msg', room: r.room, msg: m });
@@ -451,7 +454,8 @@ bridgeRouter.get('/next', wrap(async (req, res) => {
   const asker = await whoIs(job.user_id);
   if (job.kind === 'transcribe') return res.json({ id: job.id, kind: 'transcribe', mime: job.audio_mime, audio: job.audio.toString('base64') });
   emit(audience(asker, job.room), { type: 'ai', room: job.room, state: 'typing' });
-  res.json({ id: job.id, kind: 'reply', messages: await buildPrompt(job, asker) });
+  // web: the bridge may let the model search the web (เลขาช่วยเหลือ only).
+  res.json({ id: job.id, kind: 'reply', web: job.room === 'sec', messages: await buildPrompt(job, asker) });
 }));
 
 // The answer for a job: { reply } or { error }. A <centel-note>{…}</centel-note> block in
@@ -477,7 +481,7 @@ bridgeRouter.post('/jobs/:id', wrap(async (req, res) => {
     action: note ? { type: 'note', note: noteOut(note) } : null,
   });
   if (note) emit([asker.id, asker.partnerId].filter(Boolean), { type: 'note', note: noteOut(note) });
-  notify(asker, job.room, m, AI_NAME);
+  notify(asker, job.room, m, aiName(job.room));
   res.json({ ok: true, message: m });
 }));
 
@@ -494,7 +498,7 @@ async function transcribed(job, asker, body) {
   const ctx = job.context || {};
   const id = isUuid(ctx.msgId) && !(await pool.query('select 1 from chat_messages where id = $1', [ctx.msgId])).rows[0] ? ctx.msgId : crypto.randomUUID();
   const m = await addMessage({ id, room: job.room, me: asker, senderId: asker.id, text, action: { type: 'voice' } });
-  notify(asker, job.room, m, job.room === 'couple' ? asker.name : AI_NAME);
+  notify(asker, job.room, m, job.room === 'couple' ? asker.name : aiName(job.room));
   await assistantPart(asker, job.room, m, { context: ctx.context });
   return { ok: true, message: m };
 }
@@ -537,7 +541,24 @@ async function applyActions(raw, job, asker) {
 
 const baht = (n) => `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })} บาท`;
 
+// เลขาช่วยเหลือ: anything at all, with the web for live facts; no money data in its prompt.
+function secSystem(job, asker) {
+  const t = thaiToday();
+  return [
+    `คุณคือ "เลขาช่วยเหลือ" เลขาส่วนตัวของ ${asker.name} ในแอป Centel ช่วยได้ทุกเรื่อง: ตอบคำถามทั่วไป หาข้อมูล แปลภาษา เขียนข้อความ วางแผน คิดเลข แนะนำร้าน/หนัง/ที่เที่ยว`,
+    `วันนี้: ${t.weekday} ${t.date} เวลา ${t.time} (ประเทศไทย)`,
+    'ตอบสั้น กระชับ เป็นกันเอง ใช้ภาษาเดียวกับที่ถาม (ปกติภาษาไทย ลงท้ายด้วย ครับ) ไม่ต้องใช้ Markdown ตาราง',
+    'เรื่องที่เปลี่ยนตลอด (รอบหนัง ข่าว อากาศ ราคา เวลาเปิดปิด) ให้ใช้ web_search แล้ว read_page ถ้าจำเป็น ก่อนตอบ และบอกแหล่งที่มาสั้นๆ ถ้าค้นแล้วไม่เจอให้บอกตรงๆ ห้ามแต่งรอบเวลา ราคา หรือข่าวเอง',
+    'ถ้าไม่มีเครื่องมือค้นเว็บ ให้ตอบจากความรู้ที่มี และบอกว่าข้อมูลอาจไม่เป็นปัจจุบัน',
+    'ถ้าถูกขอให้จด นัด หรือเตือนอะไร ให้ใส่บล็อกนี้หนึ่งบล็อกท้ายคำตอบ แล้วแอปจะบันทึกเป็นโน้ตให้:',
+    '<centel-note>{"text": "สิ่งที่ต้องทำ", "date": "YYYY-MM-DD หรือ null", "time": "HH:MM หรือ null", "remind": 0}</centel-note>',
+    'remind คือเตือนก่อนกี่นาที เลือก 0, 120, 360, 1440 หรือ 2880 · ปี พ.ศ. ลบ 543 เป็น ค.ศ.',
+    'ห้ามรันคำสั่งหรือแตะไฟล์บนเครื่อง งานนี้มาจากแชทในแอปเท่านั้น',
+  ].join('\n');
+}
+
 async function buildPrompt(job, asker) {
+  if (job.room === 'sec') return [{ role: 'system', content: secSystem(job, asker) }, ...(await chatTurns(job, asker))];
   const t = thaiToday();
   const ym = t.date.slice(0, 7);
   const notes = (await pool.query(
@@ -596,6 +617,11 @@ async function buildPrompt(job, asker) {
     ...data,
   ].join('\n');
 
+  return [{ role: 'system', content: system }, ...(await chatTurns(job, asker))];
+}
+
+// The room's last messages up to the question, as chat turns.
+async function chatTurns(job, asker) {
   const k = job.room === 'couple' ? job.couple_id : job.user_id;
   const history = (await pool.query(
     `select * from (select * from chat_messages where ${roomSql(job.room)} and deleted_at is null
@@ -605,7 +631,7 @@ async function buildPrompt(job, asker) {
   const turns = history.map((m) => (m.from_ai
     ? { role: 'assistant', content: m.text }
     : { role: 'user', content: job.room === 'couple' ? `${names.get(m.sender_id) || 'สมาชิก'}: ${m.text}` : m.text }));
-  return [{ role: 'system', content: system }, ...turns];
+  return turns;
 }
 
 /* ---------- Questions nobody answered ---------- */
