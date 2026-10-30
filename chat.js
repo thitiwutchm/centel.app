@@ -132,6 +132,11 @@ function chatEvent(ev) {
     if (ev.state === 'offline' && chat.state) chat.state.bridge.online = false;
     if (ev.state === 'typing' && chat.state) chat.state.bridge.online = true;
     if (chat.open === ev.room) { chatRenderWall(); chatRenderHead(); }
+  } else if (ev.type === 'room') {
+    if (st) st.name = ev.name;
+    const nm = document.getElementById('chName');
+    if (nm) nm.innerHTML = chatRoomName('couple');
+    chatRefreshCard();
   } else if (ev.type === 'note') {
     const list = cloud.notes || (cloud.notes = []);
     const i = list.findIndex((n) => n.id === ev.note.id);
@@ -181,7 +186,11 @@ function chatGroupAvatar(cls = 'ch-grp') {
   return `<span class="${cls}" aria-hidden="true">${chatAvatar('me', 'ch-av xs')}${chatAvatar('partner', 'ch-av xs')}${chatAvatar('ai', 'ch-av xs')}</span>`;
 }
 
-function chatRoomName(room) { return room === 'couple' ? 'บ้านเรา' : 'ผู้ช่วย Centel'; }
+function chatRoomName(room) {
+  if (room !== 'couple') return 'ผู้ช่วย Centel';
+  const name = chat.state && chat.state.rooms && chat.state.rooms.couple && chat.state.rooms.couple.name;
+  return name ? `<span translate="no">${esc(name)}</span>` : 'บ้านเรา';
+}
 
 function chatWhen(iso) {
   if (!iso) return '';
@@ -257,7 +266,7 @@ async function openChat(room) {
   el.innerHTML = `
     <header class="ch-head">
       <button class="ch-back" data-chat="close" aria-label="กลับ"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-      <div class="ch-title"><b>${chatRoomName(room)}</b><span id="chStatus"></span></div>
+      <div class="ch-title">${room === 'couple' ? `<button type="button" class="ch-name" data-chat="rename" aria-label="แก้ชื่อห้อง"><b id="chName">${chatRoomName(room)}</b><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>` : `<b>${chatRoomName(room)}</b>`}<span id="chStatus"></span></div>
       ${room === 'couple' ? chatGroupAvatar('ch-grp sm') : `<span class="ch-av-wrap sm">${chatAvatar('ai', 'ch-av sm')}</span>`}
     </header>
     <div class="ch-wall" id="chWall"><div class="ch-loading">กำลังโหลด…</div></div>
@@ -332,6 +341,43 @@ function chatFitStop() {
   const vv = window.visualViewport;
   if (vv) { vv.removeEventListener('resize', chatFit); vv.removeEventListener('scroll', chatFit); }
   window.removeEventListener('resize', chatFit);
+}
+
+// Rename the shared room in place: the title becomes a text field, Enter or leaving it saves.
+function chatRename(btn) {
+  const st = chat.state && chat.state.rooms && chat.state.rooms.couple;
+  if (!st || btn.querySelector('input')) return;
+  const input = document.createElement('input');
+  input.className = 'ch-name-in';
+  input.maxLength = 40;
+  input.value = st.name || '';
+  input.placeholder = 'บ้านเรา';
+  input.setAttribute('enterkeyhint', 'done');
+  input.setAttribute('aria-label', 'ชื่อห้อง');
+  btn.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const name = input.value.replace(/\s+/g, ' ').trim();
+    input.replaceWith(btn);
+    if (!save || name === (st.name || '')) return;
+    const before = st.name;
+    st.name = name || null;
+    document.getElementById('chName').innerHTML = chatRoomName('couple');
+    try { await api('PUT', '/chat/room', { name }); chatRefreshCard(); } catch (e) {
+      st.name = before;
+      document.getElementById('chName').innerHTML = chatRoomName('couple');
+      toast(cloudErr(e));
+    }
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', () => finish(true));
 }
 
 function closeChat() {
@@ -609,6 +655,7 @@ function chatBindScreen(el) {
     if (b) {
       const a = b.dataset.chat;
       if (a === 'close') closeChat();
+      else if (a === 'rename') chatRename(b);
       else if (a === 'unreply') chatSetReply(null);
       else if (a === 'unedit') chatSetEdit(null);
       else if (a === 'more') {

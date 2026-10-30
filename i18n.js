@@ -451,7 +451,7 @@ const I18N_EN = {
   'ส่งแล้ว ดูการแจ้งเตือนบนเครื่อง': 'Sent, check your notifications', 'ไม่พบเครื่องที่เปิดการแจ้งเตือน ลองปิดแล้วเปิดใหม่': 'No device with notifications on. Turn it off and on again',
 
   // Chat mini app (chat.js)
-  'แชท': 'Chat', 'บ้านเรา': 'Our home', 'ผู้ช่วย Centel': 'Centel assistant', 'ผู้ช่วย': 'Assistant', 'ข้อความ': 'Message',
+  'แชท': 'Chat', 'บ้านเรา': 'Our home', 'แก้ชื่อห้อง': 'Rename room', 'ชื่อห้อง': 'Room name', 'ผู้ช่วย Centel': 'Centel assistant', 'ผู้ช่วย': 'Assistant', 'ข้อความ': 'Message',
   'พิมพ์ข้อความ': 'Type a message', 'ส่ง': 'Send', 'กลับ': 'Back', 'ตอบกลับ': 'Reply', 'คัดลอก': 'Copy', 'คัดลอกแล้ว': 'Copied',
   'ผู้ช่วยออนไลน์': 'Assistant online', 'ผู้ช่วยออฟไลน์': 'Assistant offline', 'ยังไม่ได้เชื่อม Mac': 'Mac not connected',
   'ผู้ช่วยกำลังพิมพ์…': 'Assistant is typing…', '{0} กำลังพิมพ์…': '{0} is typing…', 'ผู้ช่วยออฟไลน์ · จะตอบเมื่อ Mac เปิด': 'Assistant offline · answers when the Mac is on',
