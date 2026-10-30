@@ -18,11 +18,13 @@ Python 3.8+ standard library only.
 """
 
 import html
+import ipaddress
 import json
 import os
 import platform
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -106,9 +108,36 @@ TOOLS = [
 BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
 
+def public_url(url):
+    """Only public web pages: a link the model was handed must not reach this Mac or the home
+    network (Ollama on 127.0.0.1:11434 has no password, nor do most routers and printers)."""
+    u = urllib.parse.urlparse(url or "")
+    if u.scheme not in ("http", "https") or not u.hostname:
+        raise ValueError("ใช้ได้เฉพาะลิงก์ http/https")
+    try:
+        infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise ValueError("หาเว็บนี้ไม่เจอ")
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not ip.is_global or ip.is_multicast:
+            raise ValueError("ลิงก์นี้ชี้เข้าเครื่องหรือเครือข่ายในบ้าน เปิดไม่ได้")
+    return url
+
+
+class PublicRedirects(urllib.request.HTTPRedirectHandler):
+    # Each hop of a redirect is checked too, so a public page cannot bounce the bridge inward.
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        public_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+WEB = urllib.request.build_opener(PublicRedirects)
+
+
 def fetch_text(url, data=None, timeout=20):
-    req = urllib.request.Request(url, data=data, headers={"user-agent": BROWSER_UA, "accept-language": "th,en;q=0.8"})
-    with urllib.request.urlopen(req, timeout=timeout) as res:
+    req = urllib.request.Request(public_url(url), data=data, headers={"user-agent": BROWSER_UA, "accept-language": "th,en;q=0.8"})
+    with WEB.open(req, timeout=timeout) as res:
         return res.read(2_000_000).decode(res.headers.get_content_charset() or "utf-8", "replace")
 
 
