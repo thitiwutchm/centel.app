@@ -265,6 +265,17 @@ function deltaFor(t, S) {
   return (S.has(t.toWalletId) ? t.amount : 0) - (S.has(t.walletId) ? t.amount : 0);
 }
 
+// What a transaction means for my own money that day: income in, spending out, counting only my
+// share of a shared bill (even when my partner paid, so it has no wallet); a transfer moves money
+// between wallets as before. The day header uses this, so a day of shared meals is not ฿0.
+function costFor(t, S) {
+  if (t.type === 'transfer') return deltaFor(t, S);
+  if (!counts(t) || !inSel(t, S)) return 0;
+  if (t.type === 'income') return t.amount;
+  if (t.type === 'expense') return -t.amount;
+  return 0;
+}
+
 function touches(t, S) {
   if (t.type === 'settle') return S.has(t.walletId) || (!!S.total && !t.walletId);
   return inSel(t, S) || (t.type === 'transfer' && S.has(t.toWalletId));
@@ -723,7 +734,7 @@ function dayGroups(list, S, newestFirst = true) {
   if (newestFirst) days.reverse();
   return days.map((ds) => {
     const items = by[ds];
-    const net = items.reduce((s, t) => s + deltaFor(t, S), 0);
+    const net = items.reduce((s, t) => s + costFor(t, S), 0);
     const d = parseDs(ds);
     return `
       <div class="day-card">
@@ -857,6 +868,7 @@ function insightCard(ym, S) {
   const by = {};
   exp.forEach((t) => { const k = catRootId(t.category); by[k] = (by[k] || 0) + t.amount; });
   const [top, spent] = Object.entries(by).sort((a, b) => b[1] - a[1])[0];
+  const all = exp.reduce((sum, t) => sum + t.amount, 0);
   const c = catById(top) || catFallback('expense');
   const day = new Date().getDate();
   const lastYm = addMonths(ym, -1);
@@ -874,7 +886,7 @@ function insightCard(ym, S) {
     <div class="card insight">
       <div class="ins-top">${circleIco(c)}<div><b>${esc(c.label)}</b><div class="muted small">หมวดที่ใช้มากที่สุดเดือนนี้ · รวม <b class="exp">${baht(spent)}</b></div></div></div>
       <div class="ins-row">
-        <div><div class="muted small">เฉลี่ยเดือนนี้</div><div class="ins-avg">${baht(Math.round((spent / day) * 100) / 100)}<span class="muted">/วัน</span></div></div>
+        <div><div class="muted small">เฉลี่ยเดือนนี้</div><div class="ins-avg">${baht(Math.round((all / day) * 100) / 100)}<span class="muted">/วัน</span></div></div>
         ${cmp}
       </div>
     </div>`;
