@@ -42,6 +42,7 @@ export function parseNote(raw, now = new Date()) {
   const take = (rx) => { const m = s.match(rx); if (m) s = s.replace(m[0], ' '); return m; };
   let time = '';
   let endTime = '';
+  let bare = false; // a plain "4:30", which may mean the afternoon
   const hhmm = (h, m = 0) => (h >= 0 && h < 24 && m >= 0 && m < 60 ? `${pad(h)}:${pad(m)}` : '');
   const hm = (h, m = 0) => { time = hhmm(h, m); };
   const ap = (h, x) => (h % 12) + (/pm/i.test(x) ? 12 : 0);
@@ -53,7 +54,7 @@ export function parseNote(raw, now = new Date()) {
     hm(+m[1], +m[2]); endTime = hhmm(+m[3], +m[4]);
   }
   if (time) { if (!endTime || endTime <= time) endTime = ''; m = null; } else
-  if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:นาฬิกา|น\.?(?![ก-๎]))?/))) hm(+m[1], +m[2]);
+  if ((m = take(/(?:เวลา\s*|ตอน\s*)?(\d{1,2})[:.](\d{2})\s*(?:นาฬิกา|น\.?(?![ก-๎]))?/))) { hm(+m[1], +m[2]); bare = true; }
   else if ((m = take(/(?:ตอน\s*)?เที่ยงคืน/))) hm(0);
   else if ((m = take(/(?:ตอน\s*)?เที่ยง(?:วัน)?/))) hm(12);
   else if ((m = take(/(?:ตอน\s*)?บ่าย\s*โมง/))) hm(13);
@@ -102,13 +103,18 @@ export function parseNote(raw, now = new Date()) {
   if (!date) {
     if (take(/มะรืน(?:นี้)?/)) date = addDays(2);
     else if (take(/พรุ่งนี้|tomorrow/i)) date = addDays(1);
-    else if (take(/วันนี้|คืนนี้|today|tonight/i)) date = addDays(0);
+    else if (take(/วันนี้|คืนนี้|today|tonight/i)) {
+      date = addDays(0);
+      // "วันนี้ 4:30" said at 9 in the morning means 16:30.
+      const nowT = `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`;
+      if (bare && time < nowT && +time.slice(0, 2) < 12) { const pm = hhmm(+time.slice(0, 2) + 12, +time.slice(3)); if (pm > nowT) time = pm; }
+    }
   }
   // A time on its own means the next time it comes round: today, or tomorrow once past.
   const timeOnly = !date && !!time;
   if (timeOnly) date = addDays(time > `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}` ? 0 : 1);
   // Commas left between the words taken out ("…, Nov 30, 10 AM") go too.
-  const text = s.replace(/\s+/g, ' ').replace(/(\s*,)+\s*$/, '').replace(/^\s*,/, '').replace(/,(\s*,)+/g, ',').trim();
+  const text = s.replace(/\s+/g, ' ').replace(/\s+,/g, ',').replace(/,+/g, ',').replace(/,\s*$/, '').replace(/^\s*,/, '').trim();
   // A line that is only a date or time ("19:30", an edit) keeps it; the words stay as the text.
   // timeOnly: the date was not in the words, only worked out from the time.
   return { text: text || raw.trim(), date: date ? dateStr(date) : '', time, endTime: time ? endTime : '', ...(timeOnly ? { timeOnly } : {}) };

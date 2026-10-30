@@ -165,6 +165,10 @@ test('line: a note typed into the group is saved for the person who typed it', a
   const n2 = (await B('GET', '/bootstrap')).notes.find((x) => x.text === 'ประชุมผู้ปกครอง');
   assert.equal(n2.remind, 120);
   assert.equal(new Date(n2.remindAt).toISOString().slice(11, 16), '09:00');
+  // Free-form, over several lines, as typed on a phone.
+  const r3 = await say('ช่วยทำนัดแจ้งเตือนพรุ่งนี้เวลา 16:30 น.\n\nแจ้งเตือนล่วงหน้า 2 ชั่วโมง\n\nเอาไม้ไปฝากขายที่สนาม Rally house', mom, 'rt9');
+  assert.match(r3, /^รับทราบครับ ทำนัดให้ แม่เฟิร์น เรียบร้อยแล้ว ✅\n📝 เอาไม้ไปฝากขายที่สนาม Rally house\n📅 .* 16:30 น\.\n🔔 เตือนล่วงหน้า 2 ชั่วโมง/);
+  assert.match(await say('ทำนัด คุยกับหลิง\n\nMon, Nov 2, 1pm\n\nเตือนล่วงหน้า 1 วัน', mom, 'rt10'), /📝 คุยกับหลิง\n📅 .*2 พ\.ย\. 13:00 น\.\n🔔 เตือนล่วงหน้า 1 วัน/);
   // Everyday chat gets no answer; a stranger is told how to link their LINE.
   assert.equal(await say('นัดกันกี่โมง', mom, 'rt4'), undefined);
   assert.match(await say('เตือน ซื้อนม', 'U' + '1'.repeat(32), 'rt5'), /ยังไม่รู้[\s\S]*U1{32}/);

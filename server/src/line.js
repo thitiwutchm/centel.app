@@ -116,7 +116,9 @@ export async function lineWebhook(req, res) {
 // or any line that @mentions the bot. Returns { verb, text } (the command word and the
 // note part), or null for other chat.
 // The command word must stand alone, so everyday chat ("นัดกันกี่โมง") is left alone.
-const COMMAND = /^\s*(ทำนัด|นัดหมาย|ลงนัด|นัด|เตือน(?:ความจำ)?|จดไว้|จด|โน้ต|note|remind(?:\s+me)?)(?:\s+|\s*:\s*|$)/i;
+// ทำนัด / นัดหมาย / ลงนัด may run into the words after them and follow a polite
+// "ช่วย" / "ขอ" / "รบกวน" ("ช่วยทำนัดแจ้งเตือนวันนี้ 4:30 น."); "แจ้งเตือน" right after is dropped.
+const COMMAND = /^\s*(?:(?:ช่วย|ขอ|รบกวน)\s*)?(?:(ทำนัด|นัดหมาย|ลงนัด)(?:\s*ให้)?(?:\s*(?:แจ้ง)?เตือน(?!\s*(?:ก่อน|ล่วงหน้า)))?\s*:?\s*|(นัด|เตือน(?:ความจำ)?|จดไว้|จด|โน้ต|note|remind(?:\s+me)?)(?:\s+|\s*:\s*|$))/i;
 // What the bot says it did: "รับทราบครับ ทำนัดให้ แม่เฟิร์น เรียบร้อยแล้ว". A note (จด) may have
 // no date; an appointment or reminder it cannot find a date in gets no answer.
 const verbOf = (w = '') => (/^(จด|โน้ต|note)/i.test(w) ? 'จด' : /^(เตือน|remind)/i.test(w) ? 'ตั้งเตือน' : 'ทำนัด');
@@ -126,7 +128,7 @@ export function noteCommand(message) {
   for (const x of [...self].sort((a, b) => b.index - a.index)) s = s.slice(0, x.index) + s.slice(x.index + x.length);
   const m = s.match(COMMAND);
   if (!m && !self.length) return null;
-  return { verb: verbOf(m?.[1]), text: (m ? s.slice(m[0].length) : s).trim() };
+  return { verb: verbOf(m?.[1] || m?.[2]), text: (m ? s.slice(m[0].length) : s).trim() };
 }
 
 const LEADS = [0, 120, 360, 1440, 2880];
@@ -202,7 +204,7 @@ function noteSummary(head, n) {
 // "เตือนก่อน 2 ชม." / "ล่วงหน้า 1 วัน" / "เตือนตรงเวลา" / "ไม่ต้องเตือน": lead is minutes, null for
 // no reminder, undefined when the line says nothing about it; rest is the line without it.
 function takeLead(line) {
-  let m = line.match(/(?:เตือน)?\s*(?:ก่อน|ล่วงหน้า)\s*(\d{1,2})\s*(ชม\.?|ชั่วโมง|วัน)/);
+  let m = line.match(/(?:แจ้ง)?(?:เตือน)?\s*(?:ก่อน|ล่วงหน้า)\s*(\d{1,2})\s*(ชม\.?|ชั่วโมง|วัน)/);
   if (m) {
     const mins = +m[1] * (m[2] === 'วัน' ? 1440 : 60);
     if (LEADS.includes(mins)) return { lead: mins, rest: line.replace(m[0], ' ') };
