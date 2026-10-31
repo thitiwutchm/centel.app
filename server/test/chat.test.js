@@ -311,6 +311,47 @@ test('chat: เลขาช่วยเหลือ is a private room for anythi
   await bridge(token, 'POST', `/jobs/${j2.id}`, { reply: 'สวัสดีครับ' });
 });
 
+test('chat: the Mac reports its status for the สถานะ Mac page', async () => {
+  const before = await A('GET', '/chat/mac');
+  assert.equal(before.macs.length, 1);
+  assert.equal(before.macs[0].status, null);
+  const st = await bridge(token, 'POST', '/status', {
+    host: 'KB-Mac-mini', chip: 'Apple M4 Pro', os: 'macOS 26.1', uptime: 3600 * 30,
+    cpu: { cores: 12, load: [1.5, 1.2, 0.9], usage: 23.4 },
+    mem: { total: 32 * 1024 ** 3, used: 20 * 1024 ** 3, secret: 'x' },
+    disk: { total: 500e9, free: 200e9 },
+    ollama: { up: true, version: '0.12.0', running: [{ name: 'qwen3:14b', size: 10e9, vram: 10e9 }], models: [{ name: 'qwen3:14b', size: 9e9 }] },
+    hermes: { up: true, ms: 12 }, voice: true, web: true,
+    bridge: { version: '2', answered: 5, avgMs: 8200 },
+    evil: '<script>',
+  });
+  assert.equal(st.ok, true);
+  await bridge(token, 'POST', '/status', { cpu: { usage: 50 }, mem: { total: 100, used: 40 } });
+  // The partner sees the couple's Mac too, with its last report and one chart sample (5-minute spacing).
+  const out = await B('GET', '/chat/mac');
+  const m = out.macs[0];
+  assert.equal(m.online, true);
+  assert.equal(m.mine, false);
+  assert.equal(m.status.cpu.usage, 50);
+  assert.equal(m.samples.length, 1);
+  assert.equal(m.samples[0].cpu, 23.4);
+  assert.equal(Math.round(m.samples[0].mem), 63);
+  assert.equal(m.samples[0].disk, 60);
+  assert.equal(m.status.evil, undefined);
+  assert.equal(m.status.mem.secret, undefined);
+  assert.ok(out.jobs.done >= 1);
+  // Junk numbers are dropped, not stored.
+  await bridge(token, 'POST', '/status', { host: 'x'.repeat(500), cpu: { usage: 'lots', cores: -1 } });
+  const m2 = (await A('GET', '/chat/mac')).macs[0];
+  assert.equal(m2.status.host.length, 40);
+  assert.equal(m2.status.cpu.usage, null);
+  assert.equal(m2.status.cpu.cores, null);
+  assert.equal(m2.mine, true);
+  // Someone outside the couple sees no Mac.
+  assert.equal((await C('GET', '/chat/mac')).macs.length, 0);
+  assert.equal((await bridge('cb_' + 'x'.repeat(32), 'POST', '/status', {})).status, 401);
+});
+
 test('chat: revoking the token stops the bridge', async () => {
   await A('DELETE', '/chat/bridge');
   assert.equal((await bridge(token, 'GET', '/next?wait=0')).status, 401);

@@ -466,6 +466,21 @@ const I18N_EN = {
   'คัดลอกคำสั่ง': 'Copy command', '🔑 เชื่อม Mac ที่รัน Hermes Agent': '🔑 Connect the Mac running Hermes Agent',
   '🔑 สร้าง token ใหม่ (ตัวเก่าจะใช้ไม่ได้)': '🔑 New token (the old one stops working)', 'ยกเลิกการเชื่อม Mac เครื่องนี้': 'Disconnect this Mac',
   'ยกเลิกการเชื่อม Mac?': 'Disconnect the Mac?', 'ยกเลิกการเชื่อมแล้ว': 'Disconnected', 'ยกเลิกการเชื่อม': 'Disconnect',
+  // สถานะ Mac (mac.js)
+  'สถานะ Mac': 'Mac status', '🖥️ สถานะ Mac': '🖥️ Mac status', 'รีเฟรช': 'Refresh',
+  'ดิสก์': 'Disk', '{0} คอร์': '{0} cores', 'ว่าง {0}': '{0} free', 'สูงมาก': 'Very high', 'ค่อนข้างสูง': 'High', 'ปกติ': 'Normal',
+  'เปิดเครื่องมา {0}': 'Up for {0}', 'เห็นล่าสุด {0}': 'Last seen {0}', 'ข้อมูลล่าสุดเมื่อ {0}': 'Last report {0}', 'เมื่อสักครู่': 'just now',
+  '{0} นาทีที่แล้ว': '{0} min ago', '{0} ชม.ที่แล้ว': '{0} h ago', '{0} วัน {1} ชม.': '{0} d {1} h', '{0} ชม. {1} นาที': '{0} h {1} min', '{0} นาที': '{0} min',
+  'ย้อนหลัง 24 ชั่วโมง': 'Last 24 hours', 'ยังไม่มีข้อมูลพอ': 'Not enough data yet', 'ตอนนี้ {0}% · เฉลี่ย {1}% · สูงสุด {2}%': 'Now {0}% · avg {1}% · max {2}%',
+  '24 ชม.ก่อน': '24 h ago', '12 ชม.ก่อน': '12 h ago', 'ตอนนี้': 'Now', 'บริการ': 'Services', 'ทำงาน': 'Running', 'ทำงาน · {0}': 'Running · {0}', 'ไม่ตอบ': 'Not responding',
+  'โมเดลที่โหลดอยู่': 'Loaded model', 'ไม่มี (โหลดเมื่อมีคำถาม)': 'None (loads on the next question)', 'ไม่ได้ใช้ (ต่อ Ollama ตรง)': 'Not used (direct to Ollama)',
+  'ฟังเสียง (Whisper)': 'Voice (Whisper)', 'ค้นเว็บ': 'Web search', 'เปิดอยู่': 'On', 'โมเดลในเครื่อง': 'Models on this Mac',
+  'ตอบแล้ว 24 ชม.': 'Answered, 24 h', 'เวลาตอบเฉลี่ย': 'Avg answer time', 'ตอบไม่ได้ 24 ชม.': 'Failed, 24 h', 'รอคิว': 'Waiting', 'ผิดพลาดล่าสุด': 'Last error',
+  '{0} วิ': '{0} s', 'bridge v{0} · เริ่ม {1} · ตอบไป {2} ครั้ง': 'bridge v{0} · started {1} · {2} answers', ' · ของ {0}': ' · {0}\'s',
+  'bridge บน Mac ยังเป็นรุ่นเก่า': 'The bridge on the Mac is an older version',
+  'อัปเดตครั้งเดียวเพื่อให้ Mac ส่งสถานะเครื่องมาแสดงที่นี่ วางคำสั่งนี้ใน Terminal บน Mac (ค่าที่ตั้งไว้ไม่หาย)': 'Update it once so the Mac reports its status here. Paste this in Terminal on the Mac (your settings stay).',
+  'เชื่อม Mac ที่รัน Hermes Agent ได้ที่ บัญชี › ผู้ช่วย AI ในแชท แล้วสถานะเครื่องจะขึ้นที่นี่': 'Connect the Mac running Hermes Agent in Account › Chat assistant (AI) and its status shows here.',
+  'อัปเดต {0} · รีเฟรชเองทุก 30 วินาที': 'Updated {0} · refreshes every 30 seconds', 'โหลดสถานะไม่ได้: {0}': 'Couldn\'t load status: {0}',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

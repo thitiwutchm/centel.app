@@ -408,6 +408,78 @@ bridgeRouter.use(wrap(async (req, _res, next) => {
   next();
 }));
 
+/* ---------- Mac status (Account › สถานะ Mac) ---------- */
+
+// Only plain numbers and short strings from the bridge are kept, so the page never shows
+// anything the Mac did not mean to report.
+const num = (v, max = 1e15) => (Number.isFinite(+v) && +v >= 0 && +v <= max ? Math.round(+v * 100) / 100 : null);
+const str = (v, n = 80) => (v == null ? null : String(v).slice(0, n));
+function cleanStatus(b) {
+  const s = b && typeof b === 'object' ? b : {};
+  const o = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  const cpu = o(s.cpu), mem = o(s.mem), disk = o(s.disk), ol = o(s.ollama), he = o(s.hermes), br = o(s.bridge);
+  const models = (list, n) => (Array.isArray(list) ? list : []).slice(0, n).map((m) => ({
+    name: str(o(m).name, 60), size: num(o(m).size), vram: num(o(m).vram), until: str(o(m).until, 40),
+  })).filter((m) => m.name);
+  return {
+    host: str(s.host, 40), model: str(s.model, 60), os: str(s.os, 40), chip: str(s.chip, 60),
+    uptime: num(s.uptime),
+    cpu: { cores: num(cpu.cores, 512), load: Array.isArray(cpu.load) ? cpu.load.slice(0, 3).map((x) => num(x, 1e4)) : [], usage: num(cpu.usage, 100) },
+    mem: { total: num(mem.total), used: num(mem.used), pressure: num(mem.pressure, 100), swap: num(mem.swap) },
+    disk: { total: num(disk.total), free: num(disk.free) },
+    ollama: { up: !!ol.up, version: str(ol.version, 20), running: models(ol.running, 8), models: models(ol.models, 30) },
+    hermes: { up: he.up == null ? null : !!he.up, ms: num(he.ms, 1e6), url: str(he.url, 80) },
+    voice: !!s.voice, web: !!s.web,
+    bridge: { version: str(br.version, 20), since: str(br.since, 40), answered: num(br.answered), failed: num(br.failed),
+      heard: num(br.heard), lastMs: num(br.lastMs), avgMs: num(br.avgMs), lastError: str(br.lastError, 200), lastErrorAt: str(br.lastErrorAt, 40) },
+  };
+}
+
+const pct = (a, b) => (a != null && b ? Math.round((a / b) * 1000) / 10 : null);
+
+// The bridge reports about once a minute; a sample for the charts is kept every 5 minutes.
+bridgeRouter.post('/status', wrap(async (req, res) => {
+  const st = cleanStatus(req.body);
+  await pool.query('update bridge_tokens set status = $2, status_at = now() where user_id = $1', [req.bridge.userId, st]);
+  await pool.query(
+    `insert into mac_samples (user_id, cpu, mem, disk)
+     select $1, $2, $3, $4 where not exists (select 1 from mac_samples where user_id = $1 and at > now() - interval '290 seconds')`,
+    [req.bridge.userId, st.cpu.usage, st.mem.pressure ?? pct(st.mem.used, st.mem.total),
+      st.disk.total ? pct(st.disk.total - (st.disk.free || 0), st.disk.total) : null]);
+  if (Math.random() < 0.02) await pool.query("delete from mac_samples where at < now() - interval '2 days'");
+  res.json({ ok: true, every: 60 });
+}));
+
+// Every Mac serving this couple, with its last report and the last 24 hours of samples.
+router.get('/mac', wrap(async (req, res) => {
+  const me = await whoIs(req.user.id);
+  const ids = [me.id, me.partnerId].filter(Boolean);
+  const { rows } = await pool.query(
+    `select b.user_id, b.created_at, b.last_seen, b.info, b.caps, b.status, b.status_at, u.display_name, u.nickname
+       from bridge_tokens b join users u on u.id = b.user_id where b.user_id = any($1) order by b.user_id = $2 desc`, [ids, me.id]);
+  const macs = [];
+  for (const r of rows) {
+    const samples = (await pool.query(
+      `select extract(epoch from at)::bigint * 1000 as t, cpu, mem, disk from mac_samples
+        where user_id = $1 and at > now() - interval '24 hours' order by at`, [r.user_id])).rows
+      .map((x) => ({ t: Number(x.t), cpu: x.cpu, mem: x.mem, disk: x.disk }));
+    macs.push({
+      mine: r.user_id === me.id,
+      owner: r.nickname || r.display_name || null,
+      online: !!r.last_seen && Date.now() - new Date(r.last_seen) < BRIDGE_ONLINE_MS,
+      lastSeen: r.last_seen, linkedAt: r.created_at, info: r.info || null,
+      voice: /\bstt\b/.test(r.caps || ''),
+      status: r.status, statusAt: r.status_at, samples,
+    });
+  }
+  const jobs = (await pool.query(
+    `select count(*) filter (where status = 'done' and created_at > now() - interval '24 hours')::int as done,
+            count(*) filter (where status = 'failed' and created_at > now() - interval '24 hours')::int as failed,
+            count(*) filter (where status in ('queued', 'taken'))::int as waiting
+       from chat_jobs where user_id = any($1)`, [ids])).rows[0];
+  res.json({ macs, jobs, now: new Date().toISOString() });
+}));
+
 // A Mac that is on but cannot hear (no Whisper) would leave a voice question waiting forever, so it
 // is dropped with a note to type instead, unless another bridge for the couple can still hear.
 const NO_VOICE_TEXT = 'ขอโทษครับ Mac ยังฟังเสียงไม่ได้ (ยังไม่ได้ติดตั้ง Whisper) พิมพ์ถามแทนได้เลยครับ ⌨️';

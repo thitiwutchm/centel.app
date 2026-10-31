@@ -879,6 +879,7 @@ function chatSettings() {
       <div class="field"><label>Hermes บน Mac</label><span class="ln-status${b.online ? ' ok' : ''}">${status}${seen}</span></div>
       ${mine && mine.info ? `<div class="field"><label>เครื่อง</label><span class="muted small" translate="no">${esc(mine.info)}</span></div>` : ''}
     </div>
+    ${b.set ? '<button class="btn ghost" id="chMacStatus">🖥️ สถานะ Mac</button>' : ''}
     <div id="chBridgeBox"></div>
     <button class="btn ghost" id="chBridgeNew">${mine ? '🔑 สร้าง token ใหม่ (ตัวเก่าจะใช้ไม่ได้)' : '🔑 เชื่อม Mac ที่รัน Hermes Agent'}</button>
     ${mine ? '<button class="btn ghost" id="chBridgeOff">ยกเลิกการเชื่อม Mac เครื่องนี้</button>' : ''}
@@ -886,6 +887,8 @@ function chatSettings() {
 }
 
 function chatSettingsBind() {
+  const ms = document.getElementById('chMacStatus');
+  if (ms) ms.addEventListener('click', macSheet);
   const nb = document.getElementById('chBridgeNew');
   if (!nb) return;
   nb.addEventListener('click', async () => {

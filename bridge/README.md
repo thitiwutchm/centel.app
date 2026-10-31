@@ -61,8 +61,15 @@ log จะขึ้นว่า `web on` และบรรทัด `tool web_s
 | `WHISPER_MODEL` | `~/.centel-bridge/ggml-large-v3-turbo.bin` | ไฟล์โมเดล whisper.cpp (เล็กกว่า: `ggml-small.bin`) |
 | `WEB_TOOLS` | `1` | `0` ปิดการค้นเว็บของเลขาช่วยเหลือ |
 | `WHISPER_LANG` | `auto` | หรือ `th` ถ้าพูดไทยอย่างเดียว |
+| `STATUS_REPORT` | `1` | `0` ไม่ส่งสถานะเครื่องให้หน้า บัญชี › สถานะ Mac |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | ที่อยู่ Ollama สำหรับดูโมเดลที่โหลดอยู่ |
 
 ความปลอดภัย: ข้อความในแชทถูกส่งให้ Hermes บน Mac ควรปิด toolset ที่สั่ง terminal / แก้ไฟล์ของ Hermes
 สำหรับงานนี้ (`hermes tools`) เพราะคนในแชทไม่ควรสั่งเครื่อง Mac ได้
+
+สถานะ Mac: ทุก 1 นาที bridge ส่ง CPU, RAM, ดิสก์, uptime, โมเดลใน Ollama, Hermes gateway และเสียง/เว็บ เปิดอยู่ไหม
+ไปที่ `/api/bridge/status` (ตัวเลขเท่านั้น ไม่มีไฟล์หรือข้อความแชท) แสดงที่ บัญชี › ผู้ช่วย AI ในแชท › สถานะ Mac
+อัปเดต bridge โดยไม่ต้องติดตั้งใหม่:
+`curl -fsSL https://centel.app/bridge/centel_bridge.py -o ~/.centel-bridge/centel_bridge.py && launchctl kickstart -k gui/$(id -u)/app.centel.bridge`
 
 หยุด: `launchctl unload ~/Library/LaunchAgents/app.centel.bridge.plist`
