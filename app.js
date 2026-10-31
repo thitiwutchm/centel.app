@@ -211,6 +211,7 @@ function render() {
   const bills = ui.tab === 'bills';
   const nav = bills && (ui.billView === 'month' || ui.billView === 'calendar');
   document.body.classList.toggle('with-topbar', bills);
+  document.body.dataset.tab = ui.tab;
   $('.topbar').hidden = !bills;
   $('.topbar').classList.toggle('hide-nav', !nav);
   $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : ui.billView === 'schedule' ? 'Schedule' : 'บิลทั้งหมด';

@@ -791,6 +791,7 @@ function renderHome() {
       </div>
     </div>
 
+    <div class="home-grid"><div class="home-col">
     <div class="card list-card">
       <div class="card-head"><b>กระเป๋าเงินของฉัน</b><button class="link-btn" data-action="wallets">ดูทั้งหมด</button></div>
       ${wallets}
@@ -809,6 +810,7 @@ function renderHome() {
       ${occ.length ? occ.slice(0, 3).map(occItem).join('') : '<div class="muted pad">🎉 จ่ายครบทุกบิลแล้วเดือนนี้</div>'}
     </div>` : ''}
 
+    </div><div class="home-col">
     ${money.txns.length ? `
     <div class="section-row"><span>รายงานเดือนนี้</span><button class="link-btn" data-action="report" data-ym="${ym}">ดูรายงาน</button></div>
     <div class="card" id="homeReport">${homeReport(ym, S)}</div>
@@ -824,6 +826,7 @@ function renderHome() {
       ${state.bills.length || isCloud() ? '' : '<button class="btn ghost" data-action="sample">ลองใช้ข้อมูลตัวอย่าง</button>'}
     </div>`}
     ${state.bills.length || money.txns.length ? '' : installTip()}
+    </div></div>
   `;
 }
 

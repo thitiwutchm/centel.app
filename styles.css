@@ -1654,3 +1654,74 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .mac-upd { text-align: center; }
 .mac-spark-head b { flex: 0 0 auto; }
 .mac-spark-read { text-align: right; }
+
+/* ---------- Desktop / laptop ---------- */
+/* Phones never see any of this: the home columns are display: contents, so the cards stay one
+   list in the same order, and the sidebar brand is hidden. */
+.home-grid, .home-col { display: contents; }
+.side-brand { display: none; }
+
+@media (min-width: 1024px) {
+  :root { --side-w: 248px; }
+  body { padding: 28px 0 56px var(--side-w); }
+  body.with-topbar { padding-top: 84px; }
+  main { max-width: 780px; padding: 12px 28px; }
+  body[data-tab="home"] main { max-width: 1160px; }
+  .page-head { margin: 0 -12px 12px; padding: 4px 24px 0; }
+  .page-head.sticky { top: 14px; margin-top: -26px; padding-top: 10px; border-radius: 28px; border-bottom: 0; }
+
+  /* Bottom capsule becomes a floating glass sidebar */
+  .tabbar {
+    left: 16px; right: auto; top: 16px; bottom: 16px; width: calc(var(--side-w) - 32px);
+    flex-direction: column; gap: 4px; padding: 18px 12px; border-radius: 30px;
+  }
+  .tabbar button { flex: none; height: 50px; font-size: 15.5px; justify-content: stretch; }
+  .tabbar .tab-in { flex-direction: row; justify-content: flex-start; gap: 14px; width: 100%; height: 100%; padding: 0 16px; border-radius: 18px; }
+  .tabbar .ti { width: 23px; height: 23px; flex: none; }
+  .tabbar button:active { transform: none; }
+  .side-brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 22px; color: var(--c-text); }
+  .side-brand img { width: 36px; height: 36px; border-radius: 10px; }
+  .side-brand b { font-size: 20px; letter-spacing: -.01em; }
+  .topbar { left: var(--side-w); padding: 0 24px; height: 64px; justify-content: center; gap: 28px; }
+  .month-title { min-width: 200px; }
+
+  /* Home: hero on top, cards in two columns */
+  .hero { max-width: 760px; margin-left: auto; margin-right: auto; }
+  .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 24px; align-items: start; margin-top: 8px; }
+  .home-col { display: block; min-width: 0; }
+  .home-col > .section-row:first-child { margin-top: 0; }
+
+  /* Floating buttons and toast sit in the content area, not over the sidebar */
+  .fab { right: 32px; bottom: 32px; }
+  .sched-fab { left: calc(50% + var(--side-w) / 2); bottom: 32px; }
+  .toast { left: calc(50% + var(--side-w) / 2); bottom: 40px; }
+
+  /* Sheets and confirms open as centred dialogs */
+  .sheet {
+    left: 0; right: 0; top: 0; bottom: 0; margin: auto; height: fit-content;
+    width: min(560px, calc(100vw - 64px)); max-width: none; max-height: calc(100dvh - 64px);
+    padding: 14px 22px 22px; animation: dlg-in .32s cubic-bezier(.2, .9, .3, 1);
+  }
+  .sheet.cur-layer { height: calc(100dvh - 64px); }
+  .sheet .grabber { display: none; }
+  .gc-card { top: 0; bottom: 0; margin: auto; height: fit-content; max-width: 440px; animation: dlg-in .32s cubic-bezier(.2, .9, .3, 1); }
+  .gconfirm.out .gc-card { animation: dlg-out .2s ease forwards; }
+  .ch-banner { left: auto; right: 24px; top: 24px; width: 380px; }
+
+  /* Pointer niceties */
+  @media (hover: hover) {
+    .tabbar button:not(.active):hover .tab-in { background: color-mix(in srgb, currentColor 9%, transparent); }
+    .item:hover, button.item:hover { background: var(--c-accent-soft); }
+    .round-btn:hover, .icon-btn:hover { filter: brightness(1.08); }
+    .sheet::-webkit-scrollbar { width: 10px; }
+    .sheet::-webkit-scrollbar-thumb { background: var(--c-line); border-radius: 5px; border: 3px solid transparent; background-clip: padding-box; }
+  }
+}
+@keyframes dlg-in { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes dlg-out { to { opacity: 0; transform: translateY(10px) scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .sheet, .gc-card { animation: none; } }
+/* Chat opens as a panel on the right; the app stays visible beside it. */
+@media (min-width: 1024px) {
+  .ch-screen { left: auto; width: min(520px, 100vw - var(--side-w)); border-left: 0.5px solid var(--c-line); box-shadow: -24px 0 60px rgba(0, 0, 0, .25); }
+  body.ch-covered > :not(.ch-screen) { visibility: visible; }
+}
