@@ -248,7 +248,7 @@ function occItem(o) {
   const b = o.bill;
   const dueTxt = `ครบกำหนด ${thShortDate(o.due)}`;
   const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', record(o.ym, b.id).file ? '📎' : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
-  const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : 'ระบุยอด'}</span>` : baht(o.amount);
+  const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : b.gmail ? '📧 ดึงยอด' : 'ระบุยอด'}</span>` : baht(o.amount);
   return `
     <div class="item ${o.paid ? 'paid' : ''}" data-occ="${b.id}" data-ym="${o.ym}" role="button" tabindex="0">
       ${icoHtml(b)}
@@ -788,6 +788,7 @@ function billForm(b, opts = {}) {
         account: $('#fGAcc').value.replace(/[\s-]/g, ''),
         day: Number($('#fGDay').value),
         payDays: Number($('#fGPay').value),
+        pdfPass: $('#fGPass').value.trim() || undefined,
       };
     }
   };
@@ -874,8 +875,9 @@ function billForm(b, opts = {}) {
           <div class="field"><label for="fGAcc">เบอร์/เลขบัญชี</label><input id="fGAcc" inputmode="numeric" placeholder="ไม่บังคับ" value="${esc(g.account || '')}" autocomplete="off"></div>
           <div class="field"><label for="fGDay">ดึงทุกเดือน</label><select id="fGDay">${gmailDayOptions(g.day)}</select></div>
           <div class="field"><label for="fGPay">จ่ายภายใน</label><select id="fGPay">${gmailPayOptions(g.payDays)}</select></div>
+          <div class="field"><label for="fGPass">รหัสเปิด PDF</label><input id="fGPass" placeholder="ไม่บังคับ" value="${esc(g.pdfPass || '')}" autocomplete="off" autocapitalize="off"></div>
         </div>
-        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · "จ่ายภายใน" ตั้งวันครบกำหนดเป็นจำนวนวันหลังดึงบิล แทนวันที่ในอีเมล · เลือกหมวดหมู่ด้านล่าง</p>`;
+        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · "จ่ายภายใน" ตั้งวันครบกำหนดเป็นจำนวนวันหลังดึงบิล แทนวันที่ในอีเมล · ใส่ "รหัสเปิด PDF" เมื่อยอดอยู่ใน PDF ที่ล็อกรหัส (เช่น AIS) · เลือกหมวดหมู่ด้านล่าง</p>`;
     }
     box.innerHTML = html;
     const chipsEl = $('#srcChips');
@@ -1051,6 +1053,7 @@ function occurrenceSheet(id, ym) {
     ${peaNeeded ? `<div class="alert warn">⚡<div>บิลนี้ผูกกับ PEA ต้องดึงยอด${thMonthYear(ym)}ก่อนจึงจะกดจ่ายได้</div></div>` : ''}
     ${b.pea ? `<button class="btn ${peaNeeded ? '' : 'ghost'}" id="oPea" type="button">⚡ ดึงยอด${peaNeeded ? 'เดือนนี้' : ''}จาก PEA</button>` : ''}
     ${peaNeeded && peaFetchDay(b, ym) ? `<p class="hint">แอปจะดึงยอดให้เองตั้งแต่วันที่ ${peaFetchDay(b, ym)} เมื่อเปิดแอป</p>` : ''}
+    ${b.gmail ? `<button class="btn ${rec.amount == null && !o.paid ? '' : 'ghost'}" id="oGmail" type="button">📧 ดึงยอดจาก Gmail</button>` : ''}
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
       : `${slips ? `<button type="button" class="scan-btn pay-slip" id="oSlip">${SCAN_ICON}<span class="scan-text">จ่ายด้วยสลิป</span></button>
@@ -1163,6 +1166,17 @@ function occurrenceSheet(id, ym) {
       toast(err.message || 'แนบไฟล์ไม่สำเร็จ');
     }
   });
+  const oGmail = $('#oGmail');
+  if (oGmail) {
+    // Load Google's script now so the sign-in popup can open straight from the tap.
+    gmailPrepare().catch(() => {});
+    oGmail.addEventListener('click', async () => {
+      oGmail.disabled = true; oGmail.textContent = 'กำลังดึง…';
+      const res = await gmailRunRules([b], false);
+      if (res && !res.rows.some((r) => r.rule === b)) toast(`ไม่พบอีเมลบิลของ ${b.name} ใน 4 เดือนที่ผ่านมา ตรวจอีเมลผู้ส่งและเบอร์ในกฎ`);
+      if ($('#oGmail')) occurrenceSheet(id, ym);
+    });
+  }
   const oPea = $('#oPea');
   if (oPea) oPea.addEventListener('click', async () => {
     const label = oPea.textContent;
