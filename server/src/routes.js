@@ -3,7 +3,7 @@ import express from 'express';
 import { pool, asUser } from './db.js';
 import { hashPassword, verifyPassword, createSession, destroySession, requireUser, rateLimit } from './auth.js';
 import { analyzeReceipt, aiEnabled, RECEIPT_MODEL } from './receipts.js';
-import { putReceipt, receiptUrl, storageEnabled } from './storage.js';
+import { putReceipt, receiptUrl, getObject, deleteObject, storageEnabled } from './storage.js';
 import { verifyGoogleIdToken, googleClientId } from './google.js';
 import { lineEnabled, linePush } from './line.js';
 import { pushKeys, pushTo, saveSub, dropSub, subCount, saveAlerts } from './push.js';
@@ -168,6 +168,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const budgets = (await db.query('select * from budgets order by created_at')).rows;
     const prefs = (await db.query('select data from prefs where user_id = app_uid()')).rows[0];
     const labels = (await db.query('select id, name, sort from labels order by sort, name')).rows;
+    const planner = (await db.query('select data, rev from planner where user_id = app_uid()')).rows[0];
     const links = (await db.query('select expense_id, label_id from expense_labels')).rows;
     const notes = (await db.query('select * from notes order by date nulls last, time nulls first, created_at')).rows;
     const line = (await db.query('select group_id, active from line_targets where user_id = app_uid()')).rows[0];
@@ -200,6 +201,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
         id: b.id, ownerId: b.owner_id, scope: b.scope, category: b.category, amount: b.amount, walletId: b.wallet_id,
       })),
       prefs: prefs ? prefs.data : {},
+      planner: planner ? { data: planner.data, rev: planner.rev } : { data: null, rev: 0 },
       notes: notes.map(noteOut),
       line: line ? { groupId: line.group_id, active: line.active } : null,
       linePeople: linePeople.map((x) => ({ userId: x.line_user_id, name: x.name, who: x.who })),
@@ -670,6 +672,69 @@ router.put('/prefs', wrap(async (req, res) => {
   await asUser(uid(req), (db) => db.query(
     'insert into prefs (user_id, data) values (app_uid(), $1) on conflict (user_id) do update set data = excluded.data',
     [JSON.stringify(data).length < 100000 ? data : {}]));
+  res.json({ ok: true });
+}));
+
+/* ---------- Bill planner (bills, monthly records, settings) ---------- */
+
+const PLANNER_MAX = 2 * 1024 * 1024;
+
+router.get('/planner', wrap(async (req, res) => {
+  const row = await asUser(uid(req), async (db) =>
+    (await db.query('select data, rev from planner where user_id = app_uid()')).rows[0]);
+  res.json(row ? { data: row.data, rev: row.rev } : { data: null, rev: 0 });
+}));
+
+// The device sends the rev it last saw. If another device saved since, nothing is
+// written and the current copy comes back so the device can merge and try again.
+router.put('/planner', wrap(async (req, res) => {
+  const d = req.body && req.body.data;
+  const baseRev = Number(req.body && req.body.baseRev) || 0;
+  if (!d || typeof d !== 'object' || !Array.isArray(d.bills) || typeof d.records !== 'object' || !d.records || Array.isArray(d.records)) throw bad('bad_planner');
+  const data = { bills: d.bills, records: d.records, settings: d.settings && typeof d.settings === 'object' && !Array.isArray(d.settings) ? d.settings : {} };
+  if (JSON.stringify(data).length > PLANNER_MAX) throw bad('too_large', 413);
+  const out = await asUser(uid(req), async (db) => {
+    const cur = (await db.query('select data, rev from planner where user_id = app_uid() for update')).rows[0];
+    const rev = cur ? cur.rev : 0;
+    if (rev !== baseRev) return { conflict: true, data: cur ? cur.data : null, rev };
+    await db.query(
+      `insert into planner (user_id, data, rev) values (app_uid(), $1, $2)
+       on conflict (user_id) do update set data = excluded.data, rev = excluded.rev, updated_at = now()`,
+      [data, rev + 1]);
+    return { rev: rev + 1 };
+  });
+  if (out.conflict) return res.status(409).json({ error: 'stale', data: out.data, rev: out.rev });
+  res.json(out);
+}));
+
+/* ---------- Bill files (invoice PDF/image per bill per month) ---------- */
+
+const BILL_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/gif'];
+const billFileKey = (req) => {
+  const { billId, ym } = req.params;
+  if (!/^[\w-]{1,60}$/.test(billId) || !/^\d{4}-\d{2}$/.test(ym)) throw bad('bad_request');
+  return `${uid(req)}/bills/${billId}/${ym}`;
+};
+
+router.put('/bill-files/:billId/:ym', rateLimit(120, 60 * 60000),
+  express.raw({ type: () => true, limit: '11mb' }), wrap(async (req, res) => {
+    const key = billFileKey(req);
+    const type = String(req.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!BILL_FILE_TYPES.includes(type) || !Buffer.isBuffer(req.body) || !req.body.length) throw bad('bad_file');
+    await putReceipt(key, req.body, type);
+    res.json({ ok: true });
+  }));
+
+router.get('/bill-files/:billId/:ym', wrap(async (req, res) => {
+  const obj = await getObject(billFileKey(req));
+  if (!obj) throw bad('not_found', 404);
+  res.set({ 'Content-Type': obj.ContentType || 'application/octet-stream', 'Cache-Control': 'private, no-store' });
+  if (obj.ContentLength) res.set('Content-Length', String(obj.ContentLength));
+  obj.Body.pipe(res);
+}));
+
+router.delete('/bill-files/:billId/:ym', wrap(async (req, res) => {
+  await deleteObject(billFileKey(req));
   res.json({ ok: true });
 }));
 
