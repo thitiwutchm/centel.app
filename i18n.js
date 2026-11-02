@@ -63,8 +63,8 @@ const I18N_EN = {
   'แตะปุ่ม': 'Tap the', 'แชร์': 'Share', '(สี่เหลี่ยมมีลูกศรขึ้น)': 'button (square with an up arrow)', 'เลือก': 'Choose',
   'เพิ่มไปยังหน้าจอโฮม': 'Add to Home Screen', 'ใช้งานแบบออฟไลน์ได้ ข้อมูลเก็บไว้ในเครื่องของคุณเท่านั้น': 'Works offline. Your data stays on your device.',
   'วันครบกำหนด': 'On the due date', 'วัน': 'days', '{0} วัน': '{0} days',
-  'รายการรับจ่าย งบประมาณ และรายจ่ายร่วมซิงก์กับบัญชีออนไลน์ ส่วนรายการบิลเก็บในเครื่องนี้ ควรส่งออกเก็บไว้เป็นระยะ':
-    'Transactions, budgets and shared expenses sync with your online account; bills are kept on this device. Export a backup now and then.',
+  'บิล ประวัติการจ่าย ไฟล์ใบแจ้งหนี้ รายการรับจ่าย และงบประมาณ ซิงก์กับบัญชีออนไลน์ทุกเครื่องที่เข้าสู่ระบบ':
+    'Bills, payment history, invoice files, transactions and budgets sync with your online account on every signed-in device.',
   'ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ':
     'All data is stored on this device (localStorage) and sent nowhere. Export a backup now and then.',
   'การแจ้งเตือน': 'Reminders', 'เตือนล่วงหน้า': 'Remind me',
@@ -187,7 +187,10 @@ const I18N_EN = {
   '{0} จ่าย{1}{2}': '{0} Pay {1}{2}', 'อีก {0} วันครบกำหนด {1}': '{1} is due in {0} days', 'วันนี้ครบกำหนด {0}': '{0} is due today',
   'ทุกบิลตั้งเป็นตัดบัญชีอัตโนมัติ': 'Every bill is on autopay', 'ข้อมูลตัวอย่างใช้ได้เฉพาะเมื่อไม่ได้เข้าสู่ระบบ': 'Sample data only works when signed out',
   'แทนที่ข้อมูลปัจจุบันด้วยข้อมูลตัวอย่าง?': 'Replace your current data with sample data?', 'เพิ่มข้อมูลตัวอย่างแล้ว': 'Sample data added',
-  'ลบข้อมูลบิลในเครื่องนี้? (รายการรับจ่ายในบัญชีออนไลน์จะไม่ถูกลบ)': 'Delete the bills on this device? (Transactions in your online account are kept)',
+  'ลบบิลและประวัติการจ่ายทั้งหมด? จะลบจากบัญชีออนไลน์และทุกเครื่องด้วย (รายการรับจ่ายไม่ถูกลบ)': 'Delete all bills and payment history? This removes them from your online account and every device (transactions are kept)',
+  'ดาวน์โหลดไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not download the file. Try again',
+  'ไม่พบไฟล์ในเครื่องนี้ (แนบจากเครื่องอื่นก่อนซิงก์ไฟล์ ให้แนบใหม่ที่เครื่องนั้น)': 'File not found on this device (it was attached on another device before files synced; attach it again there)',
+  'ไฟล์ไม่รองรับ': 'File type not supported',
   'ลบข้อมูลบิลแล้ว': 'Bills deleted', 'ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้': 'Delete all bills, transactions, budgets and history? This cannot be undone.',
   'ลบข้อมูลแล้ว': 'Data deleted',
 
