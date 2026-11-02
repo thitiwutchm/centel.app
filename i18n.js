@@ -146,6 +146,7 @@ const I18N_EN = {
   'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ครั้งเดียว': 'Once', 'ทุกเดือน': 'Monthly', 'ผ่อนงวด': 'Installments',
   'หมวดหมู่': 'Category', 'ยอดไม่แน่นอน': 'Variable amount', 'กรอกยอดจริงทุกเดือน': 'Enter the real amount each month',
   'จ่ายจาก': 'Pay from', 'เตือน': 'Remind', 'ตัดบัญชีอัตโนมัติ': 'Autopay', 'วันที่ {0}': 'Day {0}',
+  'วันตัดรอบ': 'Statement date', 'ตัดรอบ {0}': 'Statement {0}', 'ตัดรอบ {0} {1}': 'Statement {0} {1}', 'ตัดรอบ {0} · ครบกำหนด {1}': 'Statement {0} · due {1}',
   'ครบกำหนด': 'Due', 'เริ่มเดือน': 'Starts', 'วันที่จ่าย': 'Payment date', 'จำนวนงวด': 'Installments', 'สิ้นสุด': 'Ends',
   'ไม่มีวันสิ้นสุด': 'Never', 'เช่น ebill@ktc.co.th': 'e.g. ebill@ktc.co.th', 'ไม่บังคับ': 'Optional',
   'กฎดึงบิลจาก Gmail': 'Gmail bill rule', 'อีเมลผู้ส่ง': 'Sender email', 'เบอร์/เลขบัญชี': 'Phone / account no.',
