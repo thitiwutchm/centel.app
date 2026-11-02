@@ -22,7 +22,7 @@ const GMAIL_PROVIDERS = [
   { key: 'nt', name: 'NT', domains: ['ntplc.co.th', 'nt.co.th', 'tot.co.th', 'cattelecom.com'], category: 'phone' },
 ];
 
-const BILL_WORDS = /ใบแจ้งค่าบริการ|ใบแจ้งหนี้|ใบแจ้งยอด|ค่าบริการ|e-?bill|invoice|statement|bill/i;
+const BILL_WORDS = /ใบแจ้งค่า(?:ใช้)?บริการ|ใบแจ้งหนี้|ใบแจ้งยอด|ค่า(?:ใช้)?บริการ|e-?bill|invoice|statement|bill/i;
 
 const gmail = { clientId: null, tokenClient: null, scriptP: null, results: null };
 
@@ -66,14 +66,39 @@ function gmailDateStr(y, mo, d) {
 
 function gmailMoney(s) { return Number(s.replace(/,/g, '')); }
 
+// "+66 98-860-6699" / "098-860-6699" → "0988606699"; mask characters become "x".
+function gmailAccNorm(a) {
+  let s = String(a || '').toLowerCase().replace(/[\s+-]/g, '').replace(/\*/g, 'x');
+  if (/^66[0-9x]{9}$/.test(s)) s = '0' + s.slice(2);
+  return s;
+}
+
+// Does an account printed in an email match the rule's? Masked digits match anything,
+// but at least 4 real digits must agree.
+function gmailAccMatch(rule, seen) {
+  const a = gmailAccNorm(rule), b = gmailAccNorm(seen);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  let same = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === 'x' || b[i] === 'x') continue;
+    if (a[i] !== b[i]) return false;
+    same++;
+  }
+  return same >= 4;
+}
+
 // Pull amount, due date and account number out of an e-bill's subject + text.
 function gmailParseBill({ from, subject, text, date }) {
   const body = `${subject || ''}\n${text || ''}`.replace(/[ ​]/g, ' ');
   const flat = body.replace(/\s+/g, ' ');
 
   let amount = null;
-  const amtRe = /(ยอด(?:เงิน)?(?:รวม)?(?:ที่)?(?:ต้อง)?ชำระ(?:ทั้งสิ้น)?|ยอดค่าบริการ(?:รวม)?|จำนวนเงิน(?:ที่ต้องชำระ)?|total\s*amount\s*(?:due|payable)|amount\s*(?:due|payable)|bill\s*total(?:\s*\(baht\))?|total\s*amount|total\s*due|balance\s*due)[^0-9]{0,40}?([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2})/i;
-  let m = flat.match(amtRe);
+  // AIS writes "ค่าใช้บริการ" where others write "ค่าบริการ", and may leave out the satang.
+  const amtLabel = '(ยอด(?:เงิน)?(?:รวม)?(?:ที่)?(?:ต้อง)?ชำระ(?:ทั้งสิ้น)?|ยอด(?:ค่า(?:ใช้)?บริการ|รวม)(?:รวม|ทั้งสิ้น)?(?:ที่ต้องชำระ)?|ค่าใช้บริการ(?:รวม|ทั้งสิ้น)|จำนวนเงิน(?:ที่ต้องชำระ)?|total\\s*amount\\s*(?:due|payable)|amount\\s*(?:due|payable)|bill\\s*total(?:\\s*\\(baht\\))?|total\\s*amount|total\\s*due|balance\\s*due)';
+  let m = flat.match(new RegExp(`${amtLabel}[^0-9]{0,40}?([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{2})|[0-9]+\\.[0-9]{2})`, 'i'))
+    || flat.match(new RegExp(`${amtLabel}[^0-9]{0,40}?([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\\s*(?:บาท|baht|thb)`, 'i'));
   if (m) amount = gmailMoney(m[2]);
   if (amount == null) {
     m = flat.match(/([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2}|[0-9]+\.[0-9]{2})\s*(?:บาท|baht|thb)/i)
@@ -91,10 +116,14 @@ function gmailParseBill({ from, subject, text, date }) {
   if (m) account = m[0].replace(/-/g, '');
   if (!account) m = flat.match(/(?:หมายเลข(?:โทรศัพท์|บริการ|ผู้ใช้บริการ)?|เบอร์(?:โทรศัพท์)?|mobile\s*(?:no\.?|number)|phone\s*(?:no\.?|number)|account\s*(?:no\.?|number)|เลขที่บัญชี|รหัสลูกค้า)\s*:?\s*([0-9][0-9 xX*-]{7,16}[0-9xX*])/i);
   if (!account && m) account = m[1].replace(/[\s-]/g, '');
+  // Every number-like token, so a rule's account can match whichever one the email prints
+  // (phone number, billing account, masked "098xxx6699").
+  const numbers = [...new Set((flat.match(/\+?[0-9xX*](?:-?[0-9xX*]){7,15}/g) || [])
+    .map((x) => gmailAccNorm(x)).filter((x) => (x.match(/[0-9]/g) || []).length >= 4))];
 
   const sent = date ? new Date(date) : null;
   const ym = (due || (sent && !isNaN(sent) ? `${sent.getFullYear()}-${String(sent.getMonth() + 1).padStart(2, '0')}` : '')).slice(0, 7) || null;
-  return { amount, due, account, ym, isBill: amount != null || BILL_WORDS.test(subject || '') };
+  return { amount, due, account, numbers, ym, isBill: amount != null || BILL_WORDS.test(subject || '') };
 }
 
 /* ----- Gmail API ----- */
@@ -145,21 +174,29 @@ async function gmailPdfBytes(msgId, part, token) {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-// Text of the first pages of a PDF; '' when it is password-protected or unreadable.
-async function gmailPdfText(bytes) {
-  try {
-    const pdfjs = await loadPdfJs();
-    // pdf.js takes ownership of the buffer it is given, so hand it a copy.
-    const pdf = await pdfjs.getDocument({ data: bytes.slice() }).promise;
-    const pages = [];
-    for (let i = 1; i <= Math.min(pdf.numPages, 2); i++) {
-      const tc = await (await pdf.getPage(i)).getTextContent();
-      pages.push(tc.items.map((it) => it.str + (it.hasEOL ? '\n' : ' ')).join(''));
+// Text of the first pages of a PDF. Locked PDFs (AIS e-bills, for one) are tried with the
+// rule's PDF passwords; `locked` says none of them opened it.
+async function gmailPdfText(bytes, passwords) {
+  let pdfjs;
+  try { pdfjs = await loadPdfJs(); } catch (e) { return { text: '', locked: false }; }
+  const tries = [undefined, ...(passwords || []).filter(Boolean)];
+  let locked = false;
+  for (const password of tries) {
+    try {
+      // pdf.js takes ownership of the buffer it is given, so hand it a copy.
+      const pdf = await pdfjs.getDocument({ data: bytes.slice(), password }).promise;
+      const pages = [];
+      for (let i = 1; i <= Math.min(pdf.numPages, 2); i++) {
+        const tc = await (await pdf.getPage(i)).getTextContent();
+        pages.push(tc.items.map((it) => it.str + (it.hasEOL ? '\n' : ' ')).join(''));
+      }
+      return { text: pages.join('\n'), locked: false };
+    } catch (e) {
+      if (!e || e.name !== 'PasswordException') return { text: '', locked };
+      locked = true;
     }
-    return pages.join('\n');
-  } catch (e) {
-    return '';
   }
+  return { text: '', locked };
 }
 
 // Concatenate the readable text parts of a message (prefer HTML; e-bills put figures in tables).
@@ -235,19 +272,27 @@ function gmailMigrate() {
   if (changed) save();
 }
 
-// The rule an email belongs to: best sender match, then the rule whose account matches,
-// then one without an account.
-function gmailRuleFor(r, rules) {
-  const addr = gmailFromAddr(r.from);
+// Rules whose senders match an email's From, best match only (exact address over domain).
+function gmailSenderHits(from, rules) {
+  const addr = gmailFromAddr(from);
   let best = 0, hits = [];
   rules.forEach((b) => {
     const s = Math.max(0, ...gmailSenders(b).map((e) => gmailSenderScore(e, addr)));
     if (s > best) { best = s; hits = [b]; } else if (s && s === best) hits.push(b);
   });
+  return hits;
+}
+
+// The rule an email belongs to: best sender match, then the rule whose account appears in the
+// email (masked digits allowed), then one without an account. When only one rule has that
+// sender, an email that prints no phone/account number of its own still counts for it.
+function gmailRuleFor(r, rules) {
+  const hits = gmailSenderHits(r.from, rules);
   if (!hits.length) return null;
-  return hits.find((b) => r.account && b.gmail.account === r.account)
+  const seen = [r.account, ...(r.numbers || [])].filter(Boolean);
+  return hits.find((b) => b.gmail.account && seen.some((n) => gmailAccMatch(b.gmail.account, n)))
     || hits.find((b) => !b.gmail.account)
-    || null;
+    || (hits.length === 1 && !r.account ? hits[0] : null);
 }
 
 function gmailQuery(rules) {
@@ -269,15 +314,20 @@ async function gmailSearch(token, rules) {
     const pdfs = gmailPdfParts(msg.payload);
     const pdf = pdfs[0] ? { name: pdfs[0].filename || 'invoice.pdf', part: pdfs[0], bytes: null } : null;
     // Some senders put the figures only in the attached PDF; read it when the body falls short.
+    let locked = false;
     if (pdf && (info.amount == null || !info.due)) {
       try { pdf.bytes = await gmailPdfBytes(msg.id, pdf.part, token); } catch (e) { /* keep the body's figures */ }
-      const fromPdf = gmailParseBill({ ...base, text: pdf.bytes ? await gmailPdfText(pdf.bytes) : '' });
+      const passwords = gmailSenderHits(h.from, rules).map((b) => b.gmail.pdfPass);
+      const read = pdf.bytes ? await gmailPdfText(pdf.bytes, passwords) : { text: '', locked: false };
+      locked = read.locked;
+      const fromPdf = gmailParseBill({ ...base, text: read.text });
       if (info.amount == null) info.amount = fromPdf.amount;
       if (!info.due && fromPdf.due) { info.due = fromPdf.due; info.ym = fromPdf.ym; }
       if (!info.account) info.account = fromPdf.account;
+      info.numbers = [...new Set([...info.numbers, ...fromPdf.numbers])];
       info.isBill = info.isBill || fromPdf.isBill;
     }
-    const row = { id: msg.id, from: h.from || '', subject: h.subject || '(ไม่มีหัวเรื่อง)', date, hasPdf: !!pdf, pdf, ...info };
+    const row = { id: msg.id, from: h.from || '', subject: h.subject || '(ไม่มีหัวเรื่อง)', date, hasPdf: !!pdf, pdf, locked, ...info };
     row.rule = gmailRuleFor(row, rules);
     return row;
   }));
@@ -339,8 +389,12 @@ function gmailToken() {
 
 /* ----- Importing into rule bills ----- */
 
+// Imported = this email already filled its bill's month with an amount (or that month is paid).
+// An import that read no amount, or landed in another month under an older version, is redone.
 function gmailImported(r) {
-  return Object.values(state.records).some((m) => Object.values(m).some((rec) => rec.gmail === r.id));
+  if (!r.rule) return Object.values(state.records).some((m) => Object.values(m).some((rec) => rec.gmail === r.id));
+  const rec = record(gmailTarget(r).ym, r.rule.id);
+  return rec.gmail === r.id && (rec.amount != null || !!rec.paid || r.amount == null);
 }
 
 function gmailShortAccount(a) { return a && a.length >= 4 ? `…${a.slice(-4)}` : a; }
@@ -373,15 +427,36 @@ function gmailPayDue(g, r) {
   return new Date(base.getFullYear(), base.getMonth(), base.getDate() + Number(g.payDays));
 }
 
-// Put the email's amount on its rule's bill for that month; the newest email sets the due day.
-function gmailImport(r) {
+// The bill month (and due date, when known) an email fills.
+function gmailTarget(r) {
   const b = r.rule;
   if (b.gmail.payDays) {
     const due = gmailPayDue(b.gmail, r);
-    r.ym = ymOf(due);
-    r.due = dateStr(due);
+    return { ym: ymOf(due), due: dateStr(due) };
   }
-  const ym = r.ym || ymOf(new Date());
+  // No due date in the email: the bill is for the next due day on/after the email arrived
+  // (AIS mails on the 20-somethings for a bill due the 11th of next month).
+  if (!r.due && b.dueDay && r.date) {
+    const got = new Date(r.date);
+    if (!isNaN(got)) {
+      const ymGot = ymOf(got);
+      return { ym: got.getDate() > Math.min(b.dueDay, daysInMonth(ymGot)) ? addMonths(ymGot, 1) : ymGot, due: null };
+    }
+  }
+  return { ym: r.ym || ymOf(new Date()), due: r.due };
+}
+
+// Put the email's amount on its rule's bill for that month; the newest email sets the due day.
+function gmailImport(r) {
+  const b = r.rule;
+  const t = gmailTarget(r);
+  r.ym = t.ym; r.due = t.due;
+  const ym = r.ym;
+  // Undo an earlier import of this email into another, unpaid month.
+  Object.keys(state.records).forEach((m) => {
+    const old = record(m, b.id);
+    if (m !== ym && old.gmail === r.id && !old.paid) setRecord(m, b.id, { gmail: undefined, amount: undefined });
+  });
   if (b.startMonth && ym < b.startMonth) b.startMonth = ym;
   if (r.due && (!b.gmail.dueYm || ym >= b.gmail.dueYm)) { b.dueDay = Number(r.due.slice(8, 10)); b.gmail.dueYm = ym; }
   const prev = record(ym, b.id);
@@ -421,7 +496,7 @@ function gmailRow(r, i) {
         <div class="sub">${esc(meta)}</div>
         <div class="sub">${dueTxt}</div>
         ${r.pdf ? `<div class="sub">📎 ${esc(r.pdf.name)} (เก็บไว้กับบิล)</div>` : ''}
-        ${r.amount == null ? `<div class="sub warn-txt">ไม่พบยอดในเนื้ออีเมล${r.hasPdf ? ' (PDF แนบอาจล็อกรหัสไว้)' : ''} กรอกยอดเองหลังนำเข้า</div>` : ''}
+        ${r.amount == null ? `<div class="sub warn-txt">${r.locked ? 'PDF ล็อกรหัส ใส่รหัสเปิด PDF ในกฎเพื่ออ่านยอด' : `ไม่พบยอดในเนื้ออีเมล${r.hasPdf ? ' (PDF แนบอาจล็อกรหัสไว้)' : ''} กรอกยอดเองหลังนำเข้า`}</div>` : ''}
       </div>
       <div class="right"><div class="amt">${r.amount != null ? baht(r.amount) : '-'}</div>${action}</div>
     </div>`;
@@ -482,7 +557,9 @@ function gmailDueRules() {
   if (typeof state === 'undefined') return [];
   const now = new Date();
   const ym = ymOf(now);
-  return gmailRules().filter((b) => gmailFetchDay(b.gmail, ym) && now.getDate() >= gmailFetchDay(b.gmail, ym) && b.gmail.last !== ym);
+  const today = dateStr(now);
+  return gmailRules().filter((b) => gmailFetchDay(b.gmail, ym) && now.getDate() >= gmailFetchDay(b.gmail, ym)
+    && b.gmail.last !== ym && b.gmail.tried !== today);
 }
 
 function gmailAutoDue() { return gmailDueRules().length > 0; }
@@ -492,21 +569,37 @@ function gmailAutoAlert() {
   return `<button class="alert warn gmail-auto" data-action="gmail-auto">📧<div>ถึงรอบดึงบิลจาก Gmail: ${due.map((b) => esc(b.name)).join(', ')} แตะเพื่อดึงบิลเดือนนี้</div></button>`;
 }
 
-// Pull and import new emails for the given rules without review.
+// Pull and import new emails for the given rules without review. A rule counts as done for
+// the month only once an email for it from the last ~5 weeks turned up; until then it is
+// tried again on the next day's first open (the e-bill can land after the pull day).
 async function gmailRunRules(rules, quiet) {
-  if (gmail.autoBusy || !rules.length) return;
+  if (gmail.autoBusy || !rules.length) return null;
   gmail.autoBusy = true;
   try {
     await gmailPrepare();
     const token = await gmailToken();
     const rows = await gmailSearch(token, rules);
-    const n = gmailImportAll(rows.filter((r) => !gmailImported(r)));
-    const ym = ymOf(new Date());
-    rules.forEach((b) => { b.gmail.last = ym; });
+    const fresh = rows.filter((r) => !gmailImported(r));
+    const n = gmailImportAll(fresh);
+    const now = new Date();
+    const ym = ymOf(now);
+    const recent = now.getTime() - 35 * 864e5;
+    rules.forEach((b) => {
+      if (rows.some((r) => r.rule === b && new Date(r.date).getTime() >= recent)) { b.gmail.last = ym; delete b.gmail.tried; }
+      else b.gmail.tried = dateStr(now);
+    });
     save(); render();
-    if (!quiet || n) toast(n ? `Gmail AutoSync: นำเข้า ${n} บิล` : 'Gmail AutoSync: ยังไม่มีบิลใหม่');
+    const noAmt = fresh.filter((r) => r.amount == null);
+    if (noAmt.length) {
+      const r = noAmt[0];
+      toast(r.locked
+        ? `${r.rule.name}: PDF ล็อกรหัส ใส่รหัสเปิด PDF ในกฎเพื่ออ่านยอด`
+        : `${r.rule.name}: พบอีเมลบิลแต่อ่านยอดไม่ได้ กรอกยอดเอง`);
+    } else if (!quiet || n) toast(n ? `Gmail AutoSync: นำเข้า ${n} บิล` : 'Gmail AutoSync: ยังไม่มีบิลใหม่');
+    return { rows, imported: n };
   } catch (err) {
     if (!quiet) toast('Gmail AutoSync ไม่สำเร็จ: ' + (err.message || 'ลองใหม่'));
+    return null;
   } finally {
     gmail.autoBusy = false;
   }
@@ -583,4 +676,4 @@ if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') gmailAutoTry(); });
 }
 
-if (typeof module !== 'undefined') module.exports = { gmailParseBill, gmailParseDate, gmailSenderScore };
+if (typeof module !== 'undefined') module.exports = { gmailParseBill, gmailParseDate, gmailSenderScore, gmailAccMatch, gmailRuleFor };

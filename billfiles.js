@@ -85,7 +85,9 @@ async function billFileViewer(billId, ym) {
       return;
     }
     const pdfjs = await loadPdfJs();
-    const pdf = await pdfjs.getDocument({ data: new Uint8Array(await f.blob.arrayBuffer()) }).promise;
+    // Locked e-bills (AIS) open with the password saved in the bill's Gmail rule.
+    const password = (b && b.gmail && b.gmail.pdfPass) || undefined;
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(await f.blob.arrayBuffer()), password }).promise;
     box.innerHTML = '';
     const width = box.clientWidth || 340;
     for (let i = 1; i <= Math.min(pdf.numPages, 6); i++) {
