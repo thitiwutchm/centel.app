@@ -75,6 +75,7 @@ function save() {
   updateBadge();
   calFeedChanged(); // signed in with a calendar subscription: send the new calendar (calfeed.js)
   pushAlertsChanged(); // notifications on: send this device's upcoming bill alerts (push.js)
+  aiBillsChanged(); // Claude / ChatGPT connected: send them a copy of the bills (ai.js)
 }
 
 /* ---------- Date helpers ---------- */
@@ -459,6 +460,7 @@ function renderSettings() {
     ${calFeedSettings()}
     ${lineSettings()}
     ${chatSettings()}
+    ${aiSettings()}
 
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
@@ -486,6 +488,7 @@ function renderSettings() {
   lineSettingsBind();
   pushSettingsBind();
   chatSettingsBind();
+  aiSettingsBind();
   view.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.themePick === themeId()) return;
     setTheme(b.dataset.themePick);
@@ -1485,7 +1488,7 @@ document.addEventListener('keydown', (e) => {
 
 // Re-render when returning to the app so "today" and statuses stay current.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); pushAlertsChanged(); } peaAutoTry(); }
+  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); pushAlertsChanged(); aiBillsChanged(); } peaAutoTry(); }
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -1511,4 +1514,5 @@ updateBadge();
 cloudStart();
 calFeedChanged();
 pushAlertsChanged();
+aiBillsChanged();
 setTimeout(peaAutoTry, 1500);

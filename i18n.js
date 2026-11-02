@@ -76,6 +76,14 @@ const I18N_EN = {
   // Calendar subscription (calfeed.js)
   '📆 ซิงก์บิลเข้าปฏิทิน iPhone อัตโนมัติ': '📆 Auto-sync bills to iPhone Calendar',
   '📆 ปฏิทิน iPhone: ซิงก์อัตโนมัติอยู่': '📆 iPhone Calendar: auto sync on',
+  // Connect Claude / ChatGPT (ai.js)
+  'เชื่อมกับ AI': 'Connect AI', 'เชื่อมกับ AI อยู่ {0} แอป': 'Connected to {0} AI app(s)',
+  'ให้ Claude / ChatGPT อ่านข้อมูลสรุปให้': 'Let Claude / ChatGPT read and summarise',
+  'ลิงก์ MCP ของ Centel (ใช้ได้ทั้ง Claude และ ChatGPT)': 'Centel MCP link (works with Claude and ChatGPT)',
+  'แอปที่เชื่อมอยู่': 'Connected apps', 'ยังไม่เคยใช้': 'not used yet', 'ใช้ล่าสุด {0}': 'Last used {0}',
+  'ยังไม่มี เชื่อมแล้วกลับมาหน้านี้ จะเห็นชื่อแอปที่นี่': 'None yet. Once connected, the app shows up here.',
+  'ต้องเข้าสู่ระบบก่อน AI อ่านข้อมูลจากบัญชีออนไลน์ของคุณ': 'Sign in first: the AI reads your online account.',
+  'ยกเลิกการเชื่อมแอปนี้? AI จะอ่านข้อมูล Centel ไม่ได้อีก จนกว่าจะเชื่อมใหม่': 'Remove this app? It can no longer read Centel until you connect it again.',
   'สมัครปฏิทินครั้งเดียว แล้วทุกบิลที่มีกำหนดจ่ายจะไปอยู่ในปฏิทิน iPhone พร้อมเสียงเตือน และอัปเดตเองเมื่อเพิ่ม แก้ไข หรือจ่ายบิล':
     'Subscribe once and every bill with a due date goes into iPhone Calendar with alerts, updating by itself when you add, edit or pay bills.',
   'สมัครปฏิทินครั้งเดียว แล้วทุกบิลที่มีกำหนดจ่ายจะไปอยู่ในปฏิทิน iPhone พร้อมเสียงเตือน และอัปเดตเองเมื่อเพิ่ม แก้ไข หรือจ่ายบิล (ต้องเข้าสู่ระบบ)':
