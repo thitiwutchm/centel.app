@@ -1730,3 +1730,9 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
   .ch-screen { left: auto; width: min(520px, 100vw - var(--side-w)); border-left: 0.5px solid var(--c-line); box-shadow: -24px 0 60px rgba(0, 0, 0, .25); }
   body.ch-covered > :not(.ch-screen) { visibility: visible; }
 }
+
+/* Packages: paid in one go, counted a share per use (money.js) */
+.pkg-uses { display: flex; align-items: center; gap: 8px; }
+.pkg-uses input { flex: 1; font-size: 17px; }
+.pkg-uses span { color: var(--muted); }
+.pkg-item .pkg-use { flex: 0 0 auto; white-space: nowrap; }

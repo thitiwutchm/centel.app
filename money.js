@@ -14,6 +14,7 @@ const WALLET_TYPES = {
   ewallet: { label: 'e-Wallet',    icon: '📱', color: '#00b3a4' },
   saving:  { label: 'เงินออม',     icon: '🐷', color: '#e83e8c' },
   invest:  { label: 'การลงทุน',    icon: '📈', color: '#d98a00' },
+  package: { label: 'แพ็กเกจ',     icon: '🎟️', color: '#e0662b' },
 };
 
 const TX_CATS = {
@@ -121,6 +122,31 @@ function txCat(t) {
   if (!t.category) return NO_CAT;
   return catById(t.category) || catFallback(t.type);
 }
+/* ---------- Packages ----------
+   A package is paid in one go but used many times (e.g. ฿16,000 for 20 fitness sessions).
+   It lives as a wallet of type 'package' holding the prepaid value: paying for it is a transfer
+   into that wallet (not spending), and each use is an expense of one share (฿800) out of it, so
+   reports count ฿800 per use instead of ฿16,000 on the day it was paid.
+   w.pkg = { price, uses, category, merchant }. Uses left come from the balance, so a package
+   added part-way through (balance = what is left) works the same way. */
+function isPkg(w) { return !!w && w.type === 'package' && !!w.pkg && w.pkg.uses > 0; }
+function pkgPer(w) { return Math.round((w.pkg.price / w.pkg.uses) * 100) / 100; }
+function pkgLeft(w) { const per = pkgPer(w); return per > 0 ? Math.max(0, Math.round(balanceOf(w.id) / per)) : 0; }
+// One use takes one share; the last one takes whatever is left, so the uses add up to the price exactly.
+function pkgUseAmount(w) {
+  const bal = Math.round(balanceOf(w.id) * 100) / 100;
+  return pkgLeft(w) <= 1 ? Math.max(0, bal) : Math.min(pkgPer(w), bal);
+}
+function pkgSub(w) { return `เหลือ ${pkgLeft(w)}/${w.pkg.uses} ครั้ง · ครั้งละ ${baht(pkgPer(w))}`; }
+// The add-expense form, filled in for one use of a package.
+function pkgUseForm(w) {
+  const n = w.pkg.uses - pkgLeft(w) + 1;
+  txnForm(null, {
+    walletId: w.id, amount: pkgUseAmount(w), category: w.pkg.category || '', merchant: w.pkg.merchant || '',
+    note: `${w.name} ครั้งที่ ${n}/${w.pkg.uses}`,
+  });
+}
+
 function labelById(id) { return money.labels.find((l) => l.id === id); }
 // The labels on a transaction that still exist (a deleted label just disappears).
 function txLabels(t) { return (t.labels || []).map(labelById).filter(Boolean); }
@@ -761,9 +787,20 @@ function renderHome() {
   const wallets = money.wallets.slice(0, 4).map((w) => `
     <button class="item" data-wallet-edit="${w.id}">
       ${walletIco(w)}
-      <div class="main"><div class="name">${esc(w.name)}</div>${w.excluded ? '<div class="sub">ไม่รวมในยอดรวม</div>' : ''}</div>
+      <div class="main"><div class="name">${esc(w.name)}</div>${isPkg(w) ? `<div class="sub">${pkgSub(w)}</div>` : w.excluded ? '<div class="sub">ไม่รวมในยอดรวม</div>' : ''}</div>
       <div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div>
     </button>`).join('');
+  // Packages with uses left, each with a one-tap "used it today" button.
+  const pkgs = money.wallets.filter((w) => isPkg(w) && pkgLeft(w) > 0);
+  const pkgCard = pkgs.length ? `
+    <div class="section-row"><span>แพ็กเกจ</span></div>
+    <div class="card list-card">${pkgs.map((w) => `
+      <div class="item pkg-item">
+        ${walletIco(w)}
+        <div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${pkgSub(w)}</div></div>
+        <button type="button" class="chip pkg-use" data-pkg-use="${w.id}">ใช้ 1 ครั้ง</button>
+      </div>`).join('')}
+    </div>` : '';
 
   const occ = state.bills.length ? occurrences(ym).filter((o) => !o.paid) : [];
   const billsLeft = occ.reduce((s, o) => s + o.amount, 0);
@@ -797,6 +834,8 @@ function renderHome() {
       <div class="card-head"><b>กระเป๋าเงินของฉัน</b><button class="link-btn" data-action="wallets">ดูทั้งหมด</button></div>
       ${wallets}
     </div>
+
+    ${pkgCard}
 
     ${chatCard()}
 
@@ -1485,6 +1524,12 @@ function txnForm(t, preset = {}) {
           <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div></div></div>
       <div class="tr" id="tWalletRow"><div class="tr-ico">${svgIcon('wallet')}</div>
         <div class="tr-body"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
+      ${isNew ? `<div class="tr" id="tPkgRow"><div class="tr-ico">${svgIcon('repeat')}</div>
+        <div class="tr-body"><label for="tPkg">จ่ายก้อน ใช้หลายครั้ง</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="tPkg"><span></span></label></div></div>
+      <div class="tr" id="tPkgBody" hidden><div class="tr-ico"></div>
+        <div class="tr-body col"><span class="tr-lab">แพ็กเกจ</span>
+          <div class="pkg-uses"><input id="tPkgUses" inputmode="numeric" placeholder="จำนวนครั้ง เช่น 20" aria-label="จำนวนครั้ง" autocomplete="off"><span>ครั้ง</span></div>
+          <div class="kv"><span>นับเป็นรายจ่ายครั้งละ</span><b id="tPkgPer">-</b></div></div></div>` : ''}
       <div class="tr" id="tToRow"><div class="tr-ico">${svgIcon('swap')}</div>
         <div class="tr-body"><label for="tTo">ไปยัง</label><select id="tTo"></select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
       <div class="tr" id="tNoteRow"><div class="tr-ico">${svgIcon('note')}</div>
@@ -1498,6 +1543,7 @@ function txnForm(t, preset = {}) {
       <div class="tr tr-labels"><div class="tr-ico">${svgIcon('tag')}</div>
         <div class="tr-body col"><span class="tr-lab">ป้ายกำกับ</span><div class="chips lab-pick" id="tLabels"></div></div></div>
     </div>
+    <p class="hint" id="tPkgHint" hidden>ยอดก้อนนี้ไม่นับเป็นรายจ่ายทั้งก้อน เงินจะย้ายจากกระเป๋าเงินไปเก็บเป็นแพ็กเกจ และนับเป็นรายจ่ายทีละครั้งเมื่อกด "ใช้ 1 ครั้ง" ที่หน้าหลัก</p>
     <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
     ${d.billId && !linkedBill && !isNew ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
     ${isNew ? '' : '<button class="btn danger" id="delTx">ลบรายการ</button>'}
@@ -1511,6 +1557,15 @@ function txnForm(t, preset = {}) {
     document.querySelectorAll('#tSplit button').forEach((x) => x.classList.toggle('on', x.dataset.split === d.split));
     $('#tMine').textContent = baht(myShare(num($('#tAmount').value) || 0));
   };
+  const pkgOn = () => !!$('#tPkg') && $('#tPkg').checked;
+  const paintPkg = () => {
+    if (!$('#tPkgRow')) return;
+    const on = pkgOn();
+    $('#tPkgBody').hidden = !on || $('#tPkgRow').hidden;
+    $('#tPkgHint').hidden = !on;
+    const total = num($('#tAmount').value), uses = Math.floor(num($('#tPkgUses').value));
+    $('#tPkgPer').textContent = total > 0 && uses > 0 ? baht(Math.round((total / uses) * 100) / 100) : '-';
+  };
   const renderType = () => {
     document.querySelectorAll('#txType button').forEach((x) => x.classList.toggle('on', x.dataset.ttype === d.type));
     document.querySelectorAll('#txScope button').forEach((x) => x.classList.toggle('on', x.dataset.scope === d.scope));
@@ -1523,6 +1578,13 @@ function txnForm(t, preset = {}) {
     if ($('#tBillRow')) $('#tBillRow').hidden = d.type !== 'expense';
     $('#tToRow').hidden = !transfer;
     $('#tShareRows').hidden = !sh;
+    // A package is a personal expense paid in one go; not a bill payment, not shared.
+    const canPkg = d.type === 'expense' && !sh && !d.billId && !isPkg(walletById($('#tWallet').value));
+    if ($('#tPkgRow')) {
+      $('#tPkgRow').hidden = !canPkg;
+      if (!canPkg) $('#tPkg').checked = false;
+      paintPkg();
+    }
     $('#tShareHint').hidden = !sh;
     // The wallet only matters when I am the one paying.
     $('#tWalletRow').hidden = sh && d.payerId !== me;
@@ -1581,14 +1643,27 @@ function txnForm(t, preset = {}) {
     renderType();
   });
   $('#tCatOpen').addEventListener('click', () => catPicker(d.type, d.category, (id) => { d.category = id; paintCats(); }));
-  $('#tAmount').addEventListener('input', updateShares);
+  $('#tAmount').addEventListener('input', () => { updateShares(); paintPkg(); });
+  if ($('#tPkg')) {
+    $('#tPkg').addEventListener('change', () => { paintPkg(); if (pkgOn()) $('#tPkgUses').focus(); });
+    $('#tPkgUses').addEventListener('input', paintPkg);
+  }
   $('#tSplit').addEventListener('click', (e) => {
     const b = e.target.closest('[data-split]');
     if (!b) return;
     d.split = b.dataset.split;
     updateShares();
   });
-  $('#tWallet').addEventListener('change', () => { if (d.type === 'transfer') renderType(); });
+  $('#tWallet').addEventListener('change', () => {
+    // Paying from a package fills in one use of it.
+    const w = walletById($('#tWallet').value);
+    if (d.type === 'expense' && isPkg(w)) {
+      if (!num($('#tAmount').value)) $('#tAmount').value = pkgUseAmount(w);
+      if (!d.category && w.pkg.category) d.category = w.pkg.category;
+      if (!$('#tMerchant').value && w.pkg.merchant) $('#tMerchant').value = w.pkg.merchant;
+    }
+    renderType();
+  });
   $('#tTo').addEventListener('change', (e) => { d.toWalletId = e.target.value; });
 
   // Pending bills, those whose amount is closest to `amt` first (a slip's amount usually matches one).
@@ -1697,6 +1772,28 @@ function txnForm(t, preset = {}) {
       if (d.slipRef) out.slipRef = d.slipRef;
     }
     if (d.billId) { out.billId = d.billId; out.billYm = d.billYm; }
+    if (pkgOn() && d.type === 'expense' && !shared()) {
+      // Paid in one go for many uses: the money moves into a new package wallet (a transfer, not
+      // spending); each use later is an expense of one share out of it.
+      const uses = Math.floor(num($('#tPkgUses').value));
+      if (!(uses > 1)) { toast('กรุณาใส่จำนวนครั้ง (อย่างน้อย 2)'); $('#tPkgUses').focus(); return; }
+      if ((d.currency || 'THB') !== 'THB') { toast('แพ็กเกจรองรับเฉพาะเงินบาท'); return; }
+      const c = out.category ? catById(out.category) : null;
+      const name = (out.merchant || out.note || (c && c.label) || 'แพ็กเกจ').slice(0, 60);
+      const pw = { id: uid(), name, type: 'package', initial: 0, excluded: false,
+        pkg: { price: total, uses, category: out.category || null, merchant: out.merchant || '' } };
+      if (c) pw.icon = c.icon;
+      saveWallet(pw);
+      const tx = { id: out.id, type: 'transfer', amount: total, walletId: out.walletId, toWalletId: pw.id, date,
+        note: out.note || `ซื้อแพ็กเกจ ${name} (${uses} ครั้ง)`, scope: 'personal', labels: out.labels };
+      if (out.receiptKey) tx.receiptKey = out.receiptKey;
+      if (out.slipRef) tx.slipRef = out.slipRef;
+      saveTxn(tx);
+      if (money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
+      closeSheet(); render(); popIn();
+      toast(`สร้างแพ็กเกจ ${name} แล้ว ครั้งละ ${baht(pkgPer(pw))}`);
+      return;
+    }
     if (shared()) {
       // A record for my partner to see, counted straight away; the split only sets each person's cost.
       const mine = myShare(total);
@@ -1761,7 +1858,7 @@ function walletSheet(mode = 'pick') {
   const row = (w) => `
     <button class="item" ${mode === 'pick' ? `data-wallet-sel="${w ? w.id : 'total'}"` : w ? `data-wallet-edit="${w.id}"` : ''}>
       ${walletIco(w)}
-      <div class="main"><div class="name">${esc(w ? w.name : 'ยอดรวม')}</div><div class="sub">${masked(sbaht(balanceOf(w ? w.id : 'total')))}</div></div>
+      <div class="main"><div class="name">${esc(w ? w.name : 'ยอดรวม')}</div><div class="sub">${masked(sbaht(balanceOf(w ? w.id : 'total')))}${isPkg(w) ? ` · ${pkgSub(w)}` : ''}</div></div>
       ${mode === 'pick' && ui.wallet === (w ? w.id : 'total') ? '<span class="tick">✓</span>' : ''}
       ${mode === 'edit' && w ? svgIcon('chev', 'svg-i sm muted') : ''}
     </button>`;
@@ -1810,9 +1907,15 @@ function walletForm(w) {
     <div class="form">
       <div class="field"><label for="wName">ชื่อ</label><input id="wName" placeholder="เช่น KBank ออมทรัพย์" value="${esc(d.name)}" autocomplete="off"></div>
       <div class="field"><label for="wInit">ยอดเริ่มต้น (฿)</label><input id="wInit" inputmode="decimal" placeholder="0" value="${d.initial === '' ? '' : d.initial}"></div>
-      <div class="field"><label for="wExcl">ไม่รวมในยอดรวม</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="wExcl" ${d.excluded ? 'checked' : ''}><span></span></label></div>
+      <div id="wPkgRows">
+        <div class="field"><label for="wPkgPrice">ราคาแพ็กเกจ (฿)</label><input id="wPkgPrice" inputmode="decimal" placeholder="เช่น 16000" value="${d.pkg ? d.pkg.price : ''}"></div>
+        <div class="field"><label for="wPkgUses">จำนวนครั้ง</label><input id="wPkgUses" inputmode="numeric" placeholder="เช่น 20" value="${d.pkg ? d.pkg.uses : ''}"></div>
+        <div class="field"><label>หมวดหมู่</label><span style="flex:1"></span><button type="button" class="chip" id="wPkgCat"></button></div>
+        <div class="kv"><span>ตกครั้งละ</span><b id="wPkgPer">-</b></div>
+      </div>
+      <div class="field" id="wExclRow"><label for="wExcl">ไม่รวมในยอดรวม</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="wExcl" ${d.excluded ? 'checked' : ''}><span></span></label></div>
     </div>
-    <p class="hint">บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000</p>
+    <p class="hint" id="wHint">บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000</p>
     ${isNew ? '' : `<button class="btn danger" id="delWallet">ลบกระเป๋าเงิน${used ? 'และรายการทั้งหมด' : ''}</button>`}
   `);
   $('#wTypes').addEventListener('click', (e) => {
@@ -1821,7 +1924,27 @@ function walletForm(w) {
     d.type = c.dataset.wtype;
     document.querySelectorAll('#wTypes .chip').forEach((x) => x.classList.toggle('on', x === c));
     paintPic();
+    paintPkg();
   });
+  // A package holds prepaid value: its balance is what is left to use, always part of the total
+  // (otherwise its uses would drop out of the reports).
+  const pkgCat = { id: d.pkg ? d.pkg.category || '' : '' };
+  const paintPkg = () => {
+    const on = d.type === 'package';
+    $('#wPkgRows').hidden = !on;
+    $('#wExclRow').hidden = on;
+    $('#wHint').textContent = on
+      ? 'ยอดเริ่มต้น = มูลค่าที่ยังเหลือใช้ (แพ็กเกจใหม่ใส่เท่าราคาเต็ม) ทุกครั้งที่ใช้ บันทึกเป็นรายจ่ายครั้งละส่วน ไม่ใช่ทั้งก้อน'
+      : 'บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000';
+    const price = num($('#wPkgPrice').value), uses = Math.floor(num($('#wPkgUses').value));
+    $('#wPkgPer').textContent = price > 0 && uses > 0 ? baht(Math.round((price / uses) * 100) / 100) : '-';
+    const c = pkgCat.id ? catById(pkgCat.id) : null;
+    $('#wPkgCat').textContent = c ? `${c.icon} ${c.label}` : 'เลือกหมวดหมู่';
+  };
+  paintPkg();
+  $('#wPkgPrice').addEventListener('input', paintPkg);
+  $('#wPkgUses').addEventListener('input', paintPkg);
+  $('#wPkgCat').addEventListener('click', () => catPicker('expense', pkgCat.id, (id) => { pkgCat.id = id; paintPkg(); }));
   const paintPic = () => {
     $('#wAvatar').innerHTML = walletIco(d, 'w-avatar-in') + '<span class="w-cam">✎</span>';
     $('#wReset').hidden = !d.icon;
@@ -1853,6 +1976,13 @@ function walletForm(w) {
     const initial = raw.startsWith('-') ? -num(raw.slice(1)) : num(raw);
     const out = { id: d.id || uid(), name, type: d.type, initial, excluded: $('#wExcl').checked };
     if (d.icon) out.icon = d.icon;
+    if (d.type === 'package') {
+      const price = num($('#wPkgPrice').value), uses = Math.floor(num($('#wPkgUses').value));
+      if (!(price > 0)) { toast('กรุณาใส่ราคาแพ็กเกจ'); $('#wPkgPrice').focus(); return; }
+      if (!(uses > 0)) { toast('กรุณาใส่จำนวนครั้ง'); $('#wPkgUses').focus(); return; }
+      out.excluded = false;
+      out.pkg = { ...(d.pkg || {}), price, uses, category: pkgCat.id || null };
+    }
     saveWallet(out); render(); walletSheet('edit');
     toast(isNew ? 'เพิ่มกระเป๋าเงินแล้ว' : 'บันทึกแล้ว');
   });
@@ -2213,7 +2343,7 @@ function accountTop() {
     </div>
     <div class="section-title">กระเป๋าเงิน</div>
     <div class="list">
-      ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
+      ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${isPkg(w) ? pkgSub(w) : wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
       <button class="item add-row" data-action="add-wallet"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มกระเป๋าเงิน</div></div></button>
     </div>
     <div class="section-title">หมวดหมู่และป้ายกำกับ</div>
@@ -2311,6 +2441,8 @@ function moneyClick(t) {
   if (bud) { budgetDetail(bud.dataset.budget); return true; }
   const ws = t.closest('[data-wallet-sel]');
   if (ws) { ui.wallet = ws.dataset.walletSel; closeSheet(); render(); return true; }
+  const pu = t.closest('[data-pkg-use]');
+  if (pu) { const w = walletById(pu.dataset.pkgUse); if (isPkg(w)) pkgUseForm(w); return true; }
   const we = t.closest('[data-wallet-edit]');
   if (we) { const w = walletById(we.dataset.walletEdit); if (w) walletForm(w); return true; }
   const per = t.closest('[data-period]');
