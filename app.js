@@ -132,6 +132,21 @@ function dueDateFor(b, ym) {
   return new Date(y, m - 1, Math.min(b.dueDay || 1, daysInMonth(ym)));
 }
 
+// Credit cards can also keep their statement cut-off day (b.cutDay, 1-31), separate from the due day.
+// The statement a bill month pays was cut that month when the cut day comes before the due day,
+// otherwise in the month before (e.g. cut on the 25th, due on the 10th of the next month).
+function hasCutDay(b) { return !!(b && b.cutDay && b.category === 'credit' && b.type !== 'once'); }
+function cutDateFor(b, ym) {
+  if (!hasCutDay(b)) return null;
+  const cm = b.cutDay < (b.dueDay || 1) ? ym : addMonths(ym, -1);
+  const { y, m } = parseYm(cm);
+  return new Date(y, m - 1, Math.min(b.cutDay, daysInMonth(cm)));
+}
+function cutDayOptions(cur) {
+  return `<option value="">ไม่ระบุ</option>` + Array.from({ length: 31 }, (_, i) => i + 1)
+    .map((d) => `<option value="${d}" ${Number(cur) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
+}
+
 // Days before the due date a bill counts as "soon"; a bill can override the app default.
 function remindOf(b) { return b.remind != null ? b.remind : state.settings.remindDays; }
 
@@ -248,7 +263,8 @@ function setTab(tab) {
 
 function occItem(o) {
   const b = o.bill;
-  const dueTxt = `ครบกำหนด ${thShortDate(o.due)}`;
+  const cut = cutDateFor(b, o.ym);
+  const dueTxt = `${cut ? `ตัดรอบ ${thShortDate(cut)} · ` : ''}ครบกำหนด ${thShortDate(o.due)}`;
   const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', record(o.ym, b.id).file ? '📎' : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
   const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : b.gmail ? '📧 ดึงยอด' : 'ระบุยอด'}</span>` : baht(o.amount);
   return `
@@ -744,13 +760,15 @@ function billForm(b, opts = {}) {
     const days = Array.from({ length: 31 }, (_, i) => i + 1)
       .map((d) => `<option value="${d}" ${Number(draft.dueDay) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
     let html = '';
+    const cutRow = draft.category === 'credit'
+      ? `<div class="field"><label for="fCut">วันตัดรอบ</label><select id="fCut">${cutDayOptions(draft.cutDay)}</select></div>` : '';
     if (draft.auto) {
-      html = `<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
+      html = `${cutRow}<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
         <div class="field"><label for="fStart">เริ่มเดือน</label><input type="month" id="fStart" value="${draft.startMonth || ui.ym}"></div>`;
     } else if (draft.type === 'once') {
       html = `<div class="field"><label for="fOnce">วันที่จ่าย</label><input type="date" id="fOnce" value="${draft.onceDate}"></div>`;
     } else {
-      html = `<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
+      html = `${cutRow}<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
         <div class="field"><label for="fStart">เริ่มเดือน</label><input type="month" id="fStart" value="${draft.startMonth || ui.ym}"></div>`;
       if (draft.type === 'installment') {
         html += `<div class="field"><label for="fMonths">จำนวนงวด</label><input id="fMonths" inputmode="numeric" value="${draft.months || 12}"></div>`;
@@ -775,6 +793,7 @@ function billForm(b, opts = {}) {
     draft.walletId = $('#fWallet').value;
     draft.remind = $('#fRemind').value === '' ? undefined : Number($('#fRemind').value);
     if ($('#fDue')) draft.dueDay = Number($('#fDue').value);
+    if ($('#fCut')) draft.cutDay = $('#fCut').value ? Number($('#fCut').value) : undefined;
     if ($('#fStart')) draft.startMonth = $('#fStart').value || ui.ym;
     if ($('#fEnd')) draft.endMonth = $('#fEnd').value || undefined;
     // An end before the start would hide the bill entirely, so it falls back to no end.
@@ -914,7 +933,10 @@ function billForm(b, opts = {}) {
     paintHero();
     if (['credit', 'electric', 'water'].includes(draft.category) && isNew) $('#fVariable').checked = true;
     if (['loan', 'insurance', 'rent', 'subscription', 'internet'].includes(draft.category) && isNew) $('#fVariable').checked = false;
-    if (draft.category === 'loan' && isNew && draft.type === 'monthly') { sync(); draft.type = 'installment'; renderSched(); }
+    // Re-draw the schedule rows: the type may change and credit cards add the cut-off day row.
+    sync();
+    if (draft.category === 'loan' && isNew && draft.type === 'monthly') draft.type = 'installment';
+    renderSched();
     renderPea();
   });
   $('#typeSeg').addEventListener('click', (e) => {
@@ -954,6 +976,7 @@ function billForm(b, opts = {}) {
       out.dueDay = Math.min(31, Math.max(1, draft.dueDay || 1));
       out.startMonth = draft.startMonth || ui.ym;
       if (draft.type === 'installment') out.months = Math.max(1, draft.months || 1);
+      if (out.category === 'credit' && draft.cutDay) out.cutDay = Math.min(31, Math.max(1, draft.cutDay));
       if (draft.type === 'monthly' && !draft.auto && draft.endMonth) out.endMonth = draft.endMonth;
     }
     if (draft.auto && draft.source === 'pea') {
@@ -1041,6 +1064,7 @@ function occurrenceSheet(id, ym) {
       <div class="hero-ico${billImg(b) ? ' has-img' : ''}" style="background:${c.color}2e">${billFace(b)}</div>
       <h3>${esc(b.name)}</h3>
       <div class="sub">${c.label} · ครบกำหนด ${thShortDate(o.due)} ${o.due.getFullYear() + BE}</div>
+      ${(() => { const cd = cutDateFor(b, ym); return cd ? `<div class="sub">ตัดรอบ ${thShortDate(cd)} ${cd.getFullYear() + BE}</div>` : ''; })()}
       <div style="margin-top:6px">${statusBadge(o)}</div>
     </div>
     <div class="form rows">

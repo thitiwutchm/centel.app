@@ -151,6 +151,7 @@ function billDetail(id) {
     rows += pick('ทำซ้ำ', `${svgIcon('repeat', 'svg-i xs')} ไม่ทำซ้ำ`);
   } else {
     rows += pick('เริ่ม', thMonthYear(b.startMonth), `<input type="month" data-bset="startMonth" value="${b.startMonth}">`);
+    if (b.category === 'credit') rows += pick('วันตัดรอบ', b.cutDay ? `ทุกวันที่ ${b.cutDay}` : 'ไม่ระบุ', `<select data-bset="cutDay">${cutDayOptions(b.cutDay)}</select>`);
     rows += pick('ครบกำหนด', `ทุกวันที่ ${b.dueDay}`, `<select data-bset="dueDay">${days}</select>`);
     rows += pick('ทำซ้ำ', `${svgIcon('repeat', 'svg-i xs')} ${repeatText(b)}`);
     rows += b.type === 'installment'
@@ -194,6 +195,7 @@ function billDetail(id) {
     const k = el.dataset.bset;
     const v = el.value;
     if (k === 'dueDay' || k === 'months') b[k] = Number(v);
+    else if (k === 'cutDay') { if (v) b.cutDay = Number(v); else delete b.cutDay; }
     else if (k === 'remind') { if (v === '') delete b.remind; else b.remind = Number(v); }
     else if (k === 'autopay') b.autopay = !!v;
     else if (k === 'peaDay') { b.pea.day = v === 'due' ? 'due' : Number(v); delete b.pea.tried; setTimeout(peaAutoTry, 0); }
