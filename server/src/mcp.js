@@ -1,12 +1,14 @@
 import express from 'express';
 import { pool, asUser } from './db.js';
 import { requireUser } from './auth.js';
-import { thaiToday } from './noteparse.js';
+import crypto from 'node:crypto';
+import { thaiToday, remindAt } from './noteparse.js';
 import { bearer, cors, BASE, MCP_PATH } from './oauth.js';
 
 /* Centel as a remote MCP server (Streamable HTTP, stateless, JSON responses only), so
    Claude and ChatGPT can read the person's money, budgets, bills and to-do notes and
-   summarise them. Every tool is read-only and runs as app_user for the signed-in
+   summarise them, and add or change to-do notes / reminders (create_note, update_note,
+   only for connections approved with the centel.notes scope). Every tool runs as app_user for the signed-in
    person (asUser), so it sees exactly what the app shows them: their own rows plus the
    couple's shared ones. Bills live on the device; the app sends a copy (PUT /api/ai/bills)
    while an AI app is connected. Sign-in is OAuth (oauth.js). */
@@ -241,12 +243,50 @@ async function notesList(db, args = {}) {
     }));
 }
 
+/* ---------- Notes input ---------- */
+
+const REMIND_LIST = [0, 60, 120, 180, 360, 1440, 2880, 4320];
+const isTime = (s) => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+const hhmm = (t) => (t ? String(t).slice(0, 5) : null);
+
+// A note's fields from tool arguments, falling back to the current row. Checks them the
+// way PUT /api/notes does, so a note from an AI looks the same as one made in the app.
+function noteInput(a, cur) {
+  const pick = (k, curK) => (a[k] !== undefined ? a[k] : cur[curK ?? k] ?? null);
+  const text = String(a.text !== undefined ? a.text : cur.text || '').trim().slice(0, 500);
+  if (!text) fail('text is required');
+  const date = pick('date');
+  if (date != null && !isDate(date)) fail('date must be YYYY-MM-DD');
+  const time = date ? hhmm(pick('time')) : null;
+  if (time != null && !isTime(time)) fail('time must be HH:MM (24-hour)');
+  const endDate = date ? pick('end_date', 'end_date') : null;
+  if (endDate != null && (!isDate(endDate) || endDate <= date)) fail('end_date must be a later YYYY-MM-DD than date');
+  const endTime = time ? hhmm(pick('end_time', 'end_time')) : null;
+  if (endTime != null && (!isTime(endTime) || (!endDate && endTime <= time))) fail('end_time must be HH:MM after time');
+  let remind = a.remind_minutes_before !== undefined ? a.remind_minutes_before : cur.remind ?? null;
+  if (remind != null && !REMIND_LIST.includes(remind)) fail(`remind_minutes_before must be one of ${REMIND_LIST.join(', ')}`);
+  if (remind != null && !date) {
+    if (a.remind_minutes_before != null) fail('A reminder needs a date');
+    remind = null;
+  }
+  const at = remindAt(date, time, remind);
+  if (at && a.remind_minutes_before != null && at < new Date()) fail(`That reminder time (${at.toISOString()}) has already passed`);
+  return { text, date, time, endDate, endTime, remind, remindAt: at };
+}
+
+const noteView = (n) => ({
+  id: n.id, text: n.text, date: n.date || undefined, time: hhmm(n.time) || undefined,
+  endDate: n.end_date || undefined, endTime: hhmm(n.end_time) || undefined,
+  remindMinutesBefore: n.remind ?? undefined, shared: !!n.couple_id, done: n.done,
+});
+
 /* ---------- Tools ---------- */
 
 const monthArg = { type: 'string', description: 'Month as YYYY-MM. Default: the current month in Thailand.' };
 const fromArg = { type: 'string', description: 'Start date YYYY-MM-DD (inclusive).' };
 const toArg = { type: 'string', description: 'End date YYYY-MM-DD (inclusive).' };
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 
 const TOOLS = [
   {
@@ -409,6 +449,74 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     run: (db, ctx) => walletsNow(db, ctx),
   },
+  // Writing: to-do notes and their reminders only. A reminder goes out by itself at
+  // remind_at (LINE group, iPhone push, in-app chat), the same as notes made in the app.
+  {
+    name: 'create_note',
+    title: 'Add a to-do / reminder',
+    description: 'Add a to-do note or appointment in Centel (สิ่งที่ต้องทำ / นัด / เตือนความจำ). With a date it shows on that day; with remind_minutes_before the user gets a reminder (LINE group, iPhone notification and the in-app chat) that many minutes before the time (or before 09:00 when there is no time). Dates and times are Thailand time. Confirm the details with the user before adding.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'What to do, short, without the date words. e.g. "ไปเยี่ยมแม่ ลำพูน"' },
+        date: { type: 'string', description: 'Day YYYY-MM-DD (Gregorian; พ.ศ. minus 543). Omit for an undated note.' },
+        time: { type: 'string', description: 'Start time HH:MM, 24-hour. Omit for an all-day note.' },
+        end_date: { type: 'string', description: 'Last day YYYY-MM-DD for something that spans days.' },
+        end_time: { type: 'string', description: 'End time HH:MM.' },
+        remind_minutes_before: { type: 'integer', enum: REMIND_LIST, description: 'Reminder lead: 0 = at the time, 60, 120, 180, 360 minutes, 1440 = a day, 2880 = 2 days, 4320 = 3 days before. Needs date. Omit for no reminder.' },
+        shared: { type: 'boolean', description: 'true = shared with the partner (both see it and get the reminder). Default false.' },
+      },
+      required: ['text'],
+      additionalProperties: false,
+    },
+    write: true,
+    run: async (db, _ctx, a) => {
+      const n = noteInput(a, {});
+      const row = (await db.query(
+        `insert into notes (id, couple_id, text, date, time, end_date, end_time, remind, remind_at)
+         values ($1, case when $2 then my_couple() end, $3, $4, $5, $6, $7, $8, $9) returning *`,
+        [crypto.randomUUID(), !!a.shared, n.text, n.date, n.time, n.endDate, n.endTime, n.remind, n.remindAt])).rows[0];
+      if (a.shared && !row.couple_id) return { note: noteView(row), warning: 'No partner linked, so the note was saved as personal.' };
+      return { note: noteView(row), reminderAt: row.remind_at || undefined };
+    },
+  },
+  {
+    name: 'update_note',
+    title: 'Change or tick off a to-do',
+    description: 'Change a to-do note (text, date, time, reminder) or mark it done / not done. Get the id from get_notes. Only the fields given change; pass null to clear date, time or reminder.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Note id from get_notes.' },
+        text: { type: 'string' },
+        date: { type: ['string', 'null'], description: 'YYYY-MM-DD or null.' },
+        time: { type: ['string', 'null'], description: 'HH:MM or null.' },
+        end_date: { type: ['string', 'null'] },
+        end_time: { type: ['string', 'null'] },
+        remind_minutes_before: { type: ['integer', 'null'], enum: [...REMIND_LIST, null] },
+        done: { type: 'boolean' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    write: true,
+    run: async (db, _ctx, a) => {
+      if (!/^[0-9a-f-]{36}$/i.test(String(a.id || ''))) fail('id must be a note id from get_notes');
+      const cur = (await db.query('select * from notes where id = $1', [a.id])).rows[0];
+      if (!cur) fail('Note not found');
+      const n = noteInput(a, cur);
+      const done = typeof a.done === 'boolean' ? a.done : cur.done;
+      const row = (await db.query(
+        `update notes set text = $2, date = $3, time = $4, end_date = $5, end_time = $6, remind = $7, remind_at = $8,
+           notified_at = case when remind_at is not distinct from $8 then notified_at end,
+           done = $9, done_at = case when $9 and not done then now() when $9 then done_at end,
+           done_by = case when $9 and not done then app_uid() when $9 then done_by end, updated_at = now()
+         where id = $1 returning *`,
+        [a.id, n.text, n.date, n.time, n.endDate, n.endTime, n.remind, n.remindAt, done])).rows[0];
+      if (!row) fail('This note cannot be changed');
+      return { note: noteView(row), reminderAt: row.remind_at || undefined };
+    },
+  },
   {
     name: 'list_categories',
     title: 'Categories and labels',
@@ -480,7 +588,7 @@ const TOOLS = [
 
 const INSTRUCTIONS = [
   'Centel is a Thai family money app: bills to pay, income/expense records, monthly budgets, wallets and to-do notes, for one person and (optionally) their partner.',
-  'All tools are read-only. Money is Thai baht (THB) unless a row says otherwise. Dates are in Thailand time (Asia/Bangkok).',
+  'Tools only read, except create_note and update_note, which add or change to-do notes and their reminders (confirm with the user first). Money is Thai baht (THB) unless a row says otherwise. Dates are in Thailand time (Asia/Bangkok).',
   'For shared (couple) expenses, "amount" is the user\'s own share and "total" is the whole bill.',
   'Start with get_overview for a summary; use spending_report and list_transactions to dig in. Answer in the user\'s language (usually Thai).',
 ].join(' ');
@@ -506,7 +614,9 @@ async function handle(msg, user) {
     }
     case 'ping': return rpcOk(id, {});
     case 'tools/list':
-      return rpcOk(id, { tools: TOOLS.map(({ name, title, description, inputSchema }) => ({ name, title, description, inputSchema, annotations: { title, ...RO } })) });
+      return rpcOk(id, { tools: TOOLS.map(({ name, title, description, inputSchema, write }) => ({
+        name, title, description, inputSchema, annotations: { title, ...(write ? WRITE : RO) },
+      })) });
     case 'resources/list': return rpcOk(id, { resources: [] });
     case 'resources/templates/list': return rpcOk(id, { resourceTemplates: [] });
     case 'prompts/list': return rpcOk(id, { prompts: [] });
@@ -514,6 +624,10 @@ async function handle(msg, user) {
       const tool = TOOLS.find((t) => t.name === params.name);
       if (!tool) return rpcErr(id, -32602, `Unknown tool: ${params.name}`);
       const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
+      // Connections approved before notes could be written stay read-only until approved again.
+      if (tool.write && !user.scopes?.has('centel.notes')) {
+        return rpcOk(id, { content: [{ type: 'text', text: 'This connection can only read. Ask the user to reconnect Centel (disconnect and connect again in the AI app, then tap อนุญาต) to allow adding to-dos and reminders.' }], isError: true });
+      }
       try {
         const out = await asUser(user.id, async (db) => tool.run(db, await context(db), args, user));
         return rpcOk(id, { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out, isError: false });
