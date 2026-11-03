@@ -25,6 +25,14 @@ const walletIcon = (v) => {
   if (v.startsWith('data:')) return v.length <= 120000 && IMG_ICON.test(v) ? v : null;
   return v.length <= 16 && !/[<>&"']/.test(v) ? v : null;
 };
+// A package wallet's terms (see migrations/025_wallet_package.sql); null for any other wallet.
+const walletPkg = (w) => {
+  const p = w && w.type === 'package' && w.pkg;
+  if (!p || typeof p !== 'object') return null;
+  const price = money(p.price), uses = Math.floor(Number(p.uses));
+  if (!(price > 0) || !(uses > 0) || uses > 10000) return null;
+  return { price, uses, category: str(p.category, 40), merchant: str(p.merchant, 80) || '' };
+};
 // Label ids on a transaction: at most 30 distinct short strings; null when not sent.
 const labelIds = (v) => (Array.isArray(v)
   ? [...new Set(v.map((x) => str(x, 60)).filter(Boolean))].slice(0, 30)
@@ -187,7 +195,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
       partner: partner && { id: partner.id, email: partner.email, name: partner.display_name, nickname: partner.nickname || undefined, avatar: partner.avatar || undefined },
       coupleId: couple,
       invite: invite && { code: invite.code, expiresAt: invite.expires_at },
-      wallets: wallets.map((w) => ({ id: w.id, name: w.name, type: w.type, initial: w.initial, excluded: w.excluded, sort: w.sort, icon: w.icon || undefined })),
+      wallets: wallets.map((w) => ({ id: w.id, name: w.name, type: w.type, initial: w.initial, excluded: w.excluded, sort: w.sort, icon: w.icon || undefined, pkg: w.pkg || undefined })),
       expenses: expenses.map((e) => expenseOut(e, sh[e.id] || [], (ev[e.id] || []).map((x) => ({
         actorId: x.actor_id, action: x.action, revision: x.revision, note: x.note, at: x.created_at,
       })), (lb[e.id] || []).map((x) => x.label_id))),
@@ -264,10 +272,10 @@ router.put('/wallets/:id', wrap(async (req, res) => {
   const id = str(req.params.id, 60);
   if (!id || !str(w.name)) throw bad('bad_wallet');
   await asUser(uid(req), (db) => db.query(
-    `insert into wallets (owner_id, id, name, type, initial, excluded, sort, icon) values (app_uid(), $1, $2, $3, $4, $5, $6, $7)
+    `insert into wallets (owner_id, id, name, type, initial, excluded, sort, icon, pkg) values (app_uid(), $1, $2, $3, $4, $5, $6, $7, $8)
      on conflict (owner_id, id) do update set name = excluded.name, type = excluded.type, initial = excluded.initial,
-       excluded = excluded.excluded, sort = excluded.sort, icon = excluded.icon`,
-    [id, str(w.name, 60), str(w.type, 20) || 'cash', money(w.initial || 0), !!w.excluded, Number(w.sort) || 0, walletIcon(w.icon)]));
+       excluded = excluded.excluded, sort = excluded.sort, icon = excluded.icon, pkg = excluded.pkg`,
+    [id, str(w.name, 60), str(w.type, 20) || 'cash', money(w.initial || 0), !!w.excluded, Number(w.sort) || 0, walletIcon(w.icon), walletPkg(w)]));
   res.json({ ok: true });
 }));
 
@@ -747,9 +755,9 @@ router.post('/import', wrap(async (req, res) => {
     for (const [i, w] of wallets.entries()) {
       if (!str(w.id, 60) || !str(w.name)) continue;
       await db.query(
-        `insert into wallets (owner_id, id, name, type, initial, excluded, sort, icon) values (app_uid(), $1, $2, $3, $4, $5, $6, $7)
+        `insert into wallets (owner_id, id, name, type, initial, excluded, sort, icon, pkg) values (app_uid(), $1, $2, $3, $4, $5, $6, $7, $8)
          on conflict (owner_id, id) do nothing`,
-        [str(w.id, 60), str(w.name, 60), str(w.type, 20) || 'cash', money(w.initial || 0), !!w.excluded, i, walletIcon(w.icon)]);
+        [str(w.id, 60), str(w.name, 60), str(w.type, 20) || 'cash', money(w.initial || 0), !!w.excluded, i, walletIcon(w.icon), walletPkg(w)]);
     }
     for (const [i, l] of labels.entries()) {
       if (!str(l.id, 60) || !str(l.name, 60)) continue;
