@@ -119,6 +119,7 @@ const I18N_EN = {
   'ปิดการซิงก์? ปฏิทินที่สมัครไว้จะหยุดอัปเดต (ลบปฏิทินออกได้ที่ การตั้งค่า › ปฏิทิน › บัญชี)': 'Turn off sync? The subscribed calendar stops updating (remove it in Settings › Calendar › Accounts).',
   'ปิดการซิงก์ปฏิทินแล้ว': 'Calendar sync turned off',
   'บิลที่ต้องจ่าย · centel': 'Bills to pay · centel',
+  'งานของฉัน': 'My work', 'เปิดบิลเก็บเงินกับบริษัทที่ทำงานให้ ดูว่าใครจ่ายแล้ว ใครค้าง และตั้งรอบบิล เห็นเฉพาะเจ้าของระบบ': 'Invoice the companies you work for, see who has paid and who owes, and set billing cycles. Only the owner sees this.',
   'สำรองข้อมูล': 'Backup', '⬇️ ส่งออกข้อมูล (JSON)': '⬇️ Export data (JSON)', '⬆️ นำเข้าข้อมูล': '⬆️ Import data',
   'ลบข้อมูลทั้งหมด': 'Delete all data', 'Centel · เวอร์ชัน 2.0': 'Centel · version 2.0', 'บันทึกแล้ว': 'Saved',
   'ภาษา · Language': 'Language',

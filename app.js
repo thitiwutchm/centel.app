@@ -478,6 +478,10 @@ function renderSettings() {
     ${lineSettings()}
     ${chatSettings()}
     ${aiSettings()}
+    ${isCloud() && cloud.features && cloud.features.billing ? `
+    <div class="section-title">งานของฉัน</div>
+    <a class="btn ghost" href="/billing/" translate="no">💼 Billing คู่ค้า</a>
+    <p class="hint">เปิดบิลเก็บเงินกับบริษัทที่ทำงานให้ ดูว่าใครจ่ายแล้ว ใครค้าง และตั้งรอบบิล เห็นเฉพาะเจ้าของระบบ</p>` : ''}
 
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>

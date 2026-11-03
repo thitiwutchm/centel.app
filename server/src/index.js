@@ -6,6 +6,7 @@ import { lineWebhook, startReminders } from './line.js';
 import chatRoutes, { bridgeRouter, startChatJobs } from './chat.js';
 import { oauthRouter, wellKnown } from './oauth.js';
 import { mcpRouter, aiRouter } from './mcp.js';
+import { billingRouter, billingPublic, startBillingJobs } from './billing.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -26,6 +27,10 @@ app.use('/.well-known', wellKnown);
 app.use('/mcp', mcpRouter);
 app.use('/api/oauth', oauthRouter);
 app.use('/api/ai', loadUser, csrfGuard, aiRouter);
+// Owner's B2B billing (clients, plans, invoices). Its guard takes an API key or the owner's
+// session, so it does its own CSRF check; the client's invoice links need no sign-in.
+app.use('/api/billing/public', billingPublic);
+app.use('/api/billing', loadUser, billingRouter);
 app.use('/api', loadUser, csrfGuard, routes);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 
@@ -47,3 +52,4 @@ await migrate();
 app.listen(port, () => console.log(`centel api on :${port}`));
 startReminders();
 startChatJobs();
+startBillingJobs();

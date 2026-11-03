@@ -93,6 +93,10 @@
 3. Clients → Create client → **Web application** → Authorized JavaScript origins: `https://centel.app` และ `https://www.centel.app` (ไม่ต้องใส่ redirect URI)
 4. นำ Client ID (`….apps.googleusercontent.com`) ไปตั้งเป็นตัวแปร `GOOGLE_CLIENT_ID` ของ service `web` บน Railway (Caddyfile ส่งให้หน้าเว็บผ่าน `/api/config`)
 
+## Billing คู่ค้า (หลังบ้านของเจ้าของแอป)
+
+`/billing/` คือหลังบ้านสำหรับเปิดบิลเก็บเงินกับบริษัทที่เราทำแอปให้: รายชื่อคู่ค้า, รอบบิล (วันที่ออกบิล, เครดิตกี่วัน, เริ่ม/สิ้นสุด, ออกอัตโนมัติ), ออกใบแจ้งหนี้กดเดียว, บันทึกรับเงิน, ดูว่าใครจ่ายแล้ว/ค้าง/เลยกำหนด และส่งลิงก์ใบแจ้งหนี้ให้คู่ค้าเปิดดู/พิมพ์ได้โดยไม่ต้องล็อกอิน ใช้ได้เฉพาะเจ้าของ (`BILLING_ADMINS` บน Railway › api หรือบัญชีแรกของระบบถ้าไม่ได้ตั้ง) ระบบอื่นเรียกผ่าน API key ได้ รายละเอียด API อยู่ที่ [docs/billing-api.md](docs/billing-api.md)
+
 ## ThemeA (ดีไซน์สไตล์ Apple)
 
 `themea/` คือหน้าตาแบบ Apple ของแอปเดียวกัน เปิดที่ `/themea/` ใช้ข้อมูลชุดเดียวกับหน้าหลัก (localStorage `billplanner.v1`)
