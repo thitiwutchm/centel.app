@@ -111,6 +111,7 @@ async function homeView() {
       <div class="stat ok"><div class="k">รับแล้วเดือนนี้</div><div class="v num">${fmt(thb(s.paidThisMonth, 'amount'))}</div></div>
     </div>
     ${others.length ? `<p class="hint">สกุลเงินอื่นค้างรับ: ${others.map((o) => fmt(o.outstanding, o.currency)).join(' · ')}</p>` : ''}
+    <div class="cols"><div class="col">
     <div class="section-title"><span>บิลที่ถึงรอบใน 31 วัน</span></div>
     <div class="list">${s.upcoming.length ? s.upcoming.map((p) => `
       <div class="row">
@@ -118,8 +119,10 @@ async function homeView() {
           <div class="sub">${p.nextBillDate <= s.today ? '<span class="chip warn">ถึงรอบแล้ว</span> ' : ''}รอบ ${dateTH(p.nextBillDate)} · ${fmt(p.amount, p.currency)}${p.autoIssue ? ' · ออกอัตโนมัติ' : ''}</div></div>
         <button class="btn small" data-issue="${p.id}">ออกบิล</button>
       </div>`).join('') : '<div class="empty">ยังไม่มีรอบบิลที่จะถึง</div>'}</div>
+    </div><div class="col">
     <div class="section-title"><span>คู่ค้า</span></div>
-    ${clientList(s.clients)}`;
+    ${clientList(s.clients)}
+    </div></div>`;
   bindIssue(homeView);
 }
 
@@ -162,6 +165,7 @@ async function clientView(id) {
   const st = c.status;
   frame({ title: c.name, back: '#clients', tab: 'clients', action: { label: 'แก้ไข', run: () => clientForm(c) } });
   view.innerHTML = `
+    <div class="cols"><div class="col">
     <div class="card">
       <div class="hero"><div class="avatar">${initial(c.name)}</div>
         <div><h2>${esc(c.name)}</h2><div class="small muted">${[c.code && `รหัส ${esc(c.code)}`, c.contactName && esc(c.contactName), c.email && esc(c.email), c.phone && esc(c.phone)].filter(Boolean).join(' · ') || 'ยังไม่ใส่ข้อมูลติดต่อ'}</div></div>
@@ -180,11 +184,13 @@ async function clientView(id) {
           <div class="sub">${EVERY[p.every]}${p.every !== 'once' ? ` วันที่ ${p.billDay}` : ''} · ${p.active && p.nextBillDate ? `รอบถัดไป ${dateTH(p.nextBillDate)}` : 'จบแล้ว'}${p.autoIssue ? ' · ออกอัตโนมัติ' : ''}${p.vat ? ' · +VAT' : ''}${p.whtRate ? ` · หัก ณ ที่จ่าย ${p.whtRate}%` : ''}</div></div>
         ${p.active && p.nextBillDate ? `<button class="btn small" data-issue="${p.id}">ออกบิล</button>` : ''}
       </div>`).join('') : '<div class="empty">ยังไม่มีรอบบิล เพิ่มค่าบริการรายเดือน/รายปี เพื่อให้ระบบเตือนและออกบิลให้</div>'}</div>
-    <div class="section-title"><span>ใบแจ้งหนี้</span></div>
-    ${invoiceList(c.invoices, false)}
     ${c.address || c.taxId || c.notes ? `<div class="section-title"><span>ข้อมูลออกบิล</span></div><div class="card"><dl class="kv">
       ${c.taxId ? `<dt>เลขผู้เสียภาษี</dt><dd>${esc(c.taxId)}</dd>` : ''}${c.address ? `<dt>ที่อยู่</dt><dd style="white-space:pre-line">${esc(c.address)}</dd>` : ''}
-      ${c.dueDays != null ? `<dt>เครดิต</dt><dd>${c.dueDays} วัน</dd>` : ''}${c.notes ? `<dt>หมายเหตุ</dt><dd style="white-space:pre-line">${esc(c.notes)}</dd>` : ''}</dl></div>` : ''}`;
+      ${c.dueDays != null ? `<dt>เครดิต</dt><dd>${c.dueDays} วัน</dd>` : ''}${c.notes ? `<dt>หมายเหตุ</dt><dd style="white-space:pre-line">${esc(c.notes)}</dd>` : ''}</dl></div>` : ''}
+    </div><div class="col">
+    <div class="section-title first-desk"><span>ใบแจ้งหนี้</span></div>
+    ${invoiceList(c.invoices, false)}
+    </div></div>`;
   $('#newInv').onclick = () => invoiceForm({ clientId: c.id, client: c });
   $('#newPlan').onclick = () => planForm({ clientId: c.id });
   $('#shareClient').onclick = () => share(clientLink(c), `บิลของ ${c.name}`);
@@ -314,6 +320,7 @@ async function invoiceView(id) {
   const i = await api('GET', `/invoices/${id}`);
   frame({ title: i.number || 'ใบร่าง', back: `#client/${i.clientId}`, tab: 'invoices', action: i.status === 'void' ? null : { label: 'แก้ไข', run: () => invoiceForm(i) } });
   view.innerHTML = `
+    <div class="cols"><div class="col">
     <div class="card">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
         <div><a href="#client/${i.clientId}" style="text-decoration:none"><b>${esc(i.clientName)}</b></a>
@@ -329,7 +336,16 @@ async function invoiceView(id) {
         ${i.status !== 'draft' ? `<a class="btn plain" href="${invoiceLink(i)}" target="_blank" rel="noopener">🖨️ ดู / พิมพ์</a>` : ''}
       </div>
     </div>
-    <div class="section-title"><span>รายการ</span></div>
+    ${i.status !== 'draft' ? `<div class="section-title"><span>การชำระ</span></div>
+    <div class="list">${i.payments.length ? i.payments.map((p) => `
+      <div class="row"><div class="main"><b class="num">${fmt(p.amount, i.currency)}</b><div class="sub">${dateTH(p.paidOn)}${p.method ? ` · ${esc(p.method)}` : ''}${p.reference ? ` · ${esc(p.reference)}` : ''}${p.note ? ` · ${esc(p.note)}` : ''}</div></div>
+        <button class="btn small plain" data-unpay="${p.id}">ลบ</button></div>`).join('') : '<div class="empty">ยังไม่ได้รับเงิน</div>'}</div>` : ''}
+    <div class="btns">
+      ${i.status === 'draft' ? '<button class="btn danger small" id="del">ลบใบร่าง</button>' : ''}
+      ${i.status === 'issued' || i.status === 'paid' ? '<button class="btn danger small" id="void">ยกเลิกใบนี้</button>' : ''}
+    </div>
+    </div><div class="col">
+    <div class="section-title first-desk"><span>รายการ</span></div>
     <div class="card">
       <table class="items"><thead><tr><th>รายละเอียด</th><th class="r hide-sm">จำนวน</th><th class="r hide-sm">ราคา</th><th class="r">รวม</th></tr></thead>
       <tbody>${i.items.map((x) => `<tr><td class="desc">${esc(x.description)}<div class="small muted show-sm num">${x.qty} × ${fmt(x.unitPrice, i.currency)}</div></td><td class="r num hide-sm">${x.qty}</td><td class="r num hide-sm">${fmt(x.unitPrice, i.currency)}</td><td class="r num">${fmt(x.qty * x.unitPrice, i.currency)}</td></tr>`).join('')}</tbody></table>
@@ -341,14 +357,7 @@ async function invoiceView(id) {
       </div>
       ${i.notes ? `<p class="small muted" style="white-space:pre-line">${esc(i.notes)}</p>` : ''}
     </div>
-    ${i.status !== 'draft' ? `<div class="section-title"><span>การชำระ</span></div>
-    <div class="list">${i.payments.length ? i.payments.map((p) => `
-      <div class="row"><div class="main"><b class="num">${fmt(p.amount, i.currency)}</b><div class="sub">${dateTH(p.paidOn)}${p.method ? ` · ${esc(p.method)}` : ''}${p.reference ? ` · ${esc(p.reference)}` : ''}${p.note ? ` · ${esc(p.note)}` : ''}</div></div>
-        <button class="btn small plain" data-unpay="${p.id}">ลบ</button></div>`).join('') : '<div class="empty">ยังไม่ได้รับเงิน</div>'}</div>` : ''}
-    <div class="btns">
-      ${i.status === 'draft' ? '<button class="btn danger small" id="del">ลบใบร่าง</button>' : ''}
-      ${i.status === 'issued' || i.status === 'paid' ? '<button class="btn danger small" id="void">ยกเลิกใบนี้</button>' : ''}
-    </div>`;
+    </div></div>`;
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on('#issue', async () => {
     if (!confirm('ออกบิลใบนี้? จะได้เลขที่ใบแจ้งหนี้และวันครบกำหนด')) return;
@@ -452,6 +461,7 @@ async function settingsView() {
   const [s, { keys }] = await Promise.all([api('GET', '/settings'), api('GET', '/keys')]);
   B.settings = s;
   view.innerHTML = `
+    <div class="cols"><div class="col">
     <form class="card" id="setForm">
       <div class="field"><label>ชื่อผู้ออกบิล (บริษัท/ชื่อคุณ)</label><input name="sellerName" value="${esc(s.sellerName)}"></div>
       <div class="field"><label>เลขประจำตัวผู้เสียภาษี</label><input name="sellerTaxId" value="${esc(s.sellerTaxId)}"></div>
@@ -473,7 +483,8 @@ async function settingsView() {
       <button class="btn" style="width:100%">บันทึก</button>
       <p class="hint">การแจ้งเตือน (ออกบิลอัตโนมัติ ใกล้ครบกำหนด เลยกำหนด) ส่งเข้า iPhone ผ่านการแจ้งเตือนของแอป Centel ที่เปิดไว้ในบัญชี</p>
     </form>
-    <div class="section-title"><span>API key สำหรับระบบอื่น</span><button class="btn small ghost" id="newKey">+ สร้าง key</button></div>
+    </div><div class="col">
+    <div class="section-title first-desk"><span>API key สำหรับระบบอื่น</span><button class="btn small ghost" id="newKey">+ สร้าง key</button></div>
     <div id="keyBox"></div>
     <div class="list">${keys.length ? keys.map((k) => `<div class="row"><div class="main"><b>${esc(k.name)}</b><div class="sub mono">${esc(k.prefix)}… · ${k.lastUsedAt ? `ใช้ล่าสุด ${new Date(k.lastUsedAt).toLocaleString('th-TH')}` : 'ยังไม่เคยใช้'}</div></div>
       <button class="btn small danger" data-revoke="${k.id}">ยกเลิก</button></div>`).join('') : '<div class="empty">ยังไม่มี API key</div>'}</div>
@@ -488,7 +499,8 @@ POST /plans/{id}/issue          ออกบิลรอบถัดไปขอ
 POST /invoices/{id}/payments    {amount?, paidOn?, method?, reference?}
 GET|POST|PUT /clients, /plans   จัดการคู่ค้าและรอบบิล</pre>
       <p class="hint">รายละเอียดเต็มอยู่ใน docs/billing-api.md ของ repo</p>
-    </div>`;
+    </div>
+    </div></div>`;
   $('#setForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
