@@ -111,7 +111,7 @@ function aiSettings() {
     <div class="section-title">เชื่อมกับ AI</div>
     <button class="btn${n ? ' ghost' : ''}" id="aiOpen">✨ ${n ? `เชื่อมกับ AI อยู่ ${n} แอป` : 'ให้ Claude / ChatGPT อ่านข้อมูลสรุปให้'}</button>
     <p class="hint">${isCloud()
-      ? 'เพิ่ม Centel เป็น connector ใน Claude หรือ ChatGPT แล้วถามได้เลย เช่น "สรุปรายจ่ายเดือนนี้" "บิลไหนยังไม่จ่าย" "เดือนนี้ใช้เกินงบหมวดไหน" · AI อ่านได้อย่างเดียว แก้ไขอะไรไม่ได้'
+      ? 'เพิ่ม Centel เป็น connector ใน Claude หรือ ChatGPT แล้วถามได้เลย เช่น "สรุปรายจ่ายเดือนนี้" "บิลไหนยังไม่จ่าย" "เดือนนี้ใช้เกินงบหมวดไหน" หรือ "เตือนพรุ่งนี้ 10 โมงไปรับพัสดุ" · AI เพิ่มสิ่งที่ต้องทำและตั้งเตือนได้ แต่แก้รายรับรายจ่าย งบ หรือบิลไม่ได้'
       : 'ต้องเข้าสู่ระบบก่อน AI อ่านข้อมูลจากบัญชีออนไลน์ของคุณ'}</p>`;
 }
 
@@ -147,7 +147,7 @@ function aiSheet() {
       <div class="field"><label>${esc(a.name)}<span class="muted small" style="display:block">ใช้ล่าสุด ${esc(aiWhen(a.lastUsedAt))}</span></label>
         <span style="flex:1"></span><button class="btn ghost" style="width:auto;margin:0;padding:8px 14px" data-ai-remove="${esc(a.id)}">ยกเลิก</button></div>`).join('')}</div>`
     : '<p class="hint">ยังไม่มี เชื่อมแล้วกลับมาหน้านี้ จะเห็นชื่อแอปที่นี่</p>'}
-    <p class="hint">AI เห็นรายการรับจ่าย งบประมาณ กระเป๋าเงิน สิ่งที่ต้องทำ และรายจ่ายร่วมกับคู่ เหมือนที่คุณเห็นในแอป แต่แก้ไขอะไรไม่ได้ · บิลเก็บอยู่ในเครื่อง แอปจะส่งสำเนาบิลให้ AI อ่านเมื่อมีการเปลี่ยนแปลง${aic.info && aic.info.billsAt ? ` (ส่งล่าสุด ${esc(aiWhen(aic.info.billsAt))})` : ''} · ยกเลิกแล้วสำเนาบิลจะถูกลบ</p>
+    <p class="hint">AI เห็นรายการรับจ่าย งบประมาณ กระเป๋าเงิน สิ่งที่ต้องทำ และรายจ่ายร่วมกับคู่ เหมือนที่คุณเห็นในแอป และเพิ่ม/แก้สิ่งที่ต้องทำพร้อมตั้งเตือนได้ (เตือนทาง LINE แจ้งเตือน iPhone และแชท) แต่แก้รายรับรายจ่าย งบ หรือบิลไม่ได้ · แอปที่เชื่อมก่อนวันที่ 3 พ.ย. ต้องยกเลิกแล้วเชื่อมใหม่หนึ่งครั้งจึงจะตั้งเตือนได้ · บิลเก็บอยู่ในเครื่อง แอปจะส่งสำเนาบิลให้ AI อ่านเมื่อมีการเปลี่ยนแปลง${aic.info && aic.info.billsAt ? ` (ส่งล่าสุด ${esc(aiWhen(aic.info.billsAt))})` : ''} · ยกเลิกแล้วสำเนาบิลจะถูกลบ</p>
   `);
   $('#aiCopy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว'); } catch (e) { prompt('คัดลอกลิงก์', url); }
