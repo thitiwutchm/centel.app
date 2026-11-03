@@ -25,6 +25,27 @@ function saveLocalNotes(list) {
 
 function notesAll() { return isCloud() ? (cloud.notes || (cloud.notes = [])) : loadLocalNotes(); }
 function noteById(id) { return notesAll().find((n) => n.id === id); }
+// A row is a to-do (date, reminder, ticking) or a memo (kind 'memo': a title, content and tags).
+function noteIsMemo(n) { return n.kind === 'memo'; }
+function notesTodo() { return notesAll().filter((n) => !noteIsMemo(n)); }
+function notesMemo() { return notesAll().filter(noteIsMemo).sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))); }
+const NOTE_PRIOS = [['', 'ไม่ระบุ'], ['low', 'ต่ำ'], ['medium', 'กลาง'], ['high', 'สูง']];
+const NOTE_REPEATS = [['', 'ไม่ทำซ้ำ'], ['daily', 'ทุกวัน'], ['weekly', 'ทุกสัปดาห์'], ['monthly', 'ทุกเดือน'], ['yearly', 'ทุกปี']];
+const noteTagList = (v) => [...new Set(String(v || '').split(/[,،\n]+/).map((t) => t.trim().replace(/^#/, '').slice(0, 30)).filter(Boolean))].slice(0, 10);
+
+// The next date of a repeating to-do (as nextOccurrence() in server/src/mcpnotes.js).
+function noteNextDate(ds, rule) {
+  const d = parseDs(ds);
+  if (rule === 'daily') d.setDate(d.getDate() + 1);
+  else if (rule === 'weekly') d.setDate(d.getDate() + 7);
+  else {
+    const day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + (rule === 'yearly' ? 12 : 1));
+    d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  }
+  return dateStr(d);
+}
 function noteMine(n) { return !isCloud() || !n.ownerId || n.ownerId === cloud.user.id; }
 
 // "09:30" → "10:30", stopping at 23:59: the end iOS suggests for a new start time.
@@ -48,7 +69,8 @@ function noteSave(n) {
   }
   upsert(cloud.notes || (cloud.notes = []), n);
   cloudCall('PUT', `/notes/${n.id}`, { text: n.text, date: n.date || null, time: n.time || null, endDate: n.endDate || null, endTime: n.endTime || null,
-    remind: n.remind, remindAt: n.remindAt, shared: !!n.shared, done: !!n.done });
+    remind: n.remind, remindAt: n.remindAt, shared: !!n.shared, done: !!n.done,
+    kind: n.kind || 'todo', body: n.body || '', tags: n.tags || [], priority: n.priority || null, inProgress: !!n.inProgress, recurrence: n.recurrence || null });
   calFeedChanged();
 }
 
@@ -194,24 +216,28 @@ function remindLabel(v) { return ([...NOTE_REMINDS, ...NOTE_REMINDS_OLD].find(([
 function noteRow(n) {
   const w = noteWhen(n);
   const from = isCloud() && n.shared && !noteMine(n);
+  const prio = { high: '!!!', medium: '!!', low: '!' }[n.priority];
   const sub = [
     w.rel ? `<span class="nrel ${w.cls}">${w.rel}</span>` : '',
+    n.inProgress && !n.done ? '<span class="nrel soon">กำลังทำ</span>' : '',
     n.time ? `<span>${svgIcon('clock', 'svg-i xs')}<span>${n.time}${n.endTime ? `–${n.endTime}` : ''} น.</span></span>` : '',
     n.endDate ? `<span>→ ${thShortDate(parseDs(n.endDate))}</span>` : '',
     n.date && n.remind != null && !n.done ? `<span>${svgIcon('bell', 'svg-i xs')}<span>${remindLabel(n.remind)}</span></span>` : '',
+    n.recurrence ? `<span>🔁 <span>${(NOTE_REPEATS.find(([k]) => k === n.recurrence) || ['', ''])[1]}</span></span>` : '',
     n.shared ? `<span>🤝 <span>${from ? `จาก ${esc(partnerName())}` : 'แชร์กับคู่'}</span></span>` : '',
+    ...(n.tags || []).slice(0, 3).map((t) => `<span class="muted">#${esc(t)}</span>`),
   ].filter(Boolean).join('');
   return `
     <div class="item note-row${n.done ? ' done' : ''}" data-note="${esc(n.id)}" role="button" tabindex="0">
       ${noteLeaf(n, w.cls)}
-      <div class="main"><div class="note-text" translate="no">${esc(n.text)}</div>${sub ? `<div class="note-sub">${sub}</div>` : ''}</div>
+      <div class="main"><div class="note-text" translate="no">${prio ? `<b class="exp" aria-label="ความสำคัญ">${prio}</b> ` : ''}${esc(n.text)}</div>${n.body ? `<div class="muted small note-body" translate="no">${esc(n.body.split('\n')[0].slice(0, 120))}</div>` : ''}${sub ? `<div class="note-sub">${sub}</div>` : ''}</div>
       <button class="check${n.done ? ' on' : ''}" data-note-done="${esc(n.id)}" aria-label="${n.done ? 'ยังไม่เสร็จ' : 'ทำเสร็จแล้ว'}">${n.done ? '✓' : ''}</button>
     </div>`;
 }
 
 // Open notes first by date (overdue on top), notes without a date after, newest first.
 function notesOpen() {
-  return notesAll().filter((n) => !n.done).sort((a, b) =>
+  return notesTodo().filter((n) => !n.done).sort((a, b) =>
     (a.date ? 0 : 1) - (b.date ? 0 : 1) || (a.date || '').localeCompare(b.date || '')
     || (a.time || '').localeCompare(b.time || '') || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 }
@@ -252,7 +278,73 @@ function notePreviewHtml(p) {
 
 /* ---------- Sheets ---------- */
 
+function memoRow(n) {
+  const from = isCloud() && n.shared && !noteMine(n);
+  const sub = [
+    n.shared ? `🤝 ${from ? `จาก ${esc(partnerName())}` : 'แชร์กับคู่'}` : '',
+    ...(n.tags || []).slice(0, 4).map((t) => `#${esc(t)}`),
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="item note-row memo-row" data-memo="${esc(n.id)}" role="button" tabindex="0">
+      <div class="leaf none" aria-hidden="true">${svgIcon('note')}</div>
+      <div class="main"><div class="note-text" translate="no">${esc(n.text)}</div>
+        ${n.body ? `<div class="muted small note-body" translate="no">${esc(n.body.replace(/\s+/g, ' ').slice(0, 140))}</div>` : ''}
+        ${sub ? `<div class="note-sub"><span>${sub}</span></div>` : ''}</div>
+    </div>`;
+}
+
+function memosSheet() {
+  const list = notesMemo();
+  openSheet(`
+    <div class="sheet-head">
+      <button class="close-x" data-action="close" aria-label="ปิด"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <h2>โน้ต</h2>
+      <button class="round-btn sm" data-memo-new aria-label="จดโน้ต">${svgIcon('plus')}</button>
+    </div>
+    <div class="seg" id="nTabs"><button type="button" data-ntab="todo">สิ่งที่ต้องทำ</button><button type="button" data-ntab="memo" class="on">โน้ต</button></div>
+    ${list.length ? `<div class="list">${list.map(memoRow).join('')}</div>` : '<div class="empty"><div class="e-ico">🗒️</div>ยังไม่มีโน้ต กด + เพื่อจด หรือให้ AI จดให้</div>'}
+  `);
+  ui.notesOpen = true;
+  ui.notesTab = 'memo';
+}
+
+function memoForm(n) {
+  const isNew = !n;
+  const d = n ? { ...n } : { id: newId(), kind: 'memo', text: '', body: '', tags: [], shared: false };
+  const canShare = isCloud() && !!cloud.partner && noteMine(d);
+  openSheet(`
+    <div class="sheet-head">
+      <button class="close-x" data-action="notes" aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <h2>${isNew ? 'จดโน้ต' : 'แก้ไขโน้ต'}</h2>
+      <button class="link-btn strong" id="mSave">บันทึก</button>
+    </div>
+    <div class="form">
+      <div class="field"><input id="mTitle" maxlength="500" placeholder="หัวข้อ" aria-label="หัวข้อ" value="${esc(d.text)}"></div>
+    </div>
+    <div class="form note-card note-edit"><textarea id="mBody" maxlength="20000" rows="10" placeholder="เนื้อหา" aria-label="เนื้อหา">${esc(d.body || '')}</textarea></div>
+    <div class="form">
+      <div class="field"><label for="mTags">แท็ก</label><input id="mTags" placeholder="เช่น บ้าน, ภาษี" value="${esc((d.tags || []).join(', '))}"></div>
+      ${canShare ? `<label class="field"><span>แชร์กับ ${esc(partnerName())}</span><span class="switch"><input type="checkbox" id="mShared" ${d.shared ? 'checked' : ''}><span></span></span></label>` : ''}
+    </div>
+    ${isNew ? '' : noteMine(d) ? '<button class="btn danger" id="mDel">ลบโน้ต</button>' : `<div class="muted small center">โน้ตนี้สร้างโดย ${esc(partnerName())}</div>`}
+  `);
+  $('#mSave').addEventListener('click', () => {
+    const text = $('#mTitle').value.trim();
+    if (!text) { toast('กรุณาใส่หัวข้อ'); $('#mTitle').focus(); return; }
+    const sh = $('#mShared');
+    noteSave({ ...d, kind: 'memo', text, body: $('#mBody').value.trim(), tags: noteTagList($('#mTags').value), shared: sh ? sh.checked : !!d.shared,
+      date: '', time: '', endDate: '', endTime: '', remind: null, done: false,
+      ownerId: d.ownerId || (isCloud() ? cloud.user.id : undefined), createdAt: d.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() });
+    toast(isNew ? 'จดโน้ตแล้ว' : 'บันทึกแล้ว');
+    memosSheet(); render();
+  });
+  const del = $('#mDel');
+  if (del) del.addEventListener('click', () => confirmDelete('ลบโน้ตนี้?', '', () => { noteDelete(d); memosSheet(); render(); toast('ลบแล้ว'); }));
+  if (isNew) setTimeout(() => $('#mTitle') && $('#mTitle').focus(), 300);
+}
+
 function notesSheet() {
+  if (ui.notesTab === 'memo') { memosSheet(); return; }
   const open = notesOpen();
   const td = dateStr(new Date());
   const groups = [
@@ -261,13 +353,14 @@ function notesSheet() {
     ['กำลังจะถึง', open.filter((n) => n.date > td)],
     ['ไม่ระบุวัน', open.filter((n) => !n.date)],
   ];
-  const done = notesAll().filter((n) => n.done).sort((a, b) => String(b.doneAt || '').localeCompare(String(a.doneAt || ''))).slice(0, 30);
+  const done = notesTodo().filter((n) => n.done).sort((a, b) => String(b.doneAt || '').localeCompare(String(a.doneAt || ''))).slice(0, 30);
   openSheet(`
     <div class="sheet-head">
       <button class="close-x" data-action="close" aria-label="ปิด"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <h2>สิ่งที่ต้องทำ</h2>
       <button class="round-btn sm" data-note-new="" aria-label="เพิ่มสิ่งที่ต้องทำ">${svgIcon('plus')}</button>
     </div>
+    <div class="seg" id="nTabs"><button type="button" data-ntab="todo" class="on">สิ่งที่ต้องทำ</button><button type="button" data-ntab="memo">โน้ต${notesMemo().length ? ` (${notesMemo().length})` : ''}</button></div>
     <div class="list notes-card">${noteQuickAdd('naSheet')}</div>
     ${groups.filter(([, l]) => l.length).map(([t, l]) => `<div class="section-title">${t} (${l.length})</div><div class="list">${l.map(noteRow).join('')}</div>`).join('')}
     ${open.length ? '' : '<div class="empty"><div class="e-ico">📝</div>ไม่มีสิ่งที่ต้องทำค้างอยู่</div>'}
@@ -302,6 +395,10 @@ function noteForm(n, preset = {}) {
     </div>
     <div class="form note-card note-edit"><textarea id="nText" maxlength="500" placeholder="เช่น ไปเยี่ยมแม่ ลำพูน" aria-label="สิ่งที่ต้องทำ">${esc(d.text)}</textarea></div>
     <div class="form prows" id="nRows"></div>
+    <div class="form">
+      <div class="field"><textarea id="nBody" maxlength="5000" rows="3" placeholder="รายละเอียด (ไม่ใส่ก็ได้)" aria-label="รายละเอียด">${esc(d.body || '')}</textarea></div>
+      <div class="field"><label for="nTags">แท็ก</label><input id="nTags" placeholder="เช่น งาน, บ้าน" value="${esc((d.tags || []).join(', '))}"></div>
+    </div>
     ${isNew ? '' : noteMine(d) ? '<button class="btn danger" id="nDel">ลบโน้ต</button>' : `<div class="muted small center">โน้ตนี้สร้างโดย ${esc(partnerName())}</div>`}
   `);
   const pick = (label, value, control) => `<label class="prow"><span class="pl">${label}</span><span class="pv">${value}${control ? svgIcon('updown', 'svg-i ud') : ''}</span>${control || ''}</label>`;
@@ -324,6 +421,11 @@ function noteForm(n, preset = {}) {
     const choices = NOTE_REMINDS_OLD.some(([k]) => k === d.remind) ? [...NOTE_REMINDS, NOTE_REMINDS_OLD.find(([k]) => k === d.remind)] : NOTE_REMINDS;
     h += pick('เตือน', `${svgIcon('bell', 'svg-i xs')} ${d.date ? remindLabel(d.remind) : 'ไม่เตือน'}`,
       `<select data-nset="remind">${choices.map(([k, l]) => `<option value="${k == null ? '' : k}" ${d.date && k === d.remind ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
+    if (d.date) h += pick('ทำซ้ำ', (NOTE_REPEATS.find(([k]) => k === (d.recurrence || '')) || NOTE_REPEATS[0])[1],
+      `<select data-nset="recurrence">${NOTE_REPEATS.map(([k, l]) => `<option value="${k}" ${k === (d.recurrence || '') ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
+    h += pick('ความสำคัญ', (NOTE_PRIOS.find(([k]) => k === (d.priority || '')) || NOTE_PRIOS[0])[1],
+      `<select data-nset="priority">${NOTE_PRIOS.map(([k, l]) => `<option value="${k}" ${k === (d.priority || '') ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
+    if (!d.done) h += `<label class="prow"><span class="pl">กำลังทำ</span><span class="switch"><input type="checkbox" data-nset="inProgress" ${d.inProgress ? 'checked' : ''}><span></span></span></label>`;
     if (canShare) h += pick(`แชร์กับ ${esc(partnerName())}`, d.shared ? 'ใช่' : 'ไม่', `<select data-nset="shared"><option value="">ไม่</option><option value="1" ${d.shared ? 'selected' : ''}>ใช่</option></select>`);
     $('#nRows').innerHTML = h;
   };
@@ -346,6 +448,10 @@ function noteForm(n, preset = {}) {
     }
     if (k === 'remind') { d.remind = v === '' ? null : Number(v); if (d.remind != null && !d.date) d.date = dateStr(today()); }
     if (k === 'shared') d.shared = !!v;
+    if (k === 'recurrence') d.recurrence = v || '';
+    if (k === 'priority') d.priority = v || '';
+    if (k === 'inProgress') d.inProgress = e.target.checked;
+    if (!d.date) d.recurrence = '';
     rows();
   });
   $('#nSave').addEventListener('click', () => {
@@ -353,7 +459,9 @@ function noteForm(n, preset = {}) {
     if (!text) { toast('กรุณาพิมพ์สิ่งที่ต้องทำ'); $('#nText').focus(); return; }
     if (!d.date) { d.time = ''; d.remind = null; }
     if (!d.time) d.endTime = '';
-    noteSave({ ...d, text, ownerId: d.ownerId || (isCloud() ? cloud.user.id : undefined), createdAt: d.createdAt || new Date().toISOString() });
+    if (!d.date) d.recurrence = '';
+    noteSave({ ...d, kind: 'todo', text, body: $('#nBody').value.trim(), tags: noteTagList($('#nTags').value),
+      ownerId: d.ownerId || (isCloud() ? cloud.user.id : undefined), createdAt: d.createdAt || new Date().toISOString() });
     toast(isNew ? 'เพิ่มโน้ตแล้ว' : 'บันทึกแล้ว');
     if (ui.notesOpen) notesSheet(); else closeSheet();
     render();
@@ -370,8 +478,22 @@ function noteForm(n, preset = {}) {
 function noteToggle(id, btn) {
   const n = noteById(id);
   if (!n) return;
+  // A repeating to-do ticked off moves to its next date (missed ones are skipped) and stays open.
+  if (!n.done && n.recurrence && n.date) {
+    const td = dateStr(new Date());
+    let next = noteNextDate(n.date, n.recurrence);
+    while (next < td) next = noteNextDate(next, n.recurrence);
+    if (n.endDate) n.endDate = dateStr(new Date(parseDs(next).getTime() + (parseDs(n.endDate) - parseDs(n.date))));
+    n.date = next;
+    n.inProgress = false;
+    noteSave({ ...n });
+    toast(`เสร็จแล้ว ✓ ครั้งถัดไป ${thShortDate(parseDs(next))}`);
+    setTimeout(() => { if (ui.notesOpen && !$('#sheet').hidden) notesSheet(); render(); }, 650);
+    return;
+  }
   n.done = !n.done;
   n.doneAt = n.done ? new Date().toISOString() : undefined;
+  if (n.done) n.inProgress = false;
   noteSave({ ...n });
   const row = btn.closest('.note-row');
   row.classList.toggle('done', n.done);
@@ -542,6 +664,11 @@ function notesIcs(stamp, alarm) {
 /* ---------- Clicks ---------- */
 
 function notesClick(t) {
+  const tab = t.closest('[data-ntab]');
+  if (tab) { ui.notesTab = tab.dataset.ntab; notesSheet(); return true; }
+  if (t.closest('[data-memo-new]')) { memoForm(null); return true; }
+  const mr = t.closest('[data-memo]');
+  if (mr) { const n = noteById(mr.dataset.memo); if (n) memoForm(n); return true; }
   const lp = t.closest('[data-lp]');
   if (lp) { linePersonForm(lp.dataset.lp); return true; }
   const dn = t.closest('[data-note-done]');
@@ -567,6 +694,8 @@ function notesClick(t) {
 
 function notesAction(action) {
   if (action !== 'notes') return false;
+  // From Home the list opens on the to-dos; back from a memo it returns to the memos.
+  if (!ui.notesOpen) ui.notesTab = 'todo';
   notesSheet();
   return true;
 }

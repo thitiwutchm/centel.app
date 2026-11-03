@@ -23,8 +23,9 @@ export const MCP_PATH = '/mcp';
 const ACCESS_SEC = 3600;
 const REFRESH_DAYS = 60;
 const CODE_SEC = 600;
-// Read everything the app shows; add and change to-do notes and their reminders.
-export const SCOPES = ['centel.read', 'centel.notes'];
+// Read everything the app shows; manage notes and to-dos (with reminders); manage budgets
+// and income / expense records (with confirmation for deletes and money changes).
+export const SCOPES = ['centel.read', 'centel.notes', 'centel.money'];
 const SCOPE = SCOPES.join(' ');
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -225,8 +226,10 @@ oauthRouter.get('/authorize', loadUser, wrap(async (req, res) => {
 <li>อ่านรายรับรายจ่าย หมวดหมู่ ป้าย และกระเป๋าเงิน</li>
 <li>อ่านงบประมาณ บิลที่ต้องจ่าย และสิ่งที่ต้องทำ</li>
 <li>เห็นรายการร่วมกับคู่ของคุณ เหมือนที่คุณเห็นในแอป</li>
-<li><b>เพิ่มและแก้ไขสิ่งที่ต้องทำ</b> พร้อมตั้งเตือนความจำได้</li>
-<li>แก้ ลบ หรือเพิ่ม รายรับรายจ่าย งบ หรือบิล <b>ไม่ได้</b></li>
+<li><b>จดโน้ต เพิ่มและแก้ไขสิ่งที่ต้องทำ</b> พร้อมตั้งเตือนความจำได้</li>
+<li><b>สร้างและแก้ไขงบประมาณ บันทึกและแก้ไขรายรับรายจ่าย</b></li>
+<li>การลบ และการเปลี่ยนยอดเงิน AI ต้องถามคุณก่อนทุกครั้ง · ดูและย้อนกลับสิ่งที่ AI เปลี่ยนได้ในแอป</li>
+<li>โอนเงินจริง แก้กระเป๋าเงิน หรือแก้บิล <b>ไม่ได้</b></li>
 </ul>
 <form method="post" action="/api/oauth/authorize">
 ${Object.entries(hidden).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join('')}
@@ -336,7 +339,8 @@ export async function bearer(req, res, next) {
   try {
     const m = /^Bearer\s+([A-Za-z0-9_-]{20,200})$/i.exec(req.get('authorization') || '');
     const row = m && (await pool.query(
-      `select g.id as grant_id, g.user_id, g.last_used_at, g.scope from oauth_tokens t join oauth_grants g on g.id = t.grant_id
+      `select g.id as grant_id, g.user_id, g.last_used_at, g.scope, c.name as client from oauth_tokens t
+       join oauth_grants g on g.id = t.grant_id join oauth_clients c on c.id = g.client_id
        where t.token_hash = $1 and t.kind = 'access' and t.expires_at > now() and g.revoked_at is null`, [sha(m[1])])).rows[0];
     if (!row) {
       res.set('WWW-Authenticate',
@@ -346,7 +350,7 @@ export async function bearer(req, res, next) {
     if (!row.last_used_at || Date.now() - new Date(row.last_used_at) > 5 * 60000) {
       pool.query('update oauth_grants set last_used_at = now() where id = $1', [row.grant_id]).catch(() => {});
     }
-    req.mcpUser = { id: row.user_id, grantId: row.grant_id, scopes: new Set(String(row.scope || '').split(' ')) };
+    req.mcpUser = { id: row.user_id, grantId: row.grant_id, client: row.client, scopes: new Set(String(row.scope || '').split(' ')) };
     next();
   } catch (e) {
     next(e);

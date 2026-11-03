@@ -71,7 +71,8 @@ const TH_DOW_FULL = ['อาทิตย์', 'จันทร์', 'อัง�
 const defaultMoney = () => ({
   wallets: [{ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0 }],
   txns: [],
-  // budgets: { id, category ('all' or TX_CATS key), amount, walletId ('total' or wallet id) } — repeats every month
+  // budgets: { id, category ('all' or TX_CATS key), amount, walletId ('total' or wallet id),
+  //   period ('month' default, 'week' = Monday–Sunday, 'custom' = startDate..endDate), name?, merchant? (shop filter) }
   budgets: [],
   // labels: { id, name } — tags a transaction can carry several of (t.labels = [label ids])
   labels: [],
@@ -347,17 +348,52 @@ function cumDaily(ym, type, filter = () => true, value = (t) => t.amount) {
 
 // A personal budget counts my spending (my share of shared bills); a shared budget
 // counts whole shared bills, once, for the couple.
+// A budget with a shop filter (merchant) only counts spending whose shop or note contains it.
 function budgetFilter(bg) {
   const target = catById(bg.category) ? catById(bg.category).id : bg.category;
-  const cat = (t) => bg.category === 'all' || catIn(t.category, target);
+  const shop = bg.merchant ? bg.merchant.toLowerCase() : '';
+  const cat = (t) => (bg.category === 'all' || catIn(t.category, target))
+    && (!shop || `${t.merchant || ''} ${t.note || ''}`.toLowerCase().includes(shop));
   if (bg.scope === 'shared') return (t) => t.type === 'expense' && t.scope === 'shared' && t.counted && cat(t);
   const S = walletSet(bg.walletId || 'total');
   return (t) => t.type === 'expense' && counts(t) && inSel(t, S) && cat(t);
 }
 function budgetValue(bg) { return bg.scope === 'shared' ? (t) => t.total : (t) => t.amount; }
+
+// The dates a budget covers while month ym is shown: the month, the Monday–Sunday week of
+// the day in view (today in this month, else the month's last or first day), or its own range.
+function budgetWin(bg, ym) {
+  const per = bg.period || 'month';
+  if (per === 'custom' && bg.startDate && bg.endDate) return { from: bg.startDate, to: bg.endDate };
+  if (per === 'week') {
+    const cur = ymOf(new Date());
+    const ref = ym === cur ? today() : parseDs(ym < cur ? `${ym}-${pad(daysInMonth(ym))}` : `${ym}-01`);
+    const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - ((ref.getDay() + 6) % 7));
+    return { from: dateStr(d), to: dateStr(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6)) };
+  }
+  return { from: `${ym}-01`, to: `${ym}-${pad(daysInMonth(ym))}` };
+}
+function winDays(w) { return daysBetween(parseDs(w.from), parseDs(w.to)) + 1; }
+// Days of the window gone by, counting today.
+function winElapsed(w) {
+  const td = dateStr(new Date());
+  return td < w.from ? 0 : td > w.to ? winDays(w) : daysBetween(parseDs(w.from), today()) + 1;
+}
+function budgetMonthly(bg) { return (bg.period || 'month') === 'month'; }
+// The overall monthly budget (ทุกหมวด, no shop filter) that heads the Budgets page.
+function budgetIsCap(bg) { return bg.category === 'all' && budgetMonthly(bg) && !bg.merchant; }
+function budgetLabel(bg) { return bg.name || budgetCat(bg).label; }
+function budgetPeriodText(bg, ym) {
+  if (budgetMonthly(bg)) return '';
+  const w = budgetWin(bg, ym);
+  const a = parseDs(w.from), b = parseDs(w.to);
+  const span = `${thShortDate(a)} – ${thShortDate(b)}${a.getFullYear() !== b.getFullYear() || bg.period === 'custom' ? ` ${String(b.getFullYear() + BE).slice(2)}` : ''}`;
+  return bg.period === 'week' ? `ทุกสัปดาห์ · ${span}` : span;
+}
 function budgetSpent(bg, ym) {
   const f = budgetFilter(bg), v = budgetValue(bg);
-  return txnsInMonth(ym).filter(f).reduce((s, t) => s + v(t), 0);
+  const w = budgetWin(bg, ym);
+  return money.txns.filter((t) => t.date >= w.from && t.date <= w.to && f(t)).reduce((s, t) => s + v(t), 0);
 }
 
 // Share of the month that has passed: 1 for past months, 0 for future ones.
@@ -702,11 +738,12 @@ function ring(pct, cls) {
     <text x="28" y="32" text-anchor="middle">${Math.round(pct)}%</text></svg>`;
 }
 
-function budgetBar(spent, amount, ym) {
-  const pace = monthPace(ym);
+function budgetBar(spent, amount, ym, win) {
+  const td = dateStr(new Date());
+  const pace = win ? winElapsed(win) / winDays(win) : monthPace(ym);
   const cls = paceCls(spent, amount, pace);
   const pct = amount > 0 ? Math.min(100, (spent / amount) * 100) : 0;
-  const showToday = ym === ymOf(new Date());
+  const showToday = win ? td >= win.from && td <= win.to : ym === ymOf(new Date());
   const tp = (pace * 100).toFixed(1);
   return `<div class="bbar"><div class="bfill ${cls}" style="width:${pct}%"></div>${showToday ? `<i class="btoday" style="left:${tp}%"></i>` : ''}</div>
     ${showToday ? `<div class="btoday-wrap"><span class="btoday-lab" style="left:clamp(24px, ${tp}%, calc(100% - 24px))">วันนี้</span></div>` : ''}`;
@@ -1229,20 +1266,22 @@ function budgetRow(bg, ym) {
   const w = bg.walletId && bg.walletId !== 'total' ? walletById(bg.walletId) : null;
   const pct = bg.amount ? (spent / bg.amount) * 100 : 0;
   const badge = `<span class="badge ${pct > 100 ? 'bad' : pct >= 80 ? 'warn' : 'muted'}">${Math.round(pct)}%</span>`;
+  const sub = [bg.name && bg.name !== c.label ? c.label : '', bg.merchant ? `ร้าน ${bg.merchant}` : '', budgetPeriodText(bg, ym), w ? w.name : ''].filter(Boolean);
   return `
     <button class="card budget" data-budget="${bg.id}">
       <div class="b-top">${circleIco(c)}
-        <div class="main"><div class="name">${esc(c.label)} ${bg.scope === 'shared' ? '<span class="badge share">ร่วม</span>' : ''} ${badge}</div>${w ? `<div class="sub">${esc(w.name)}</div>` : ''}</div>
+        <div class="main"><div class="name">${esc(budgetLabel(bg))} ${bg.scope === 'shared' ? '<span class="badge share">ร่วม</span>' : ''} ${badge}</div>${sub.length ? `<div class="sub">${esc(sub.join(' · '))}</div>` : ''}</div>
         <div class="right"><b>${baht(bg.amount)}</b><div class="sub ${left < 0 ? 'exp' : ''}">${left < 0 ? `เกินงบ ${baht(-left)}` : `เหลือ ${baht(left)}`}</div></div>
       </div>
-      ${budgetBar(spent, bg.amount, ym)}
+      ${budgetBar(spent, bg.amount, ym, budgetMonthly(bg) ? null : budgetWin(bg, ym))}
     </button>`;
 }
 
 // Summary card at the top of Budgets: my budgets, or the shared ones when I only have those.
 function budgetSummary(ym, list) {
-  const allBg = list.find((bg) => bg.category === 'all');
-  const catBgs = list.filter((bg) => bg.category !== 'all');
+  list = list.filter(budgetMonthly);
+  const allBg = list.find(budgetIsCap);
+  const catBgs = list.filter((bg) => bg !== allBg);
   const shared = list.length > 0 && list.every((bg) => bg.scope === 'shared');
   const totalBudget = allBg ? allBg.amount : catBgs.reduce((s, bg) => s + bg.amount, 0);
   const totalSpent = allBg ? budgetSpent(allBg, ym) : catBgs.reduce((s, bg) => s + budgetSpent(bg, ym), 0);
@@ -1274,9 +1313,12 @@ function budgetSummary(ym, list) {
 
 function renderBudgets() {
   const ym = budgetYm();
-  const list = visibleBudgets();
-  const shared = sharedBudgets();
-  const catBgs = list.filter((bg) => bg.category !== 'all');
+  // A custom-range budget shows in the months its range touches.
+  const inView = (bg) => bg.period !== 'custom' || !bg.startDate || (bg.startDate <= `${ym}-31` && bg.endDate >= `${ym}-01`);
+  const list = visibleBudgets().filter(inView);
+  const shared = sharedBudgets().filter(inView);
+  const cap = list.find(budgetIsCap);
+  const catBgs = list.filter((bg) => bg !== cap);
 
   view.innerHTML = `
     <div class="page-head">
@@ -1297,20 +1339,29 @@ function budgetDetail(id) {
   if (!bg) return;
   const ym = budgetYm();
   const c = budgetCat(bg);
-  const dim = daysInMonth(ym);
-  const cur = ymOf(new Date());
-  const f = budgetFilter(bg);
-  const cum = cumDaily(ym, 'expense', f, budgetValue(bg));
+  const win = budgetWin(bg, ym);
+  const dim = winDays(win);
+  const f = budgetFilter(bg), v = budgetValue(bg);
+  const list = money.txns.filter((t) => t.date >= win.from && t.date <= win.to && f(t));
+  // Cumulative spending per day of the window, index 0 = its first day.
+  const start = parseDs(win.from);
+  const cum = new Array(dim).fill(0);
+  list.forEach((t) => { cum[daysBetween(start, parseDs(t.date))] += v(t); });
+  for (let i = 1; i < dim; i++) cum[i] += cum[i - 1];
   const spent = cum[dim - 1];
   const left = bg.amount - spent;
-  const elapsed = ym === cur ? new Date().getDate() : ym < cur ? dim : 0;
+  const elapsed = winElapsed(win);
   const daysLeft = dim - elapsed;
+  const td = dateStr(new Date());
+  const now = td >= win.from && td <= win.to;
+  const future = td < win.from;
   const actualDaily = elapsed ? spent / elapsed : 0;
-  const projected = ym > cur ? 0 : spent + actualDaily * daysLeft;
-  const recommend = left > 0 ? left / Math.max(1, ym === cur ? daysLeft + 1 : ym > cur ? dim : 1) : 0;
+  const projected = future ? 0 : spent + actualDaily * daysLeft;
+  const recommend = left > 0 ? left / Math.max(1, now ? daysLeft + 1 : future ? dim : 1) : 0;
   const w = bg.walletId && bg.walletId !== 'total' ? walletById(bg.walletId) : null;
-  const { m, y } = parseYm(ym);
-  const pts = cum.slice(0, Math.max(elapsed, 1)).map((v, i) => [i, v]);
+  const end = parseDs(win.to);
+  const dlab = (d) => `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear() + BE).slice(2)}`;
+  const pts = cum.slice(0, Math.max(elapsed, 1)).map((x, i) => [i, x]);
   const proj = elapsed && daysLeft ? [[elapsed - 1, spent], [dim - 1, projected]] : [];
   const chart = lineChart({
     dim,
@@ -1319,33 +1370,34 @@ function budgetDetail(id) {
       { pts: proj, cls: projected > bg.amount ? 'exp' : 'avg', dash: true },
     ],
     hline: { v: bg.amount, cls: 'exp' },
-    xLabels: [[0, `1/${m}/${String(y + BE).slice(2)}`], [dim - 1, `${dim}/${m}/${String(y + BE).slice(2)}`]],
+    xLabels: [[0, dlab(start)], [dim - 1, dlab(end)]],
   });
-  const list = txnsInMonth(ym).filter(f);
   const S = walletSet(bg.walletId || 'total');
+  const perName = { week: 'งบรายสัปดาห์', custom: 'งบช่วงเวลาที่กำหนด' }[bg.period] || '';
 
   openSheet(`
     <div class="sheet-head">
       <button class="link-btn" data-action="close">ปิด</button>
-      <h2>${thMonthYear(ym)}</h2>
+      <h2>${budgetMonthly(bg) ? thMonthYear(ym) : perName}</h2>
       <button class="link-btn" data-action="edit-budget" data-id="${bg.id}">แก้ไข</button>
     </div>
     <div class="card bd">
-      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(c.label)}</div></div></div>
+      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(budgetLabel(bg))}</div>${bg.name && bg.name !== c.label ? `<div class="sub">${esc(c.label)}</div>` : ''}</div></div>
       <div class="bd-body">
         <div class="bd-amt">${baht(bg.amount)}</div>
         <div class="bd-sl"><div><span class="muted">ใช้ไป</span><b>${baht(spent)}</b></div>
           <div style="text-align:right"><span class="muted">${left < 0 ? 'เกินงบ' : 'เหลือ'}</span><b class="${left < 0 ? 'exp' : ''}">${baht(Math.abs(left))}</b></div></div>
-        ${budgetBar(spent, bg.amount, ym)}
-        <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + BE}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
+        ${budgetBar(spent, bg.amount, ym, budgetMonthly(bg) ? null : win)}
+        <div class="bd-meta"><span>⏳</span><div>${thShortDate(start)} – ${thShortDate(end)} ${end.getFullYear() + BE}<div class="muted small">${now ? `เหลืออีก ${daysLeft} วัน` : future ? 'ยังไม่เริ่ม' : 'สิ้นสุดแล้ว'}</div></div></div>
         <div class="bd-meta"><span${wImg(w) ? ' class="has-img"' : ''}>${bg.scope === 'shared' ? '🤝' : w ? wFace(w) : '🌐'}</span><div>${bg.scope === 'shared' ? `งบร่วมกับ ${esc(partnerName())}` : w ? esc(w.name) : 'ทุกกระเป๋าเงิน'}</div></div>
+        ${bg.merchant ? `<div class="bd-meta"><span>🏪</span><div>นับเฉพาะร้าน “${esc(bg.merchant)}”</div></div>` : ''}
       </div>
     </div>
     <div class="card chart-card">
       ${chart}
       <div class="legend"><span><i class="dot bud"></i>ใช้จริงสะสม</span><span><i class="dot exp"></i>งบ ${kbaht(bg.amount)}</span>${proj.length ? '<span><i class="dot avg"></i>คาดการณ์</span>' : ''}</div>
       <div class="kv"><span>ควรใช้ต่อวัน</span><b>${baht(Math.round(recommend * 100) / 100)}</b></div>
-      <div class="kv"><span>คาดว่าจะใช้ทั้งเดือน</span><b class="${projected > bg.amount ? 'exp' : ''}">${baht(Math.round(projected * 100) / 100)}</b></div>
+      <div class="kv"><span>คาดว่าจะใช้ทั้ง${budgetMonthly(bg) ? 'เดือน' : bg.period === 'week' ? 'สัปดาห์' : 'ช่วง'}</span><b class="${projected > bg.amount ? 'exp' : ''}">${baht(Math.round(projected * 100) / 100)}</b></div>
       <div class="kv"><span>ใช้จริงเฉลี่ยต่อวัน</span><b>${baht(Math.round(actualDaily * 100) / 100)}</b></div>
     </div>
     ${list.length ? `<div class="section-title">รายการในงบนี้ (${list.length})</div>${dayGroups(list, S)}` : ''}
@@ -1354,7 +1406,8 @@ function budgetDetail(id) {
 
 function budgetForm(bg, preset = {}) {
   const isNew = !bg;
-  const d = bg ? { ...bg } : { category: 'food', amount: '', walletId: ui.wallet === 'total' ? 'total' : ui.wallet, scope: 'personal', ...preset };
+  const d = bg ? { ...bg } : { category: 'food', amount: '', walletId: ui.wallet === 'total' ? 'total' : ui.wallet, scope: 'personal', period: 'month', ...preset };
+  d.period = d.period || 'month';
   const canShare = isCloud() && !!cloud.partner;
   const chips = [['all', ALL_CAT], ...catsOf('expense')].map(([k, c]) =>
     `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-bcat="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
@@ -1373,7 +1426,14 @@ function budgetForm(bg, preset = {}) {
         <option value="total">ทุกกระเป๋าเงิน</option>
         ${money.wallets.map((w) => `<option value="${w.id}" ${d.walletId === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
       </select></div>
-      <div class="kv"><span>รอบงบประมาณ</span><span>ทุกเดือน</span></div>
+      <div class="field"><label for="bName">ชื่องบ</label><input id="bName" maxlength="60" placeholder="ไม่ใส่ก็ได้ เช่น ซูชิโร่" value="${esc(d.name || '')}"></div>
+      <div class="field"><label for="bShop">เฉพาะร้าน</label><input id="bShop" maxlength="60" placeholder="ทุกร้าน" value="${esc(d.merchant || '')}"></div>
+    </div>
+    <div class="section-title">รอบงบประมาณ</div>
+    <div class="seg" id="bPeriod"><button type="button" data-bper="month">ทุกเดือน</button><button type="button" data-bper="week">ทุกสัปดาห์</button><button type="button" data-bper="custom">กำหนดเอง</button></div>
+    <div class="form" id="bRange">
+      <div class="field"><label for="bFrom">ตั้งแต่</label><input type="date" id="bFrom" value="${esc(d.startDate || dateStr(new Date()))}"></div>
+      <div class="field"><label for="bTo">ถึง</label><input type="date" id="bTo" value="${esc(d.endDate || '')}"></div>
     </div>
     ${isNew ? '' : '<button class="btn danger" id="delBudget">ลบงบประมาณ</button>'}
   `);
@@ -1382,6 +1442,15 @@ function budgetForm(bg, preset = {}) {
     $('#bWalletRow').hidden = d.scope === 'shared';
   };
   renderScope();
+  const renderPeriod = () => {
+    document.querySelectorAll('#bPeriod button').forEach((x) => x.classList.toggle('on', x.dataset.bper === d.period));
+    $('#bRange').hidden = d.period !== 'custom';
+  };
+  renderPeriod();
+  $('#bPeriod').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bper]');
+    if (b) { d.period = b.dataset.bper; renderPeriod(); }
+  });
   if (canShare) $('#bScope').addEventListener('click', (e) => {
     const b = e.target.closest('[data-bscope]');
     if (b) { d.scope = b.dataset.bscope; renderScope(); }
@@ -1396,9 +1465,17 @@ function budgetForm(bg, preset = {}) {
     const amount = num($('#bAmount').value);
     if (!(amount > 0)) { toast('กรุณาใส่จำนวนเงิน'); $('#bAmount').focus(); return; }
     const scope = d.scope === 'shared' ? 'shared' : 'personal';
-    const out = { id: d.id || newId(), scope, category: d.category, amount, walletId: scope === 'shared' ? 'total' : $('#bWallet').value };
-    const dup = money.budgets.find((x) => x.id !== out.id && (x.scope || 'personal') === scope && x.category === out.category && (x.walletId || 'total') === out.walletId);
-    if (dup) { toast('มีงบของหมวดนี้อยู่แล้ว'); return; }
+    const out = { id: d.id || newId(), scope, category: d.category, amount, walletId: scope === 'shared' ? 'total' : $('#bWallet').value,
+      name: $('#bName').value.trim() || undefined, merchant: $('#bShop').value.trim() || undefined, period: d.period };
+    if (d.period === 'custom') {
+      out.startDate = $('#bFrom').value; out.endDate = $('#bTo').value;
+      if (!out.startDate || !out.endDate || out.endDate < out.startDate) { toast('กรุณาเลือกวันเริ่มและวันสิ้นสุด'); return; }
+    }
+    // Same category, wallet, period, name and shop = the same budget.
+    const key = (x) => [x.scope || 'personal', x.category, x.walletId || 'total', x.period || 'month', x.startDate || '', x.endDate || '',
+      (x.name || '').toLowerCase(), (x.merchant || '').toLowerCase()].join('|');
+    const dup = money.budgets.find((x) => x.id !== out.id && key(x) === key(out));
+    if (dup) { toast('มีงบนี้อยู่แล้ว ตั้งชื่องบให้ต่างกันได้'); return; }
     saveBudget(out); closeSheet(); render(); if (isNew) popIn();
     toast(isNew ? 'สร้างงบประมาณแล้ว' : 'บันทึกแล้ว');
   });

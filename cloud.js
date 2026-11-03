@@ -140,7 +140,8 @@ function applyBootstrap(b) {
   money = {
     wallets: b.wallets.length ? b.wallets : [{ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0 }],
     txns,
-    budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId })),
+    budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId,
+      name: x.name || undefined, period: x.period || 'month', startDate: x.startDate || undefined, endDate: x.endDate || undefined, merchant: x.merchant || undefined })),
     labels: (b.labels || []).map((l) => ({ id: l.id, name: l.name })),
     prefs,
   };

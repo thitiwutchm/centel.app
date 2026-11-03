@@ -634,7 +634,7 @@ async function buildPrompt(job, asker) {
   const t = thaiToday();
   const ym = t.date.slice(0, 7);
   const notes = (await pool.query(
-    `select text, date, time, done from notes where not done and (owner_id = $1 or (couple_id is not null and couple_id = $2))
+    `select text, date, time, done from notes where kind = 'todo' and not done and (owner_id = $1 or (couple_id is not null and couple_id = $2))
      order by date nulls last, time nulls first limit 25`, [asker.id, asker.coupleId])).rows;
   const spend = (await pool.query(
     `select scope, coalesce(category, 'รอตรวจสอบ') as category, sum(amount) as total, count(*)::int as n from expenses
@@ -642,7 +642,7 @@ async function buildPrompt(job, asker) {
        and ((scope = 'personal' and owner_id = $1) or (scope = 'shared' and couple_id = $2))
      group by scope, category order by total desc`, [asker.id, asker.coupleId, ym])).rows;
   const budgets = (await pool.query(
-    `select scope, category, amount from budgets where (scope = 'personal' and owner_id = $1) or (scope = 'shared' and couple_id = $2)`,
+    `select scope, category, amount from budgets where period = 'month' and ((scope = 'personal' and owner_id = $1) or (scope = 'shared' and couple_id = $2))`,
     [asker.id, asker.coupleId])).rows;
   const recent = (await pool.query(
     `select date, coalesce(merchant, note, '') as what, amount, category, scope from expenses
