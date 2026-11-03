@@ -527,6 +527,11 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .rtabs button b { font-size: 19px; }
 .rtabs button.on.exp { border-bottom-color: var(--bad); }
 .rtabs button.on.inc { border-bottom-color: var(--accent); }
+.rcat-row { display: flex; align-items: center; gap: 6px; margin: -2px 0 10px; }
+.rcat-row .chip.rcat { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13.5px; max-width: calc(100% - 40px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rcat-row .chip.rcat .svg-i { width: 15px; height: 15px; }
+.rcat-row .rcat-x { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--bg); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.cp-all { margin: 0 0 8px; }
 .tip { background: var(--bg); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; font-size: 14px; }
 
 .chart { width: 100%; height: auto; display: block; overflow: visible; }

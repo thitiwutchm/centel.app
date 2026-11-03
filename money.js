@@ -564,6 +564,7 @@ const ICONS = {
   eyeOff: '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
   chev: '<path d="M9 6l6 6-6 6"/>',
   updown: '<path d="M8 9l4-4 4 4M8 15l4 4 4-4"/>',
+  filter: '<path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
@@ -833,7 +834,10 @@ function renderHome() {
 function homeReport(ym, S) {
   const type = ui.reportType;
   const { income, expense } = totalsIn(txnsInMonth(ym), S);
-  const f = (t) => inSel(t, S);
+  // Optional category filter, one per tab; a parent includes its sub-categories.
+  const rc = (ui.reportCat || {})[type];
+  const fc = rc ? catById(rc) : null;
+  const f = (t) => inSel(t, S) && (!fc || catIn(t.category, fc.id));
   const dim = daysInMonth(ym);
   const day = new Date().getDate();
   const cur = cumDaily(ym, type, f).slice(0, day);
@@ -859,6 +863,9 @@ function homeReport(ym, S) {
       <button class="${type === 'expense' ? 'on exp' : ''}" data-rtype="expense"><span>ใช้จ่ายทั้งหมด</span><b class="exp">${kbaht(expense)}</b></button>
       <button class="${type === 'income' ? 'on inc' : ''}" data-rtype="income"><span>รายรับทั้งหมด</span><b class="inc">${kbaht(income)}</b></button>
     </div>
+    <div class="rcat-row">${fc
+      ? `<button class="chip on rcat" data-rcat-pick>${fc.icon} ${esc(fc.parent ? `${catById(fc.parent).label} › ${fc.label}` : fc.label)}</button><button class="rcat-x" data-rcat-clear aria-label="ทุกหมวดหมู่"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>`
+      : `<button class="chip rcat" data-rcat-pick>${svgIcon('filter')}<span>ทุกหมวดหมู่</span></button>`}</div>
     <div class="tip"><span class="muted">${day}/${m}/${parseYm(ym).y + BE}:</span> <b class="${cls}">${kbaht(now)}</b>
       ${avg.length ? `<div class="muted small">เฉลี่ย ${prev.length} เดือนก่อน ณ วันเดียวกัน: <b>${kbaht(avg[day - 1])}</b></div>` : ''}</div>
     ${chart}
@@ -1370,7 +1377,9 @@ function budgetForm(bg, preset = {}) {
 
 // Category picker layered over the open sheet: the top-level grid, and a parent with
 // sub-categories shows its subs underneath. Picking one calls onPick(id) and closes.
-function catPicker(type, current, onPick) {
+// With opts.filter it picks a filter instead: a parent's first sub chip is ทั้งหมด (parent + subs),
+// and ทุกหมวดหมู่ clears it (onPick('')).
+function catPicker(type, current, onPick, opts = {}) {
   const old = $('#catLayer');
   if (old) old.remove();
   const layer = document.createElement('div');
@@ -1378,6 +1387,7 @@ function catPicker(type, current, onPick) {
   layer.innerHTML = `<div class="sheet-backdrop cat-layer-bg"></div><section class="sheet cat-layer" role="dialog" aria-modal="true">
     <div class="grabber"></div>
     <div class="sheet-head"><button class="close-x" data-cpclose aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button><h2>หมวดหมู่</h2><span class="sheet-head-pad"></span></div>
+    ${opts.filter ? `<div class="chips cp-all"><button type="button" class="chip ${current ? '' : 'on'}" data-cpsub="">ทุกหมวดหมู่</button></div>` : ''}
     <div class="cat-grid" id="cpGrid"></div><div class="chips sub-cats" id="cpSubs" hidden></div></section>`;
   document.body.appendChild(layer);
   let root = current ? catRootId(current, type) : '';
@@ -1388,7 +1398,7 @@ function catPicker(type, current, onPick) {
     const kids = root ? catChildren(root) : [];
     $('#cpSubs').hidden = !kids.length;
     $('#cpSubs').innerHTML = kids.length ? [catById(root), ...kids].map((c, i) =>
-      `<button type="button" class="chip sub-pick ${current === c.id ? 'on' : ''}" data-cpsub="${c.id}">${c.icon} ${i ? esc(c.label) : 'ทั่วไป'}</button>`).join('') : '';
+      `<button type="button" class="chip sub-pick ${current === c.id ? 'on' : ''}" data-cpsub="${c.id}">${c.icon} ${i ? esc(c.label) : (opts.filter ? 'ทั้งหมด' : 'ทั่วไป')}</button>`).join('') : '';
   };
   paint();
   layer.addEventListener('click', (e) => {
@@ -2309,6 +2319,13 @@ function moneyClick(t) {
   if (bo) { ui.budgetOff = Number(bo.dataset.boff); render(); return true; }
   const rt = t.closest('[data-rtype]');
   if (rt) { ui.reportType = rt.dataset.rtype; $('#homeReport').innerHTML = homeReport(ymOf(new Date()), walletSet('total')); return true; }
+  const repaintReport = () => { if ($('#homeReport')) $('#homeReport').innerHTML = homeReport(ymOf(new Date()), walletSet('total')); };
+  if (t.closest('[data-rcat-clear]')) { ui.reportCat = { ...ui.reportCat, [ui.reportType]: '' }; repaintReport(); return true; }
+  if (t.closest('[data-rcat-pick]')) {
+    const type = ui.reportType;
+    catPicker(type, (ui.reportCat || {})[type] || '', (id) => { ui.reportCat = { ...ui.reportCat, [type]: id }; repaintReport(); }, { filter: true });
+    return true;
+  }
   const go = t.closest('[data-goto]');
   if (go) { closeSheet(); setTab(go.dataset.goto); return true; }
   return false;
