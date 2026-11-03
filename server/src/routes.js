@@ -18,6 +18,19 @@ const isUuid = (s) => typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const str = (v, max = 200) => (v == null || v === '' ? null : String(v).slice(0, max));
 const money = (v) => Math.round(Number(v) * 100) / 100;
+// A budget's period (month / week / custom range), name and shop filter, from the app.
+// Undefined = not sent (an older app), so the stored value stays.
+const budgetExtras = (b) => {
+  if (b.period === undefined && b.name === undefined && b.merchant === undefined) return null;
+  const period = ['week', 'custom'].includes(b.period) ? b.period : 'month';
+  const custom = period === 'custom' && isDate(b.startDate) && isDate(b.endDate) && b.endDate >= b.startDate;
+  return {
+    period: period === 'custom' && !custom ? 'month' : period,
+    startDate: custom ? b.startDate : null, endDate: custom ? b.endDate : null,
+    name: str(typeof b.name === 'string' ? b.name.trim() : null, 60), merchant: str(typeof b.merchant === 'string' ? b.merchant.trim() : null, 60),
+  };
+};
+const NOTE_TAGS = (v) => (Array.isArray(v) ? [...new Set(v.map((t) => String(t).trim().slice(0, 30)).filter(Boolean))].slice(0, 10) : undefined);
 // A wallet picture is a short emoji or a small base64 image (about 160px, resized in the browser).
 const IMG_ICON = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
 const walletIcon = (v) => {
@@ -207,6 +220,8 @@ router.get('/bootstrap', wrap(async (req, res) => {
       })),
       budgets: budgets.map((b) => ({
         id: b.id, ownerId: b.owner_id, scope: b.scope, category: b.category, amount: b.amount, walletId: b.wallet_id,
+        name: b.name || undefined, period: b.period || 'month', startDate: b.start_date || undefined, endDate: b.end_date || undefined,
+        merchant: b.merchant || undefined,
       })),
       prefs: prefs ? prefs.data : {},
       planner: planner ? { data: planner.data, rev: planner.rev } : { data: null, rev: 0 },
@@ -465,6 +480,8 @@ export const noteOut = (n) => ({
   id: n.id, ownerId: n.owner_id, shared: !!n.couple_id, text: n.text, date: n.date || '',
   time: n.time ? n.time.slice(0, 5) : '', endDate: n.end_date || '', endTime: n.end_time ? n.end_time.slice(0, 5) : '', remind: n.remind, remindAt: n.remind_at, notifiedAt: n.notified_at || undefined,
   done: n.done, doneAt: n.done_at || undefined, doneBy: n.done_by || undefined, createdAt: n.created_at,
+  kind: n.kind || 'todo', body: n.body || '', tags: n.tags || [], priority: n.priority || '', inProgress: !!n.in_progress,
+  recurrence: n.recurrence || '', updatedAt: n.updated_at,
 });
 
 // Creates or changes one note. Only the creator can share or unshare it; the partner
@@ -475,16 +492,27 @@ router.put('/notes/:id', wrap(async (req, res) => {
   if (!isUuid(req.params.id)) throw bad('bad_id');
   const text = str(String(b.text || '').trim(), 500);
   if (!text) throw bad('bad_text');
-  const date = isDate(b.date) ? b.date : null;
+  // Memos (kind 'memo', 2026-11-03) are a title and content: no date, reminder or ticking.
+  const memo = b.kind === 'memo';
+  const date = !memo && isDate(b.date) ? b.date : null;
   const time = date && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.time || '') ? b.time : null;
   // Ends: a later day and/or, on a timed note, a later time. Anything not after the start is dropped.
   const endDate = date && isDate(b.endDate) && b.endDate > date ? b.endDate : null;
   const endTime = time && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.endTime || '') && (endDate || b.endTime > time) ? b.endTime : null;
   const remind = date && REMINDS.has(b.remind) ? b.remind : null;
   const at = remind != null && b.remindAt && !Number.isNaN(Date.parse(b.remindAt)) ? new Date(b.remindAt) : null;
+  // Description, tags, priority, in progress and repeat: only from apps that send them (kind is
+  // sent with them), so an older app saving a note keeps what an AI or a newer app set.
+  const extras = b.kind !== undefined;
+  const body = typeof b.body === 'string' && b.body.trim() ? b.body.trim().slice(0, 20000) : null;
+  const tags = NOTE_TAGS(b.tags) || [];
+  const priority = ['low', 'medium', 'high'].includes(b.priority) ? b.priority : null;
+  const recurrence = date && ['daily', 'weekly', 'monthly', 'yearly'].includes(b.recurrence) ? b.recurrence : null;
   const note = await asUser(uid(req), (db) => db.query(
-    `insert into notes (id, couple_id, text, date, time, remind, remind_at, done, done_at, done_by, end_date, end_time)
-       values ($1, case when $2 then my_couple() end, $3, $4, $5, $6, $7, $8, case when $8 then now() end, case when $8 then app_uid() end, $9, $10)
+    `insert into notes (id, couple_id, text, date, time, remind, remind_at, done, done_at, done_by, end_date, end_time,
+       kind, body, tags, priority, in_progress, recurrence)
+       values ($1, case when $2 then my_couple() end, $3, $4, $5, $6, $7, $8, case when $8 then now() end, case when $8 then app_uid() end, $9, $10,
+         $12, $13, $14, $15, $16, $17)
      on conflict (id) do update set
        couple_id = case when notes.owner_id = app_uid() then excluded.couple_id else notes.couple_id end,
        text = excluded.text, date = excluded.date, time = excluded.time, end_date = excluded.end_date, end_time = excluded.end_time, remind = excluded.remind, remind_at = excluded.remind_at,
@@ -492,9 +520,15 @@ router.put('/notes/:id', wrap(async (req, res) => {
        done = excluded.done,
        done_at = case when excluded.done and not notes.done then now() when excluded.done then notes.done_at end,
        done_by = case when excluded.done and not notes.done then app_uid() when excluded.done then notes.done_by end,
+       body = case when $11 then excluded.body else notes.body end,
+       tags = case when $11 then excluded.tags else notes.tags end,
+       priority = case when $11 then excluded.priority else notes.priority end,
+       in_progress = case when $11 then excluded.in_progress else notes.in_progress end,
+       recurrence = case when $11 then excluded.recurrence else notes.recurrence end,
        updated_at = now()
      returning *`,
-    [req.params.id, !!b.shared, text, date, time, remind, at, !!b.done, endDate, endTime]));
+    [req.params.id, !!b.shared, text, date, time, remind, at, !memo && !!b.done, endDate, endTime,
+      extras, memo ? 'memo' : 'todo', body, tags, priority, !memo && !b.done && !!b.inProgress, recurrence]));
   res.json({ note: noteOut(note.rows[0]) });
 }));
 
@@ -615,15 +649,21 @@ router.put('/budgets/:id', wrap(async (req, res) => {
   const scope = b.scope === 'shared' ? 'shared' : 'personal';
   const amount = money(b.amount);
   if (!(amount > 0)) throw bad('bad_amount');
+  const x = budgetExtras(b);
   await asUser(uid(req), async (db) => {
     const r = await db.query(
-      `update budgets set scope = $2, couple_id = case when $2 = 'shared' then my_couple() end, category = $3, amount = $4, wallet_id = $5
-       where id = $1`, [req.params.id, scope, str(b.category, 40) || 'all', amount, str(b.walletId, 60) || 'total']);
+      `update budgets set scope = $2, couple_id = case when $2 = 'shared' then my_couple() end, category = $3, amount = $4, wallet_id = $5,
+         period = case when $6 then $7 else period end, start_date = case when $6 then $8::date else start_date end,
+         end_date = case when $6 then $9::date else end_date end, name = case when $6 then $10 else name end,
+         merchant = case when $6 then $11 else merchant end
+       where id = $1`, [req.params.id, scope, str(b.category, 40) || 'all', amount, str(b.walletId, 60) || 'total',
+        !!x, x ? x.period : 'month', x ? x.startDate : null, x ? x.endDate : null, x ? x.name : null, x ? x.merchant : null]);
     if (!r.rowCount) {
       await db.query(
-        `insert into budgets (id, owner_id, scope, couple_id, category, amount, wallet_id)
-         values ($1, app_uid(), $2, case when $2 = 'shared' then my_couple() end, $3, $4, $5)`,
-        [req.params.id, scope, str(b.category, 40) || 'all', amount, str(b.walletId, 60) || 'total']);
+        `insert into budgets (id, owner_id, scope, couple_id, category, amount, wallet_id, period, start_date, end_date, name, merchant)
+         values ($1, app_uid(), $2, case when $2 = 'shared' then my_couple() end, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [req.params.id, scope, str(b.category, 40) || 'all', amount, str(b.walletId, 60) || 'total',
+          x ? x.period : 'month', x ? x.startDate : null, x ? x.endDate : null, x ? x.name : null, x ? x.merchant : null]);
     }
   });
   res.json({ ok: true });
@@ -779,9 +819,11 @@ router.post('/import', wrap(async (req, res) => {
     for (const b of budgets) {
       const amount = money(b.amount);
       if (!(amount > 0)) continue;
+      const x = budgetExtras(b) || { period: 'month' };
       await db.query(
-        `insert into budgets (owner_id, scope, category, amount, wallet_id) values (app_uid(), 'personal', $1, $2, $3)`,
-        [str(b.category, 40) || 'all', amount, str(b.walletId, 60) || 'total']);
+        `insert into budgets (owner_id, scope, category, amount, wallet_id, period, start_date, end_date, name, merchant)
+         values (app_uid(), 'personal', $1, $2, $3, $4, $5, $6, $7, $8)`,
+        [str(b.category, 40) || 'all', amount, str(b.walletId, 60) || 'total', x.period, x.startDate || null, x.endDate || null, x.name || null, x.merchant || null]);
     }
     return count;
   });

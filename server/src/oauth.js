@@ -23,7 +23,10 @@ export const MCP_PATH = '/mcp';
 const ACCESS_SEC = 3600;
 const REFRESH_DAYS = 60;
 const CODE_SEC = 600;
-const SCOPE = 'centel.read';
+// Read everything the app shows; manage notes and to-dos (with reminders); manage budgets
+// and income / expense records (with confirmation for deletes and money changes).
+export const SCOPES = ['centel.read', 'centel.notes', 'centel.money'];
+const SCOPE = SCOPES.join(' ');
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const rand = (n = 32) => crypto.randomBytes(n).toString('base64url');
@@ -49,7 +52,7 @@ function resourceMeta() {
   return {
     resource: BASE() + MCP_PATH,
     authorization_servers: [BASE()],
-    scopes_supported: [SCOPE],
+    scopes_supported: SCOPES,
     bearer_methods_supported: ['header'],
     resource_name: 'Centel',
     resource_documentation: BASE() + '/',
@@ -63,7 +66,7 @@ function serverMeta() {
     token_endpoint: `${b}/api/oauth/token`,
     registration_endpoint: `${b}/api/oauth/register`,
     revocation_endpoint: `${b}/api/oauth/revoke`,
-    scopes_supported: [SCOPE],
+    scopes_supported: SCOPES,
     response_types_supported: ['code'],
     response_modes_supported: ['query'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
@@ -217,13 +220,16 @@ oauthRouter.get('/authorize', loadUser, wrap(async (req, res) => {
   const hidden = { client_id: c.client.id, redirect_uri: c.redirectUri, state: c.state, code_challenge: c.challenge,
     code_challenge_method: 'S256', response_type: 'code', csrf: consentToken(req) };
   page(res, `อนุญาต ${c.client.name}`, `
-<h1>อนุญาตให้ ${esc(c.client.name)} อ่านข้อมูล?</h1>
+<h1>อนุญาตให้ ${esc(c.client.name)} ใช้ Centel?</h1>
 <p class="who">${esc(req.user.display_name)} · ${esc(req.user.email)}</p>
 <ul>
 <li>อ่านรายรับรายจ่าย หมวดหมู่ ป้าย และกระเป๋าเงิน</li>
 <li>อ่านงบประมาณ บิลที่ต้องจ่าย และสิ่งที่ต้องทำ</li>
 <li>เห็นรายการร่วมกับคู่ของคุณ เหมือนที่คุณเห็นในแอป</li>
-<li><b>อ่านอย่างเดียว</b> แก้ ลบ หรือเพิ่มอะไรไม่ได้</li>
+<li><b>จดโน้ต เพิ่มและแก้ไขสิ่งที่ต้องทำ</b> พร้อมตั้งเตือนความจำได้</li>
+<li><b>สร้างและแก้ไขงบประมาณ บันทึกและแก้ไขรายรับรายจ่าย</b></li>
+<li>การลบ และการเปลี่ยนยอดเงิน AI ต้องถามคุณก่อนทุกครั้ง · ดูและย้อนกลับสิ่งที่ AI เปลี่ยนได้ในแอป</li>
+<li>โอนเงินจริง แก้กระเป๋าเงิน หรือแก้บิล <b>ไม่ได้</b></li>
 </ul>
 <form method="post" action="/api/oauth/authorize">
 ${Object.entries(hidden).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join('')}
@@ -244,9 +250,10 @@ oauthRouter.post('/authorize', loadUser, wrap(async (req, res) => {
     return redirectWith(res, c.redirectUri, { error: 'access_denied', state: c.state, iss: BASE() });
   }
   // Connecting the same app again keeps one entry in the Account list.
+  // Approving again also brings an older grant up to today's consent page (its scope).
   const grant = (await pool.query(
-    'select id from oauth_grants where user_id = $1 and client_id = $2 and revoked_at is null', [req.user.id, c.client.id])).rows[0]
-    || (await pool.query('insert into oauth_grants (user_id, client_id) values ($1, $2) returning id', [req.user.id, c.client.id])).rows[0];
+    'update oauth_grants set scope = $3 where user_id = $1 and client_id = $2 and revoked_at is null returning id', [req.user.id, c.client.id, SCOPE])).rows[0]
+    || (await pool.query('insert into oauth_grants (user_id, client_id, scope) values ($1, $2, $3) returning id', [req.user.id, c.client.id, SCOPE])).rows[0];
   const code = rand(32);
   await pool.query(
     'insert into oauth_codes (code_hash, grant_id, redirect_uri, code_challenge, expires_at) values ($1, $2, $3, $4, $5)',
@@ -275,11 +282,12 @@ async function tokenClient(req) {
 }
 
 async function issue(grantId) {
+  const scope = (await pool.query('select scope from oauth_grants where id = $1', [grantId])).rows[0]?.scope || 'centel.read';
   const access = rand(32), refresh = rand(32);
   await pool.query(
     `insert into oauth_tokens (token_hash, grant_id, kind, expires_at) values ($1, $3, 'access', $4), ($2, $3, 'refresh', $5)`,
     [sha(access), sha(refresh), grantId, new Date(Date.now() + ACCESS_SEC * 1000), new Date(Date.now() + REFRESH_DAYS * 86400000)]);
-  return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_SEC, refresh_token: refresh, scope: SCOPE };
+  return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_SEC, refresh_token: refresh, scope };
 }
 
 oauthRouter.post('/token', rateLimit(120, 15 * 60000), wrap(async (req, res) => {
@@ -326,12 +334,13 @@ oauthRouter.post('/revoke', wrap(async (req, res) => {
 
 /* ---------- Bearer check for /mcp ---------- */
 
-// Sets req.mcpUser = { id, grantId } or answers 401 with where to find the auth server.
+// Sets req.mcpUser = { id, grantId, scopes } or answers 401 with where to find the auth server.
 export async function bearer(req, res, next) {
   try {
     const m = /^Bearer\s+([A-Za-z0-9_-]{20,200})$/i.exec(req.get('authorization') || '');
     const row = m && (await pool.query(
-      `select g.id as grant_id, g.user_id, g.last_used_at from oauth_tokens t join oauth_grants g on g.id = t.grant_id
+      `select g.id as grant_id, g.user_id, g.last_used_at, g.scope, c.name as client from oauth_tokens t
+       join oauth_grants g on g.id = t.grant_id join oauth_clients c on c.id = g.client_id
        where t.token_hash = $1 and t.kind = 'access' and t.expires_at > now() and g.revoked_at is null`, [sha(m[1])])).rows[0];
     if (!row) {
       res.set('WWW-Authenticate',
@@ -341,7 +350,7 @@ export async function bearer(req, res, next) {
     if (!row.last_used_at || Date.now() - new Date(row.last_used_at) > 5 * 60000) {
       pool.query('update oauth_grants set last_used_at = now() where id = $1', [row.grant_id]).catch(() => {});
     }
-    req.mcpUser = { id: row.user_id, grantId: row.grant_id };
+    req.mcpUser = { id: row.user_id, grantId: row.grant_id, client: row.client, scopes: new Set(String(row.scope || '').split(' ')) };
     next();
   } catch (e) {
     next(e);

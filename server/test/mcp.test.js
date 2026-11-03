@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import pg from 'pg';
 
 const API = process.env.API_URL || 'http://localhost:3999';
 const run = crypto.randomBytes(4).toString('hex');
@@ -94,7 +95,8 @@ test('mcp: sign-in page when signed out, consent page and code when signed in', 
 
   res = await fetch(`${API}/api/oauth/authorize?${q}`, { headers: { cookie: A.cookie() } });
   const html = await res.text();
-  assert.match(html, /อนุญาตให้ Claude อ่านข้อมูล/);
+  assert.match(html, /อนุญาตให้ Claude ใช้ Centel/);
+  assert.match(html, /เพิ่มและแก้ไขสิ่งที่ต้องทำ/);
   const csrf = /name="csrf" value="([^"]+)"/.exec(html)[1];
   const post = (body, cookie = A.cookie()) => fetch(`${API}/api/oauth/authorize`, {
     method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie }, body: form(body),
@@ -143,8 +145,11 @@ test('mcp: initialize, list tools, and read only this account', async () => {
 
   const list = await rpc(tokens.access_token, 'tools/list');
   const names = list.body.result.tools.map((t) => t.name);
-  for (const n of ['get_overview', 'list_transactions', 'spending_report', 'get_budgets', 'get_bills', 'get_notes', 'get_wallets', 'search', 'fetch']) assert.ok(names.includes(n), n);
-  assert.ok(list.body.result.tools.every((t) => t.annotations.readOnlyHint));
+  for (const n of ['get_overview', 'list_transactions', 'spending_report', 'list_budgets', 'get_bills', 'list_todos', 'get_wallets', 'search', 'fetch']) assert.ok(names.includes(n), n);
+  // Reading tools are marked read-only; writing ones are not (mcpwrite.test.js covers them).
+  const writes = list.body.result.tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name);
+  for (const n of ['get_overview', 'list_transactions', 'list_budgets', 'list_todos', 'search', 'fetch']) assert.ok(!writes.includes(n), n);
+  for (const n of ['create_todo', 'create_transaction', 'create_budget', 'delete_transaction']) assert.ok(writes.includes(n), n);
 
   const ov = (await call(tokens.access_token, 'get_overview')).structuredContent;
   assert.equal(ov.month, ym);
@@ -154,7 +159,7 @@ test('mcp: initialize, list tools, and read only this account', async () => {
   assert.equal(ov.budgets[0].spent, 250);
   assert.equal(ov.budgets[0].remaining, 750);
   assert.equal(ov.wallets.wallets[0].balance, 10000 + 30000 - 1450);
-  assert.equal(ov.openTodos[0].text, 'ไปเยี่ยมแม่');
+  assert.equal(ov.openTodos[0].title, 'ไปเยี่ยมแม่');
   assert.equal(typeof ov.bills, 'string'); // no copy from the phone yet
 
   const tx = (await call(tokens.access_token, 'list_transactions', { category: 'food' })).structuredContent;
@@ -185,6 +190,54 @@ test('mcp: bills copy from the app shows up in get_bills', async () => {
   assert.equal(r.unpaid, 4321);
   assert.ok(['overdue', 'due_today'].includes(r.bills[0].status)); // worked out again for today
   assert.equal(r.repeatingBills[0].dueDay, 5);
+});
+
+test('mcp: the AI adds, changes and ticks off a to-do with a reminder', async () => {
+  const tom = new Date(Date.now() + 7 * 3600000 + 86400000).toISOString().slice(0, 10);
+  const tools = (await rpc(tokens.access_token, 'tools/list')).body.result.tools;
+  assert.equal(tools.find((t) => t.name === 'create_todo').annotations.readOnlyHint, false);
+
+  const made = await call(tokens.access_token, 'create_todo', { title: 'ไปรับพัสดุ', date: tom, time: '10:00', remind_minutes_before: 60 });
+  assert.equal(made.isError, false);
+  const n = made.structuredContent.todo;
+  assert.deepEqual([n.title, n.date, n.time, n.remindMinutesBefore, n.shared], ['ไปรับพัสดุ', tom, '10:00', 60, false]);
+  // 10:00 Bangkok minus an hour = 02:00 UTC.
+  assert.equal(new Date(made.structuredContent.todo.reminderAt).toISOString(), `${tom}T02:00:00.000Z`);
+
+  // The app sees it like any other note.
+  const boot = await A('GET', '/bootstrap');
+  const inApp = boot.notes.find((x) => x.id === n.id);
+  assert.equal(inApp.remind, 60);
+
+  const moved = (await call(tokens.access_token, 'update_todo', { id: n.id, time: '15:30' })).structuredContent;
+  assert.equal(moved.todo.time, '15:30');
+  assert.equal(new Date(moved.todo.reminderAt).toISOString(), `${tom}T07:30:00.000Z`);
+  const done = (await call(tokens.access_token, 'complete_todo', { id: n.id })).structuredContent;
+  assert.equal(done.todo.status, 'completed');
+
+  // Bad input is explained, not saved.
+  assert.equal((await call(tokens.access_token, 'create_todo', { title: 'x', remind_minutes_before: 60 })).isError, true);
+  assert.equal((await call(tokens.access_token, 'create_todo', { title: 'x', date: '2020-01-01', remind_minutes_before: 0 })).isError, true);
+  assert.equal((await call(tokens.access_token, 'create_todo', { title: 'x', date: tom, time: '25:00' })).isError, true);
+  // Another account's note cannot be touched.
+  const theirs = crypto.randomUUID();
+  await B('PUT', `/notes/${theirs}`, { text: 'B private', date: tom });
+  assert.equal((await call(tokens.access_token, 'complete_todo', { id: theirs })).isError, true);
+  const bNote = (await B('GET', '/bootstrap')).notes.find((x) => x.id === theirs);
+  assert.equal(bNote.done, false);
+});
+
+test('mcp: a connection approved before notes could be written stays read-only', { skip: !process.env.DATABASE_URL }, async () => {
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  const sha = crypto.createHash('sha256').update(tokens.access_token).digest('hex');
+  await db.query("update oauth_grants set scope = 'centel.read' where id = (select grant_id from oauth_tokens where token_hash = $1)", [sha]);
+  const r = await call(tokens.access_token, 'create_todo', { title: 'nope' });
+  assert.equal(r.isError, true);
+  assert.match(r.content[0].text, /reconnect/);
+  assert.equal((await call(tokens.access_token, 'list_todos')).isError, false);
+  await db.query("update oauth_grants set scope = 'centel.read centel.notes' where id = (select grant_id from oauth_tokens where token_hash = $1)", [sha]);
+  await db.end();
 });
 
 test('mcp: refresh rotates, and removing the app cuts it off', async () => {

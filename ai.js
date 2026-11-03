@@ -111,7 +111,7 @@ function aiSettings() {
     <div class="section-title">เชื่อมกับ AI</div>
     <button class="btn${n ? ' ghost' : ''}" id="aiOpen">✨ ${n ? `เชื่อมกับ AI อยู่ ${n} แอป` : 'ให้ Claude / ChatGPT อ่านข้อมูลสรุปให้'}</button>
     <p class="hint">${isCloud()
-      ? 'เพิ่ม Centel เป็น connector ใน Claude หรือ ChatGPT แล้วถามได้เลย เช่น "สรุปรายจ่ายเดือนนี้" "บิลไหนยังไม่จ่าย" "เดือนนี้ใช้เกินงบหมวดไหน" · AI อ่านได้อย่างเดียว แก้ไขอะไรไม่ได้'
+      ? 'เพิ่ม Centel เป็น connector ใน Claude หรือ ChatGPT แล้วถามหรือสั่งได้เลย เช่น "สรุปรายจ่ายเดือนนี้" "กินข้าวไป 350 บันทึกให้หน่อย" "ตั้งงบอาหาร 20,000 ต่อเดือน" หรือ "เตือนพรุ่งนี้ 10 โมงไปรับพัสดุ" · การลบและการเปลี่ยนยอดเงิน AI ต้องถามคุณก่อน และโอนเงินจริงไม่ได้'
       : 'ต้องเข้าสู่ระบบก่อน AI อ่านข้อมูลจากบัญชีออนไลน์ของคุณ'}</p>`;
 }
 
@@ -147,7 +147,9 @@ function aiSheet() {
       <div class="field"><label>${esc(a.name)}<span class="muted small" style="display:block">ใช้ล่าสุด ${esc(aiWhen(a.lastUsedAt))}</span></label>
         <span style="flex:1"></span><button class="btn ghost" style="width:auto;margin:0;padding:8px 14px" data-ai-remove="${esc(a.id)}">ยกเลิก</button></div>`).join('')}</div>`
     : '<p class="hint">ยังไม่มี เชื่อมแล้วกลับมาหน้านี้ จะเห็นชื่อแอปที่นี่</p>'}
-    <p class="hint">AI เห็นรายการรับจ่าย งบประมาณ กระเป๋าเงิน สิ่งที่ต้องทำ และรายจ่ายร่วมกับคู่ เหมือนที่คุณเห็นในแอป แต่แก้ไขอะไรไม่ได้ · บิลเก็บอยู่ในเครื่อง แอปจะส่งสำเนาบิลให้ AI อ่านเมื่อมีการเปลี่ยนแปลง${aic.info && aic.info.billsAt ? ` (ส่งล่าสุด ${esc(aiWhen(aic.info.billsAt))})` : ''} · ยกเลิกแล้วสำเนาบิลจะถูกลบ</p>
+    <div class="section-title">สิ่งที่ AI เปลี่ยนล่าสุด</div>
+    <div id="aiChanges"><p class="hint">กำลังโหลด…</p></div>
+    <p class="hint">AI เห็นรายการรับจ่าย งบประมาณ กระเป๋าเงิน โน้ต สิ่งที่ต้องทำ และรายจ่ายร่วมกับคู่ เหมือนที่คุณเห็นในแอป จดโน้ต เพิ่ม/แก้สิ่งที่ต้องทำพร้อมตั้งเตือน สร้าง/แก้งบประมาณ และบันทึก/แก้รายรับรายจ่ายได้ · การลบ การเปลี่ยนยอดเงิน และรายการตั้งแต่ 10,000 บาท AI ต้องถามคุณก่อนทุกครั้ง · AI โอนเงินจริง แก้กระเป๋าเงิน หรือแก้บิลไม่ได้ · ทุกอย่างที่ AI เปลี่ยนแสดงด้านบน กดย้อนกลับได้ · แอปที่เชื่อมก่อนวันที่ 4 พ.ย. ต้องยกเลิกแล้วเชื่อมใหม่หนึ่งครั้งจึงจะแก้งบและรายรับรายจ่ายได้ · บิลเก็บอยู่ในเครื่อง แอปจะส่งสำเนาบิลให้ AI อ่านเมื่อมีการเปลี่ยนแปลง${aic.info && aic.info.billsAt ? ` (ส่งล่าสุด ${esc(aiWhen(aic.info.billsAt))})` : ''} · ยกเลิกแล้วสำเนาบิลจะถูกลบ</p>
   `);
   $('#aiCopy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว'); } catch (e) { prompt('คัดลอกลิงก์', url); }
@@ -163,4 +165,32 @@ function aiSheet() {
     } catch (e) { toast(cloudErr(e)); }
   }));
   if (isCloud()) aiCheck(true).then(() => { if (aic.info && aic.info.apps.length !== apps.length && document.getElementById('aiCopy')) aiSheet(); });
+  aiChangesLoad();
+}
+
+const AI_ENTITY = { note: '📝', budget: '🎯', transaction: '💸' };
+
+// The latest changes made by AI apps (server mcp_audit), each with an undo button.
+async function aiChangesLoad() {
+  const box = document.getElementById('aiChanges');
+  if (!box || !isCloud()) return;
+  let list;
+  try { list = (await api('GET', '/ai/changes')).changes || []; } catch (e) { box.innerHTML = `<p class="hint">${esc(cloudErr(e))}</p>`; return; }
+  if (!document.getElementById('aiChanges')) return;
+  box.innerHTML = list.length ? `<div class="form">${list.slice(0, 20).map((c) => `
+    <div class="field" style="gap:10px"><label style="flex:1;min-width:0;overflow-wrap:anywhere">${AI_ENTITY[c.entity] || '•'} ${esc(c.summary || c.tool)}<span class="muted small" style="display:block">${esc(c.app || 'Centel')} · ${esc(aiWhen(c.at))}${c.undone ? ' · ย้อนกลับแล้ว' : ''}</span></label>
+      ${c.undone || c.undoOf ? '' : `<button class="btn ghost" style="width:auto;flex:none;white-space:nowrap;margin:0;padding:8px 14px" data-ai-undo="${c.id}">ย้อนกลับ</button>`}</div>`).join('')}</div>`
+    : '<p class="hint">ยังไม่มี เมื่อ AI จดโน้ต ตั้งงบ หรือบันทึกรายการ จะแสดงที่นี่</p>';
+  box.querySelectorAll('[data-ai-undo]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('ย้อนกลับการเปลี่ยนแปลงนี้?')) return;
+    b.disabled = true;
+    try {
+      await api('POST', `/ai/changes/${b.dataset.aiUndo}/undo`);
+      toast('ย้อนกลับแล้ว');
+      scheduleRefresh();
+    } catch (e) {
+      toast(e.status === 409 ? 'ย้อนกลับไม่ได้ เพราะรายการนี้ถูกแก้อีกครั้งหลังจากนั้น' : cloudErr(e));
+    }
+    aiChangesLoad();
+  }));
 }
