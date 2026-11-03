@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Centel Billing</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1320" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Billing">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="icon" type="image/png" href="../icons/centel-192.png">
+  <link rel="apple-touch-icon" href="../icons/centel-180.png">
+  <link rel="stylesheet" href="billing.css">
+</head>
+<body>
+  <header class="bar">
+    <button class="back" id="back" aria-label="ย้อนกลับ" hidden>‹</button>
+    <h1 id="title">Billing</h1>
+    <button class="btn small" id="barAction" hidden></button>
+  </header>
+  <main id="view"><div class="empty">กำลังโหลด…</div></main>
+  <nav class="tabs" id="tabs" hidden>
+    <a href="#home" data-tab="home"><b>📊</b>ภาพรวม</a>
+    <a href="#clients" data-tab="clients"><b>🏢</b>คู่ค้า</a>
+    <a href="#invoices" data-tab="invoices"><b>🧾</b>ใบแจ้งหนี้</a>
+    <a href="#settings" data-tab="settings"><b>⚙️</b>ตั้งค่า</a>
+  </nav>
+  <dialog class="sheet" id="sheet"></dialog>
+  <script src="billing.js"></script>
+</body>
+</html>

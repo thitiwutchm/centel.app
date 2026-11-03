@@ -6,6 +6,7 @@ import { analyzeReceipt, aiEnabled, RECEIPT_MODEL } from './receipts.js';
 import { putReceipt, receiptUrl, getObject, deleteObject, storageEnabled } from './storage.js';
 import { verifyGoogleIdToken, googleClientId } from './google.js';
 import { lineEnabled, linePush } from './line.js';
+import { isBillingAdmin } from './billing.js';
 import { pushKeys, pushTo, saveSub, dropSub, subCount, saveAlerts } from './push.js';
 
 const router = express.Router();
@@ -155,6 +156,7 @@ async function writeLabels(db, id, ids) {
 router.get('/bootstrap', wrap(async (req, res) => {
   // Only the owner sees their own Google photo offer; app_user cannot read the column.
   const googlePic = (await pool.query('select google_picture from users where id = $1', [uid(req)])).rows[0]?.google_picture;
+  const billing = await isBillingAdmin(req.user);
   const out = await asUser(uid(req), async (db) => {
     const me = (await db.query('select id, email, display_name, nickname, avatar from users where id = app_uid()')).rows[0];
     const partner = (await db.query('select id, email, display_name, nickname, avatar from users where id = my_partner()')).rows[0] || null;
@@ -205,7 +207,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
       notes: notes.map(noteOut),
       line: line ? { groupId: line.group_id, active: line.active } : null,
       linePeople: linePeople.map((x) => ({ userId: x.line_user_id, name: x.name, who: x.who })),
-      features: { line: lineEnabled, push: true, ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
+      features: { billing, line: lineEnabled, push: true, ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
     };
   });
   res.json(out);
