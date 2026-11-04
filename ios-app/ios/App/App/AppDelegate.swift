@@ -51,12 +51,3 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
     }
 }
-
-// Main.storyboard uses this instead of CAPBridgeViewController so the web view
-// scrolls without the iOS scroll indicator bar on the right.
-class CentelViewController: CAPBridgeViewController {
-    override func capacitorDidLoad() {
-        webView?.scrollView.showsVerticalScrollIndicator = false
-        webView?.scrollView.showsHorizontalScrollIndicator = false
-    }
-}

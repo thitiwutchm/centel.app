@@ -85,6 +85,8 @@ body {
 }
 
 body.with-topbar { padding-top: calc(var(--safe-top) + 56px); }
+/* iOS app: nativetabs.js hands the tabs to the native Liquid Glass tab bar. */
+.native-tabs .tabbar { display: none; }
 
 /* Frosted band under the iOS status bar so scrolled content doesn't run under the clock.
    Zero height in a Safari tab (no safe-area inset); sits below the top bar and sheets. */
@@ -373,6 +375,9 @@ main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
 .gsignin .gbtn { display: flex; justify-content: center; min-height: 44px; }
 /* Match the iframe's own (light) scheme so dark mode doesn't paint a white box behind it. */
 .gsignin .gbtn iframe { color-scheme: light; }
+/* iOS app: our own button opens the system Google sheet (cloud.js nativeGoogleButton). */
+.gsignin .gnative { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 400px; }
+.gsignin .gnative svg { flex: none; margin-right: 8px; }
 .gsignin .or { display: flex; align-items: center; gap: 10px; margin: 14px 4px; color: var(--muted); font-size: 13px; }
 .gsignin .or::before, .gsignin .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 

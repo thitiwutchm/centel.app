@@ -476,6 +476,7 @@ function renderSettings() {
       </div>
     </div>
     <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม)</p>
+    ${travelSettings()}
     ${pushSettings()}
     ${calFeedSettings()}
     ${lineSettings()}

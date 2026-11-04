@@ -1538,7 +1538,9 @@ function txnForm(t, preset = {}) {
   const canShare = isCloud() && !!cloud.partner;
   const d = t ? { ...t } : {
     type: 'expense', amount: '', category: '', walletId: defaultWalletId(), toWalletId: '',
-    date: dateStr(new Date()), note: '', merchant: '', scope: 'personal', ...preset,
+    date: dateStr(new Date()), note: '', merchant: '', scope: 'personal',
+    // Traveller mode: new entries start in the currency of the country you're in.
+    ...(travelCurrency() ? { currency: travelCurrency() } : {}), ...preset,
   };
   // The form edits the whole bill; a shared row stores my share in `amount` and the bill in `total`.
   if (t && t.scope === 'shared') { d.amount = t.total; d.split = splitOf(t); }

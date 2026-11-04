@@ -66,6 +66,8 @@
 	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Centel ใช้กล้องเพื่อสแกนสลิปและใบเสร็จ</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Centel ใช้ตำแหน่งในโหมดนักเดินทาง เพื่อเลือกสกุลเงินของประเทศที่คุณอยู่</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Centel เปิดคลังรูปเพื่อเลือกสลิปหรือรูปโปรไฟล์</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
