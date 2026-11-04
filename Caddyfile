@@ -46,6 +46,13 @@
 		header @nocache Cache-Control "no-cache"
 		@manifest path */manifest.webmanifest
 		header @manifest Content-Type application/manifest+json
+		# iPhone UDID profile and the Ad Hoc install files (see ios-app/README.md).
+		@mobileconfig path *.mobileconfig
+		header @mobileconfig Content-Type application/x-apple-aspen-config
+		@install path /install/*
+		header @install Cache-Control "no-cache"
+		@ipa path *.ipa
+		header @ipa Content-Type application/octet-stream
 		@static path /icons/* /themeb/fonts/*
 		header @static Cache-Control "public, max-age=604800"
 

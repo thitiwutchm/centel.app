@@ -26,6 +26,20 @@ Push Notifications is already on via `App/App.entitlements`.
 Plug in the iPhone and press Run, or Product → Archive to upload to
 TestFlight / App Store Connect.
 
+## Ad Hoc install (no App Store)
+
+For our own iPhones: install from a Safari link, valid for a year.
+
+1. On each iPhone open https://centel.app/udid in Safari, install the profile,
+   and copy the UDID it shows. Add it at developer.apple.com > Devices.
+2. On the Mac: `TEAM_ID=<your team id> ./scripts/build-adhoc.sh`. It archives,
+   exports with `ExportOptions-adhoc.plist`, and writes `install/Centel.ipa`
+   and `install/manifest.plist` at the repo root.
+3. Commit `install/` and push. After the deploy, open https://centel.app/install
+   on the iPhone and tap ติดตั้งแอป.
+
+A newly added iPhone needs a fresh build. Web changes do not.
+
 ## Before App Store review (still to do)
 
 1. **Native push**: Web Push does not run inside the app. Register the APNs

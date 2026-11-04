@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Centel: รหัสเครื่อง</title>
+<link rel="icon" href="../icons/centel-192.png">
+<style>
+  :root { color-scheme: light dark; --bg: #f2f2f7; --card: #fff; --text: #1c1c1e; --muted: #6c6c70; --accent: #f27a1a; --line: rgba(0,0,0,.1); }
+  @media (prefers-color-scheme: dark) { :root { --bg: #000; --card: #1c1c1e; --text: #f2f2f7; --muted: #98989f; --line: rgba(255,255,255,.12); } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.45 -apple-system, system-ui, sans-serif; }
+  main { max-width: 480px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) 16px 40px; }
+  .logo { width: 64px; height: 64px; border-radius: 15px; display: block; margin: 8px auto 12px; }
+  h1 { font-size: 24px; text-align: center; margin: 0 0 6px; }
+  .sub { text-align: center; color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  ol { margin: 0; padding-left: 22px; } li { margin: 6px 0; }
+  .btn { display: block; text-align: center; background: var(--accent); color: #fff; text-decoration: none; border: 0;
+         border-radius: 14px; padding: 14px; font: 600 17px -apple-system, system-ui, sans-serif; width: 100%; box-sizing: border-box; }
+  .udid { font: 600 15px ui-monospace, Menlo, monospace; word-break: break-all; padding: 12px; border: 1px solid var(--line); border-radius: 12px; margin: 8px 0 12px; user-select: all; }
+  .muted { color: var(--muted); font-size: 15px; }
+  [hidden] { display: none !important; }
+</style></head>
+<body><main>
+  <img class="logo" src="../icons/centel-192.png" alt="">
+  <h1>ลงทะเบียน iPhone</h1>
+  <p class="sub">หารหัสเครื่อง (UDID) เพื่อติดตั้งแอป Centel</p>
+
+  <section id="ask">
+    <div class="card"><ol>
+      <li>เปิดหน้านี้ใน <b>Safari</b> บน iPhone ที่จะลงแอป</li>
+      <li>กดปุ่มด้านล่าง แล้วกด <b>อนุญาต</b></li>
+      <li>ไปที่ <b>ตั้งค่า &gt; ดาวน์โหลดโปรไฟล์แล้ว</b> แล้วกด <b>ติดตั้ง</b></li>
+      <li>Safari จะกลับมาหน้านี้พร้อมรหัสเครื่อง</li>
+    </ol></div>
+    <a class="btn" href="centel-udid.mobileconfig">ขอรหัสเครื่อง</a>
+    <p class="muted">โปรไฟล์นี้แค่ส่งรหัสเครื่องกลับมา ไม่ได้ติดตั้งค้างไว้ และ Centel ไม่ได้เก็บรหัสนี้</p>
+  </section>
+
+  <section id="got" hidden>
+    <div class="card">
+      <div class="muted">รหัสเครื่อง (UDID)</div>
+      <div class="udid" id="udid"></div>
+      <div class="muted" id="model"></div>
+    </div>
+    <button class="btn" id="copy" type="button">คัดลอกรหัส</button>
+    <p class="muted">ส่งรหัสนี้ให้คนดูแลแอป หรือเพิ่มเองที่
+      <a href="https://developer.apple.com/account/resources/devices/add">developer.apple.com &gt; Devices</a>
+      แล้วรอ build ใหม่ จากนั้นติดตั้งที่ <a href="../install/">centel.app/install</a></p>
+  </section>
+
+  <section id="err" hidden>
+    <div class="card">อ่านรหัสเครื่องไม่ได้ ลองกดขอรหัสใหม่อีกครั้งใน Safari</div>
+    <a class="btn" href="centel-udid.mobileconfig">ลองใหม่</a>
+  </section>
+</main>
+<script>
+  const q = new URLSearchParams(location.search);
+  const udid = q.get('udid');
+  if (udid) {
+    document.getElementById('ask').hidden = true;
+    document.getElementById('got').hidden = false;
+    document.getElementById('udid').textContent = udid;
+    document.getElementById('model').textContent = [q.get('product'), q.get('version') && 'iOS build ' + q.get('version')].filter(Boolean).join(' · ');
+    const b = document.getElementById('copy');
+    b.onclick = () => navigator.clipboard.writeText(udid).then(() => { b.textContent = 'คัดลอกแล้ว'; });
+  } else if (q.get('error')) {
+    document.getElementById('ask').hidden = true;
+    document.getElementById('err').hidden = false;
+  }
+</script>
+</body></html>
