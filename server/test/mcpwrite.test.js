@@ -226,6 +226,11 @@ test('mcpwrite: the 100,000 monthly budget plan — sum checked, created once, s
   // Spending: sushi counts in both food budgets, the other meal only in อาหารทั่วไป.
   await call('create_transaction', { amount: 850, category: 'food', merchant: 'ซูชิโร่ เซ็นทรัล', wallet: 'KBank' });
   await call('create_transaction', { amount: 350, category: 'food', merchant: 'ข้าวมันไก่' });
+  // A package wallet is only spent by its own uses in the app, never by other payments.
+  await A('PUT', '/wallets/gym', { name: 'ฟิตเนส', type: 'package', initial: 16000, pkg: { price: 16000, uses: 20 } });
+  const pk = await call('create_transaction', { amount: 100, category: 'food', merchant: 'ร้านกาแฟ', wallet: 'ฟิตเนส' });
+  assert.equal(pk.isError, true);
+  assert.match(pk.text, /package wallet/);
   const st = (await call('get_budget_status')).out;
   const b = (n) => st.budgets.find((x) => x.name === n);
   assert.equal(b('ซูชิโร่').spent, 850);

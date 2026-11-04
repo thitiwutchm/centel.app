@@ -152,7 +152,7 @@ function remindOf(b) { return b.remind != null ? b.remind : state.settings.remin
 
 // Wallet a bill is paid from: its own choice ('' = don't record a transaction), else the last used one.
 function billWallet(b) {
-  if (b.walletId === '' || (b.walletId && walletById(b.walletId))) return b.walletId;
+  if (b.walletId === '' || (b.walletId && walletById(b.walletId) && !isPkgWallet(walletById(b.walletId)))) return b.walletId;
   return billPayWallet();
 }
 
@@ -669,7 +669,7 @@ function billForm(b, opts = {}) {
 
   const catOpts = Object.entries(CATEGORIES).map(([k, c]) =>
     `<option value="${k}" ${draft.category === k ? 'selected' : ''}>${c.label}</option>`).join('');
-  const walletOpts = (sel) => `<option value="">ไม่บันทึกเป็นรายการ</option>${money.wallets
+  const walletOpts = (sel) => `<option value="">ไม่บันทึกเป็นรายการ</option>${payWallets()
     .map((w) => `<option value="${w.id}" ${sel === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}`;
 
   // Clean layout: hero (icon, name, amount) on top, then one grouped list of value pickers.
@@ -1075,7 +1075,7 @@ function occurrenceSheet(id, ym) {
       ${b.note ? `<div class="kv"><span>บันทึก</span><span style="text-align:right;max-width:65%">${esc(b.note)}</span></div>` : ''}
       ${o.paid ? '' : `<div class="field"><label for="oWallet">จ่ายจาก</label><select id="oWallet">
         <option value="">ไม่บันทึกเป็นรายการ</option>
-        ${money.wallets.map((w) => `<option value="${w.id}" ${billWallet(b) === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+        ${payWallets().map((w) => `<option value="${w.id}" ${billWallet(b) === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
       </select></div>`}
     </div>
     ${peaNeeded ? `<div class="alert warn">⚡<div>บิลนี้ผูกกับ PEA ต้องดึงยอด${thMonthYear(ym)}ก่อนจึงจะกดจ่ายได้</div></div>` : ''}

@@ -30,6 +30,15 @@ function amountOf(v, what = 'amount') {
 }
 const textOf = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
 
+// A package wallet (prepaid sessions) is spent only by its own "ใช้ 1 ครั้ง" in the app,
+// so transactions cannot be put on it from here.
+function payWalletOf(ctx, q) {
+  const id = walletOf(ctx, q);
+  const w = ctx.wallets.find((x) => x.id === id);
+  if (w && w.type === 'package') fail(`"${w.name}" is a package wallet: it can only be used through its own "ใช้ 1 ครั้ง" in the app, not for other payments. Pick another wallet.`);
+  return id;
+}
+
 function walletOf(ctx, q, { allowTotal = false } = {}) {
   if (q == null || q === '') return null;
   if (allowTotal && ['total', 'all', 'ทุกกระเป๋า'].includes(String(q).toLowerCase())) return 'total';
@@ -404,8 +413,9 @@ async function newTxn(db, ctx, a) {
   const currency = a.currency == null ? 'THB' : String(a.currency).toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) fail('currency must be a 3-letter code like THB or USD');
   const me = ctx.me.id;
-  let walletId = a.wallet != null ? walletOf(ctx, a.wallet) : null;
-  if (!walletId) walletId = ctx.wallets.some((w) => w.id === ctx.prefs.lastWallet) ? ctx.prefs.lastWallet : ctx.wallets[0]?.id || null;
+  let walletId = a.wallet != null ? payWalletOf(ctx, a.wallet) : null;
+  const payable = ctx.wallets.filter((w) => w.type !== 'package');
+  if (!walletId) walletId = payable.some((w) => w.id === ctx.prefs.lastWallet) ? ctx.prefs.lastWallet : payable[0]?.id || null;
   const row = {
     scope, type, date, amount, currency,
     merchant: textOf(a.merchant, 120), note: textOf(a.note, 500), category: categoryOf(ctx, a.category, type),
@@ -446,7 +456,7 @@ async function changedTxn(db, ctx, a) {
   if (a.note !== undefined) next.note = textOf(a.note, 500);
   if (a.wallet !== undefined) {
     if (cur.scope === 'shared' && cur.payer_id !== ctx.me.id) fail('Your partner paid this one, so it has no wallet of yours.');
-    next.wallet_id = walletOf(ctx, a.wallet);
+    next.wallet_id = payWalletOf(ctx, a.wallet);
   }
   if (a.currency !== undefined) {
     const c = String(a.currency).toUpperCase();

@@ -130,6 +130,11 @@ function txCat(t) {
    reports count ฿800 per use instead of ฿16,000 on the day it was paid.
    w.pkg = { price, uses, category, merchant }. Uses left come from the balance, so a package
    added part-way through (balance = what is left) works the same way. */
+// A package wallet is locked to its own uses: it shows under กระเป๋าเงิน with its balance, but no
+// other payment, bill or transfer can pick it. Only "ใช้ 1 ครั้ง" (or editing one of its own rows) pays from it.
+function isPkgWallet(w) { return !!w && w.type === 'package'; }
+// Wallets that ordinary payments, bills and transfers can choose from.
+function payWallets() { return money.wallets.filter((w) => !isPkgWallet(w)); }
 function isPkg(w) { return !!w && w.type === 'package' && !!w.pkg && w.pkg.uses > 0; }
 function pkgPer(w) { return Math.round((w.pkg.price / w.pkg.uses) * 100) / 100; }
 function pkgLeft(w) { const per = pkgPer(w); return per > 0 ? Math.max(0, Math.round(balanceOf(w.id) / per)) : 0; }
@@ -260,10 +265,14 @@ function catIn(txCatId, id) {
   return own === id || (!!c && c.parent === id);
 }
 
-function firstWalletId() { return (money.wallets.find((w) => !w.excluded) || money.wallets[0]).id; }
+function firstWalletId() {
+  const ws = payWallets();
+  return (ws.find((w) => !w.excluded) || ws[0] || money.wallets[0]).id;
+}
 function defaultWalletId() {
-  if (ui.wallet !== 'total' && walletById(ui.wallet)) return ui.wallet;
-  return walletById(money.prefs.lastWallet) ? money.prefs.lastWallet : firstWalletId();
+  const ok = (id) => { const w = walletById(id); return !!w && !isPkgWallet(w); };
+  if (ui.wallet !== 'total' && ok(ui.wallet)) return ui.wallet;
+  return ok(money.prefs.lastWallet) ? money.prefs.lastWallet : firstWalletId();
 }
 
 // Wallet ids that a selection covers: one wallet, or every wallet counted in the total.
@@ -414,7 +423,8 @@ function paceCls(spent, amount, pace) {
 function billPayWallet() {
   const p = money.prefs.billWallet;
   if (p === '') return '';
-  return walletById(p) ? p : firstWalletId();
+  const w = walletById(p);
+  return w && !isPkgWallet(w) ? p : firstWalletId();
 }
 
 function removeBillTxn(billId, ym) {
@@ -1535,11 +1545,14 @@ function catPicker(type, current, onPick, opts = {}) {
 function txnForm(t, preset = {}) {
   const isNew = !t;
   const me = cloud.user ? cloud.user.id : null;
-  const canShare = isCloud() && !!cloud.partner;
   const d = t ? { ...t } : {
     type: 'expense', amount: '', category: '', walletId: defaultWalletId(), toWalletId: '',
     date: dateStr(new Date()), note: '', merchant: '', scope: 'personal', ...preset,
   };
+  // Opened on a package (its "ใช้ 1 ครั้ง" or one of its own rows): the wallet stays that package,
+  // and the row stays a personal use of it (not shared, not a bill payment, not a transfer).
+  const pkgLock = isPkgWallet(walletById(d.walletId)) ? d.walletId : null;
+  const canShare = isCloud() && !!cloud.partner && !pkgLock;
   // The form edits the whole bill; a shared row stores my share in `amount` and the bill in `total`.
   if (t && t.scope === 'shared') { d.amount = t.total; d.split = splitOf(t); }
   if (!d.payerId) d.payerId = me;
@@ -1549,11 +1562,13 @@ function txnForm(t, preset = {}) {
   if (d.scope === 'shared' && !canShare) d.scope = 'personal';
   const receipts = isCloud() && cloud.features.storage;
   // A new expense can be the payment of a bill still due (picked here or matched from a slip).
-  const pend = isNew && !d.billId ? pendingBillOccs() : [];
+  const pend = isNew && !d.billId && !pkgLock ? pendingBillOccs() : [];
   // A bill payment links back to its bill month (tap to open it), showing the bill's amount.
   const linkedBill = !isNew && d.billId ? state.bills.find((b) => b.id === d.billId) : null;
   const billPaidAmount = linkedBill ? (record(d.billYm, linkedBill.id).amount ?? linkedBill.amount ?? 0) : 0;
-  const wOpts = (selId, skip) => money.wallets.filter((w) => w.id !== skip)
+  // Packages never show as a choice, except the one this row already belongs to.
+  const wOpts = (selId, skip) => (pkgLock ? money.wallets.filter((w) => w.id === pkgLock)
+    : money.wallets.filter((w) => w.id !== skip && (!isPkgWallet(w) || w.id === selId)))
     .map((w) => `<option value="${w.id}" ${selId === w.id ? 'selected' : ''}>${esc(wEmoji(w))} ${esc(w.name)}</option>`).join('');
 
   openSheet(`
@@ -1562,7 +1577,7 @@ function txnForm(t, preset = {}) {
       <h2>${isNew ? 'เพิ่มรายการ' : 'แก้ไขรายการ'}</h2>
       <span class="sheet-head-pad"></span>
     </div>
-    <div class="seg" id="txType">
+    <div class="seg" id="txType" ${pkgLock && d.type === 'expense' ? 'hidden' : ''}>
       <button type="button" data-ttype="expense">รายจ่าย</button>
       <button type="button" data-ttype="income">รายรับ</button>
       <button type="button" data-ttype="transfer">โอนเงิน</button>
@@ -1600,7 +1615,7 @@ function txnForm(t, preset = {}) {
           <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel}</button><button type="button" data-split="half">หาร 2</button></div>
           <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div></div></div>
       <div class="tr" id="tWalletRow"><div class="tr-ico">${svgIcon('wallet')}</div>
-        <div class="tr-body"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
+        <div class="tr-body"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet" ${pkgLock ? 'disabled' : ''}>${wOpts(d.walletId || defaultWalletId())}</select>${pkgLock ? '' : svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
       ${isNew ? `<div class="tr" id="tPkgRow"><div class="tr-ico">${svgIcon('repeat')}</div>
         <div class="tr-body"><label for="tPkg">จ่ายก้อน ใช้หลายครั้ง</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="tPkg"><span></span></label></div></div>
       <div class="tr" id="tPkgBody" hidden><div class="tr-ico"></div>
@@ -1669,7 +1684,7 @@ function txnForm(t, preset = {}) {
     updateShares();
     if (transfer) {
       const from = $('#tWallet').value;
-      if (!d.toWalletId || d.toWalletId === from) d.toWalletId = (money.wallets.find((w) => w.id !== from) || {}).id || '';
+      if (!d.toWalletId || d.toWalletId === from) d.toWalletId = (payWallets().find((w) => w.id !== from) || {}).id || '';
       $('#tTo').innerHTML = wOpts(d.toWalletId, from);
       return;
     }
@@ -2011,7 +2026,7 @@ function walletForm(w) {
     $('#wPkgRows').hidden = !on;
     $('#wExclRow').hidden = on;
     $('#wHint').textContent = on
-      ? 'ยอดเริ่มต้น = มูลค่าที่ยังเหลือใช้ (แพ็กเกจใหม่ใส่เท่าราคาเต็ม) ทุกครั้งที่ใช้ บันทึกเป็นรายจ่ายครั้งละส่วน ไม่ใช่ทั้งก้อน'
+      ? 'ยอดเริ่มต้น = มูลค่าที่ยังเหลือใช้ (แพ็กเกจใหม่ใส่เท่าราคาเต็ม) ทุกครั้งที่ใช้ บันทึกเป็นรายจ่ายครั้งละส่วน ไม่ใช่ทั้งก้อน กระเป๋านี้ใช้จ่ายอย่างอื่นไม่ได้ หักได้เฉพาะเมื่อกด "ใช้ 1 ครั้ง" เท่านั้น'
       : 'บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000';
     const price = num($('#wPkgPrice').value), uses = Math.floor(num($('#wPkgUses').value));
     $('#wPkgPer').textContent = price > 0 && uses > 0 ? baht(Math.round((price / uses) * 100) / 100) : '-';
@@ -2434,7 +2449,7 @@ function accountTop() {
     <div class="form">
       <div class="field"><label for="billWallet">บันทึกรายจ่ายจาก</label><select id="billWallet">
         <option value="" ${bw === '' ? 'selected' : ''}>ไม่บันทึกเป็นรายการ</option>
-        ${money.wallets.map((w) => `<option value="${w.id}" ${bw === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+        ${payWallets().map((w) => `<option value="${w.id}" ${bw === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
       </select></div>
     </div>
     <p class="hint">เมื่อกด "จ่ายแล้ว" ที่บิล แอปจะบันทึกเป็นรายจ่ายในกระเป๋าเงินนี้ให้อัตโนมัติ เพื่อให้ยอดเงินและงบประมาณตรงกัน</p>`;
