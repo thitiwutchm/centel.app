@@ -86,6 +86,15 @@ body {
 
 body.with-topbar { padding-top: calc(var(--safe-top) + 56px); }
 
+/* Frosted band under the iOS status bar so scrolled content doesn't run under the clock.
+   Zero height in a Safari tab (no safe-area inset); sits below the top bar and sheets. */
+body::after {
+  content: ""; position: fixed; inset: 0 0 auto 0; height: var(--safe-top); z-index: 9; pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+}
+
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 
