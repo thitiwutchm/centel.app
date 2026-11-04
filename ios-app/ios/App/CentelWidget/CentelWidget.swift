@@ -27,6 +27,8 @@ struct Snapshot: Decodable {
     }
     struct Words: Decodable {
         let spend, income, bills, todos, noBills, noTodos, today, tomorrow, late, inDays, needsAmount, open: String
+        let expenses: String?
+        let vsLast: String?
     }
     let lang: String
     let words: Words
@@ -38,6 +40,12 @@ struct Snapshot: Decodable {
     let todos: [Todo]
     let accent: String?
     let signedIn: Bool?
+    // Spending added up day by day (index 0 = day 1): this month up to today, all of last month.
+    let daily: [Double]?
+    let lastDaily: [Double]?
+    let lastSameDay: Double?
+    let daysInMonth: Int?
+    let monthName: String?
 
     static func load() -> Snapshot? {
         guard let json = UserDefaults(suiteName: "group.app.centel")?.string(forKey: "snapshot"),
@@ -47,7 +55,8 @@ struct Snapshot: Decodable {
 
     static let thaiWords = Words(spend: "ใช้จ่ายเดือนนี้", income: "รายรับ", bills: "บิลที่ใกล้ถึง", todos: "สิ่งที่ต้องทำ",
                                  noBills: "ไม่มีบิลค้างจ่าย", noTodos: "ไม่มีสิ่งที่ต้องทำ", today: "วันนี้", tomorrow: "พรุ่งนี้",
-                                 late: "เลยกำหนด", inDays: "อีก {0} วัน", needsAmount: "ระบุยอด", open: "เปิด Centel เพื่ออัปเดต")
+                                 late: "เลยกำหนด", inDays: "อีก {0} วัน", needsAmount: "ระบุยอด", open: "เปิด Centel เพื่ออัปเดต",
+                                 expenses: "ใช้จ่าย", vsLast: "เทียบเดือนก่อน")
     static let sample = Snapshot(
         lang: "th", words: thaiWords, monthLabel: "พฤศจิกายน 2569", expense: 18450, income: 42000, currency: "฿",
         bills: [
@@ -59,7 +68,10 @@ struct Snapshot: Decodable {
             .init(id: "a", text: "ไปเยี่ยมแม่ ลำพูน", date: Day.string(Date()), time: "10:00", shared: true),
             .init(id: "b", text: "ต่อประกันรถ", date: Day.string(Day.add(Date(), 3)), time: nil, shared: false),
         ],
-        accent: "#ff7a00", signedIn: true)
+        accent: "#ff7a00", signedIn: true,
+        daily: [320, 320, 980, 1450, 1450, 2100, 2600, 3300, 3900, 4017],
+        lastDaily: (1...31).map { Double($0) * 160 + ($0 > 20 ? 900 : 0) },
+        lastSameDay: 1600, daysInMonth: 30, monthName: "พฤศจิกายน")
 }
 
 enum Day {
@@ -313,6 +325,78 @@ struct TodoView: View {
     }
 }
 
+// MARK: - Expenses widget
+
+// Cumulative spending through the month: last month as a faint line, this month in red up to today.
+struct SpendLine: View {
+    let snap: Snapshot
+    var body: some View {
+        GeometryReader { geo in
+            let now = snap.daily ?? []
+            let last = snap.lastDaily ?? []
+            let days = max(snap.daysInMonth ?? 30, last.count, now.count, 2)
+            let top = max(now.max() ?? 0, last.max() ?? 0, 1)
+            let pt = { (i: Int, v: Double) -> CGPoint in
+                CGPoint(x: geo.size.width * CGFloat(i) / CGFloat(days - 1),
+                        y: geo.size.height - geo.size.height * CGFloat(v / top))
+            }
+            ZStack {
+                if last.count > 1 {
+                    Path { p in p.addLines(last.enumerated().map { pt($0.offset, $0.element) }) }
+                        .stroke(Color.secondary.opacity(0.35), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [3, 4]))
+                }
+                if now.count > 1 {
+                    Path { p in p.addLines(now.enumerated().map { pt($0.offset, $0.element) }) }
+                        .stroke(Color.red, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                } else {
+                    Path { p in p.move(to: CGPoint(x: 0, y: geo.size.height)); p.addLine(to: CGPoint(x: geo.size.width, y: geo.size.height)) }
+                        .stroke(Color.red, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                }
+            }
+        }
+    }
+}
+
+struct ExpensesView: View {
+    @Environment(\.widgetFamily) var family
+    let entry: Entry
+    var body: some View {
+        if let snap = entry.snap {
+            let diff = snap.expense - (snap.lastSameDay ?? 0)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(snap.words.expenses ?? snap.words.spend) · \(snap.monthName ?? snap.monthLabel)")
+                            .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
+                        Text(snap.money(snap.expense))
+                            .font(.system(size: family == .systemSmall ? 22 : 28, weight: .bold, design: .rounded))
+                            .monospacedDigit().minimumScaleFactor(0.6).lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    Link(destination: URL(string: "centel://add")!) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(Color.green))
+                    }
+                }
+                // How much more (or less) than last month by the same day.
+                HStack(spacing: 3) {
+                    Image(systemName: diff > 0 ? "arrow.up.right" : "arrow.down.right")
+                        .foregroundStyle(diff > 0 ? Color.red : Color.green)
+                    Text(snap.money(abs(diff))).monospacedDigit()
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(Capsule().fill(Color.secondary.opacity(0.18)))
+                Spacer(minLength: 6)
+                SpendLine(snap: snap).frame(height: family == .systemSmall ? 28 : 40)
+            }
+            .widgetURL(URL(string: family == .systemSmall ? "centel://add" : "centel://home"))
+        } else { EmptyState() }
+    }
+}
+
 // MARK: - Widgets
 
 struct CentelOverviewWidget: Widget {
@@ -337,9 +421,21 @@ struct CentelTodoWidget: Widget {
     }
 }
 
+struct CentelExpensesWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "CentelExpenses", provider: Provider()) { entry in
+            ExpensesView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("ใช้จ่าย")
+        .description("ยอดใช้จ่ายเดือนนี้ เทียบเดือนก่อน และปุ่มเพิ่มรายการ")
+        .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
 @main
 struct CentelWidgets: WidgetBundle {
     var body: some Widget {
+        CentelExpensesWidget()
         CentelOverviewWidget()
         CentelTodoWidget()
     }

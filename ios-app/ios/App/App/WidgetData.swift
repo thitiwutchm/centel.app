@@ -4,7 +4,7 @@ import WidgetKit
 // The page (widget.js) hands over a snapshot for the Home Screen widget: this month's
 // spending, the next unpaid bills and the open to-dos. It is kept in the App Group shared
 // with the CentelWidget extension, which reads it on its next redraw.
-// The widget's taps open centel://bills, centel://todos or centel://home; SceneDelegate
+// The widget's taps open centel://bills, centel://todos, centel://home or centel://add; SceneDelegate
 // passes them to the page, or keeps them in `pending` until the page asks.
 @objc(WidgetDataPlugin)
 public class WidgetDataPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -29,7 +29,7 @@ public class WidgetDataPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
-    // -> { link: "bills" | "todos" | "home" | null }: a widget tap that opened the app before the page was ready.
+    // -> { link: "bills" | "todos" | "home" | "add" | null }: a widget tap that opened the app before the page was ready.
     @objc func pending(_ call: CAPPluginCall) {
         let link = Self.pending
         Self.pending = nil
@@ -40,6 +40,6 @@ public class WidgetDataPlugin: CAPPlugin, CAPBridgedPlugin {
     static func link(from url: URL) -> String? {
         guard url.scheme == "centel" else { return nil }
         let what = url.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return ["bills", "todos", "home"].contains(what) ? what : "home"
+        return ["bills", "todos", "home", "add"].contains(what) ? what : "home"
     }
 }

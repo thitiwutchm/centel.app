@@ -10,9 +10,10 @@ app picks it up on next launch, with no App Store update needed.
 - Native plugins: push notifications (APNs), haptics, app lifecycle, plus the app's
   own NativeTabs, GoogleAuth and WidgetData (registered in CentelViewController).
 - `CentelWidget/` is a WidgetKit extension (`app.centel.widget`, iOS 17+): Home Screen
-  widgets for this month's spending, upcoming bills and to-dos, and Lock Screen ones.
+  widgets: Expenses (month spend, vs last month by today, spend line, + opens a new
+  transaction), Centel (spend + upcoming bills, also Lock Screen) and to-dos.
   The page (`widget.js`) saves a snapshot into the App Group `group.app.centel`
-  through WidgetData; the widget reads it. Taps open `centel://bills|todos|home`.
+  through WidgetData; the widget reads it. Taps open `centel://bills|todos|home|add`.
 - Swift Package Manager (no CocoaPods).
 
 ## Build on the Mac

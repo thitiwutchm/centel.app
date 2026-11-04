@@ -14,15 +14,23 @@
   if (!plugin) return;
 
   const WORDS = {
-    th: { spend: 'ใช้จ่ายเดือนนี้', income: 'รายรับ', bills: 'บิลที่ใกล้ถึง', todos: 'สิ่งที่ต้องทำ', noBills: 'ไม่มีบิลค้างจ่าย', noTodos: 'ไม่มีสิ่งที่ต้องทำ', today: 'วันนี้', tomorrow: 'พรุ่งนี้', late: 'เลยกำหนด', inDays: 'อีก {0} วัน', needsAmount: 'ระบุยอด', open: 'เปิด Centel เพื่ออัปเดต' },
-    en: { spend: 'Spent this month', income: 'Income', bills: 'Upcoming bills', todos: 'To-dos', noBills: 'No unpaid bills', noTodos: 'Nothing to do', today: 'Today', tomorrow: 'Tomorrow', late: 'Overdue', inDays: 'In {0} days', needsAmount: 'Enter amount', open: 'Open Centel to update' },
+    th: { spend: 'ใช้จ่ายเดือนนี้', expenses: 'ใช้จ่าย', vsLast: 'เทียบเดือนก่อน', income: 'รายรับ', bills: 'บิลที่ใกล้ถึง', todos: 'สิ่งที่ต้องทำ', noBills: 'ไม่มีบิลค้างจ่าย', noTodos: 'ไม่มีสิ่งที่ต้องทำ', today: 'วันนี้', tomorrow: 'พรุ่งนี้', late: 'เลยกำหนด', inDays: 'อีก {0} วัน', needsAmount: 'ระบุยอด', open: 'เปิด Centel เพื่ออัปเดต' },
+    en: { spend: 'Spent this month', expenses: 'Expenses', vsLast: 'vs last month', income: 'Income', bills: 'Upcoming bills', todos: 'To-dos', noBills: 'No unpaid bills', noTodos: 'Nothing to do', today: 'Today', tomorrow: 'Tomorrow', late: 'Overdue', inDays: 'In {0} days', needsAmount: 'Enter amount', open: 'Open Centel to update' },
   };
 
   function snapshot() {
     const now = new Date();
     const ym = ymOf(now);
     const lang = typeof LANG !== 'undefined' && LANG === 'en' ? 'en' : 'th';
-    const { income, expense } = totalsIn(txnsInMonth(ym), walletSet('total'));
+    const S = walletSet('total');
+    const { income, expense } = totalsIn(txnsInMonth(ym), S);
+    // Spending added up day by day, this month up to today and all of last month, for the
+    // Expenses widget's line and its "vs last month by today" chip.
+    const prev = addMonths(ym, -1);
+    const inS = (t) => inSel(t, S);
+    const daily = cumDaily(ym, 'expense', inS).slice(0, now.getDate()).map((n) => Math.round(n));
+    const lastDaily = cumDaily(prev, 'expense', inS).map((n) => Math.round(n));
+    const lastSameDay = lastDaily.length ? lastDaily[Math.min(now.getDate(), lastDaily.length) - 1] : 0;
     const bills = [ym, addMonths(ym, 1)].flatMap((m) => occurrences(m))
       .filter((o) => !o.paid)
       .slice(0, 8)
@@ -38,6 +46,7 @@
     return {
       v: 1, lang, words: WORDS[lang], ym, monthLabel: tr(thMonthYear(ym)),
       expense, income, currency: '฿', bills, todos,
+      daily, lastDaily, lastSameDay, daysInMonth: daysInMonth(ym), monthName: tr(TH_MONTHS[now.getMonth()]),
       accent: css.getPropertyValue('--accent').trim() || '#ff7a00',
       signedIn: typeof isCloud === 'function' && isCloud(),
     };
@@ -59,10 +68,11 @@
     if (delay <= 0) send(); else timer = setTimeout(send, delay);
   };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') window.widgetChanged(0); });
-  // The widget's links: centel://bills, centel://todos, centel://add.
+  // The widget's links: centel://bills, centel://todos, centel://home, centel://add (new transaction).
   window.centelWidgetOpen = (what) => {
     setTab(what === 'bills' ? 'bills' : 'home');
     if (what === 'todos') notesAction('notes');
+    if (what === 'add') txnForm();
   };
   window.widgetChanged(2500);
   // A widget tap that opened the app before this page had loaded.
