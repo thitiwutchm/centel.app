@@ -14,6 +14,7 @@ class CentelViewController: CAPBridgeViewController, UITabBarDelegate {
         bridge?.registerPluginInstance(NativeTabsPlugin())
         bridge?.registerPluginInstance(GoogleAuthPlugin())
         bridge?.registerPluginInstance(WidgetDataPlugin())
+        bridge?.registerPluginInstance(AppIconPlugin())
     }
 
     override func viewDidLoad() {

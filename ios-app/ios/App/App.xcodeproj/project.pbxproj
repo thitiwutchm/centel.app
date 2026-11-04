@@ -21,6 +21,7 @@
 		C3A7E2022F0B000100A1B2C3 /* WidgetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E2012F0B000100A1B2C3 /* WidgetData.swift */; };
 		C3A7E2042F0B000100A1B2C3 /* CentelWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E2032F0B000100A1B2C3 /* CentelWidget.swift */; };
 		C3A7E2082F0B000100A1B2C3 /* CentelWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C3A7E2072F0B000100A1B2C3 /* CentelWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C3A7E3022F0B000100A1B2C3 /* AppIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 		C3A7E2052F0B000100A1B2C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C3A7E2062F0B000100A1B2C3 /* CentelWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CentelWidget.entitlements; sourceTree = "<group>"; };
 		C3A7E2072F0B000100A1B2C3 /* CentelWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CentelWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcon.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -115,6 +117,7 @@
 				C3A7E1012F0B000100A1B2C3 /* NativeTabs.swift */,
 				C3A7E1032F0B000100A1B2C3 /* GoogleAuth.swift */,
 				C3A7E2012F0B000100A1B2C3 /* WidgetData.swift */,
+				C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -252,6 +255,7 @@
 				C3A7E1042F0B000100A1B2C3 /* GoogleAuth.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				C3A7E2022F0B000100A1B2C3 /* WidgetData.swift in Sources */,
+				C3A7E3022F0B000100A1B2C3 /* AppIcon.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -406,7 +410,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Orange AppIcon-Green";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -429,7 +435,9 @@
 		504EC3181FED79650016851F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Orange AppIcon-Green";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
