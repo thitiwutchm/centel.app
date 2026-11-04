@@ -10,6 +10,9 @@
  *    change, and the server sends each one when its time comes, even with the app closed,
  *  - a new shared expense the partner added.
  * sw.js shows the notification and opens the app when it is tapped.
+ * Inside the iOS app (ios-app/, Capacitor) there is no Web Push, so the same switch asks
+ * iOS for permission through @capacitor/push-notifications and sends the APNs device token
+ * to /api/push/apns instead; the server sends the same notifications through Apple.
  * Loaded after calfeed.js and before app.js; `state`, `occurrences`, `api` are looked up at call time.
  */
 
@@ -18,7 +21,14 @@ const DEVICE_KEY = 'centel.device.v1';
 
 const push = { on: null, busy: false, timer: null, checking: false };
 
+// The iOS app's push plugin, when running inside it.
+function pushNative() {
+  const c = window.Capacitor;
+  return c && c.isNativePlatform && c.isNativePlatform() && c.Plugins && c.Plugins.PushNotifications;
+}
+
 function pushSupported() {
+  if (pushNative()) return true;
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && window.isSecureContext;
 }
 function pushStandalone() {
@@ -55,6 +65,7 @@ function pushKeyBytes(b64) {
 // Is this device subscribed right now? Updates the Account tab when the answer changes.
 async function pushCheck() {
   if (!pushSupported() || !isCloud() || push.checking) return;
+  if (pushNative()) return pushNativeCheck();
   push.checking = true;
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -78,6 +89,7 @@ async function pushCheck() {
 async function pushEnable() {
   if (push.busy) return;
   if (!isCloud()) { toast('ต้องเข้าสู่ระบบก่อน'); return; }
+  if (pushNative()) return pushNativeEnable();
   push.busy = true;
   try {
     // Must be asked straight from the tap, before anything else awaits on iPhone.
@@ -105,6 +117,7 @@ async function pushEnable() {
 
 async function pushDisable() {
   if (push.busy) return;
+  if (pushNative()) return pushNativeDisable();
   push.busy = true;
   try {
     const reg = await navigator.serviceWorker.ready;
@@ -113,6 +126,116 @@ async function pushDisable() {
       await api('DELETE', '/push/subscribe', { endpoint: sub.endpoint }).catch(() => {});
       await sub.unsubscribe().catch(() => {});
     }
+    await api('PUT', '/push/alerts', { device: pushDevice(), alerts: [] }).catch(() => {});
+    setPushLocal(null);
+    push.on = false;
+    toast('ปิดการแจ้งเตือนแล้ว');
+  } catch (e) { toast('ทำรายการไม่สำเร็จ'); } finally {
+    push.busy = false;
+    if (ui.tab === 'account') { const y = window.scrollY; render(); window.scrollTo(0, y); }
+  }
+}
+
+/* ---------- Inside the iOS app: APNs ---------- */
+
+// iOS hands out the device token after register(); it can change (restore, reinstall),
+// so the app registers again on every start and sends it whenever it differs.
+let pushTokenWait = null;
+function pushNativeToken() {
+  const P = pushNative();
+  if (pushTokenWait) return pushTokenWait;
+  pushTokenWait = new Promise((resolve, reject) => {
+    let done = false;
+    const end = (fn, v) => { if (!done) { done = true; pushTokenWait = null; fn(v); } };
+    pushNativeListen();
+    push.onToken = (t) => end(resolve, t);
+    push.onTokenErr = (e) => end(reject, e);
+    setTimeout(() => end(reject, new Error('timeout')), 20000);
+    P.register().catch((e) => end(reject, e));
+  });
+  return pushTokenWait;
+}
+
+let pushListening = false;
+function pushNativeListen() {
+  const P = pushNative();
+  if (!P || pushListening) return;
+  pushListening = true;
+  P.addListener('registration', (t) => push.onToken && push.onToken(t.value));
+  P.addListener('registrationError', (e) => push.onTokenErr && push.onTokenErr(new Error(e.error || 'registration')));
+  // Tapped a notification: open what it points at, as sw.js does in the Home Screen app.
+  P.addListener('pushNotificationActionPerformed', (a) => {
+    const url = (a && a.notification && a.notification.data && a.notification.data.url) || '/';
+    pushOpenUrl(url);
+  });
+}
+
+function pushOpenUrl(url) {
+  const m = /#chat-(couple|ai|sec)$/.exec(url);
+  if (m && typeof openChat === 'function') { openChat(m[1]); return; }
+  if (ui.tab !== 'home' && url === '/') { ui.tab = 'home'; render(); }
+}
+
+async function pushNativeSend(token) {
+  await api('POST', '/push/apns', { token, device: pushDevice() });
+  const cur = pushLocal();
+  setPushLocal({ token, sent: cur && cur.token === token ? cur.sent : null });
+}
+
+async function pushNativeCheck() {
+  if (push.checking) return;
+  push.checking = true;
+  try {
+    const P = pushNative();
+    pushNativeListen();
+    const perm = (await P.checkPermissions()).receive;
+    const local = pushLocal();
+    const on = perm === 'granted' && !!local;
+    if (on && !push.tokenChecked) {
+      // Once per app start: ask iOS for the current token and send it when it changed.
+      const token = await pushNativeToken();
+      if (token !== local.token) await pushNativeSend(token);
+      push.tokenChecked = true;
+    }
+    if (push.on !== on) {
+      push.on = on;
+      if (ui.tab === 'account') { const y = window.scrollY; render(); window.scrollTo(0, y); }
+    }
+    pushAlertsChanged(0);
+  } catch (e) { /* offline */ } finally {
+    push.checking = false;
+  }
+}
+
+async function pushNativeEnable() {
+  push.busy = true;
+  try {
+    const P = pushNative();
+    if (cloud.features && cloud.features.apns === false) { toast('เซิร์ฟเวอร์ยังไม่ได้ตั้งค่า Apple Push'); return; }
+    let perm = (await P.checkPermissions()).receive;
+    if (perm !== 'granted' && perm !== 'denied') perm = (await P.requestPermissions()).receive;
+    if (perm !== 'granted') {
+      toast(perm === 'denied' ? 'การแจ้งเตือนถูกปิดไว้ เปิดได้ที่ การตั้งค่า › การแจ้งเตือน › Centel' : 'ยังไม่ได้อนุญาตการแจ้งเตือน');
+      return;
+    }
+    await pushNativeSend(await pushNativeToken());
+    push.tokenChecked = true;
+    push.on = true;
+    toast('เปิดการแจ้งเตือนแล้ว');
+    pushAlertsChanged(0);
+  } catch (e) {
+    toast(e.status ? (e.message === 'apns_off' ? 'เซิร์ฟเวอร์ยังไม่ได้ตั้งค่า Apple Push' : cloudErr(e)) : 'เปิดการแจ้งเตือนไม่สำเร็จ');
+  } finally {
+    push.busy = false;
+    if (ui.tab === 'account') { const y = window.scrollY; render(); window.scrollTo(0, y); }
+  }
+}
+
+async function pushNativeDisable() {
+  push.busy = true;
+  try {
+    const cur = pushLocal();
+    if (cur && cur.token) await api('DELETE', '/push/apns', { token: cur.token }).catch(() => {});
     await api('PUT', '/push/alerts', { device: pushDevice(), alerts: [] }).catch(() => {});
     setPushLocal(null);
     push.on = false;
@@ -186,7 +309,7 @@ function pushSettings() {
       : 'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน';
   } else if (!isCloud()) {
     hint = 'ต้องเข้าสู่ระบบก่อน การแจ้งเตือนส่งมาจากเซิร์ฟเวอร์ จึงเด้งได้แม้ปิดแอปอยู่';
-  } else if (Notification.permission === 'denied') {
+  } else if (!pushNative() && Notification.permission === 'denied') {
     hint = 'การแจ้งเตือนถูกปิดไว้ เปิดได้ที่ การตั้งค่า › การแจ้งเตือน › Centel';
   } else {
     can = true;
@@ -214,4 +337,12 @@ function pushSettingsBind() {
     }
     test.disabled = false;
   });
+}
+
+// In the iOS app: listen for taps on notifications from the start (iOS keeps the tap that
+// opened the app until a listener takes it), and refresh the device token once signed in.
+if (pushNative()) {
+  setTimeout(pushNativeListen, 0);
+  let tries = 0;
+  const wait = setInterval(() => { if (isCloud() || ++tries > 30) { clearInterval(wait); if (isCloud()) pushCheck(); } }, 1000);
 }

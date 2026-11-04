@@ -6,7 +6,8 @@ import { analyzeReceipt, aiEnabled, RECEIPT_MODEL } from './receipts.js';
 import { putReceipt, receiptUrl, getObject, deleteObject, storageEnabled } from './storage.js';
 import { verifyGoogleIdToken, googleClientId } from './google.js';
 import { lineEnabled, linePush } from './line.js';
-import { pushKeys, pushTo, saveSub, dropSub, subCount, saveAlerts } from './push.js';
+import { pushKeys, pushTo, saveSub, dropSub, subCount, saveAlerts, saveApns, dropApns } from './push.js';
+import { apnsEnabled } from './apns.js';
 
 const router = express.Router();
 // Compared against when an email is unknown, so login takes the same time either way.
@@ -228,7 +229,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
       notes: notes.map(noteOut),
       line: line ? { groupId: line.group_id, active: line.active } : null,
       linePeople: linePeople.map((x) => ({ userId: x.line_user_id, name: x.name, who: x.who })),
-      features: { line: lineEnabled, push: true, ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
+      features: { line: lineEnabled, push: true, apns: apnsEnabled(), ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
     };
   });
   res.json(out);
@@ -608,6 +609,18 @@ router.post('/push/subscribe', rateLimit(30, 60 * 60000), wrap(async (req, res) 
 
 router.delete('/push/subscribe', wrap(async (req, res) => {
   await dropSub(uid(req), req.body?.endpoint);
+  res.json({ ok: true, devices: await subCount(uid(req)) });
+}));
+
+// The iOS app (ios-app/) registers its APNs device token instead of a Web Push subscription.
+router.post('/push/apns', rateLimit(30, 60 * 60000), wrap(async (req, res) => {
+  if (!apnsEnabled()) throw bad('apns_off', 503);
+  if (!(await saveApns(uid(req), req.body?.token, str(req.body?.device, 60), req.body?.env))) throw bad('bad_token');
+  res.json({ ok: true, devices: await subCount(uid(req)) });
+}));
+
+router.delete('/push/apns', wrap(async (req, res) => {
+  await dropApns(uid(req), req.body?.token);
   res.json({ ok: true, devices: await subCount(uid(req)) });
 }));
 

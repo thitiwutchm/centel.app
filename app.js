@@ -233,6 +233,7 @@ function render() {
   $('.topbar').classList.toggle('hide-nav', !nav);
   $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : ui.billView === 'schedule' ? 'Schedule' : 'บิลทั้งหมด';
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
+  if (window.widgetChanged) window.widgetChanged(); // iOS app: refresh the Home Screen widget (widget.js)
   const fab = $('#addBtn');
   // Home has its own add button in the quick-action row.
   // Schedule has its own floating "รายการประจำ" button (with add inside).

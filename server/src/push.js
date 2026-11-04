@@ -1,5 +1,6 @@
 import webpush from 'web-push';
 import { pool } from './db.js';
+import { apnsEnabled, apnsSend } from './apns.js';
 
 /* Web Push: real notifications on iPhone (iOS 16.4+, app added to the Home Screen) and
    in desktop browsers. The app subscribes in the Account tab and sends the subscription
@@ -25,28 +26,57 @@ export async function pushKeys() {
   return keys;
 }
 
-// Sends { title, body, url, tag } to every device of these users. Devices the push
-// service says are gone (404/410) are forgotten. Returns how many devices got it.
+// Sends { title, body, url, tag } to every device of these users: Web Push subscriptions
+// (Safari Home Screen app, browsers) and the iOS app's APNs tokens (apns.js). Devices the
+// push service says are gone are forgotten. Returns how many devices got it.
 export async function pushTo(userIds, msg) {
   const ids = [...new Set(userIds.filter(Boolean))];
   if (!ids.length) return 0;
-  const subs = (await pool.query('select endpoint, p256dh, auth from push_subs where user_id = any($1)', [ids])).rows;
-  if (!subs.length) return 0;
-  await pushKeys();
-  const payload = JSON.stringify({ title: msg.title, body: msg.body || '', url: msg.url || '/', tag: msg.tag || undefined });
+  const [subs, tokens] = await Promise.all([
+    pool.query('select endpoint, p256dh, auth from push_subs where user_id = any($1)', [ids]).then((r) => r.rows),
+    apnsEnabled() ? pool.query('select token, env from push_apns where user_id = any($1)', [ids]).then((r) => r.rows) : [],
+  ]);
+  if (!subs.length && !tokens.length) return 0;
   let ok = 0;
-  await Promise.all(subs.map(async (s) => {
-    try {
-      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 24 * 3600, urgency: 'high' });
-      ok++;
-      await pool.query('update push_subs set last_ok = now() where endpoint = $1', [s.endpoint]);
-    } catch (e) {
-      if (e.statusCode === 404 || e.statusCode === 410) await pool.query('delete from push_subs where endpoint = $1', [s.endpoint]);
-      else console.error('push', e.statusCode || '', e.body || e.message);
-    }
+  if (subs.length) {
+    await pushKeys();
+    const payload = JSON.stringify({ title: msg.title, body: msg.body || '', url: msg.url || '/', tag: msg.tag || undefined });
+    await Promise.all(subs.map(async (s) => {
+      try {
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 24 * 3600, urgency: 'high' });
+        ok++;
+        await pool.query('update push_subs set last_ok = now() where endpoint = $1', [s.endpoint]);
+      } catch (e) {
+        if (e.statusCode === 404 || e.statusCode === 410) await pool.query('delete from push_subs where endpoint = $1', [s.endpoint]);
+        else console.error('push', e.statusCode || '', e.body || e.message);
+      }
+    }));
+  }
+  await Promise.all(tokens.map(async (t) => {
+    const r = await apnsSend(t.token, t.env, msg);
+    if (r === 'gone') { await pool.query('delete from push_apns where token = $1', [t.token]); return; }
+    if (r === 'failed') return;
+    ok++;
+    await pool.query('update push_apns set last_ok = now(), env = coalesce($2, env) where token = $1', [t.token, r.env || null]);
   }));
   return ok;
 }
+
+// The iOS app's APNs device token (hex). One row per token; a token moves to whoever
+// signed in on that iPhone last.
+const APNS_TOKEN = /^[0-9a-f]{32,200}$/;
+export async function saveApns(userId, token, device, env) {
+  const t = String(token || '').toLowerCase();
+  if (!APNS_TOKEN.test(t)) return false;
+  await pool.query(
+    `insert into push_apns (token, user_id, device, env) values ($1, $2, $3, $4)
+     on conflict (token) do update set user_id = excluded.user_id, device = excluded.device, env = excluded.env`,
+    [t, userId, device || null, env === 'sandbox' ? 'sandbox' : 'production']);
+  return true;
+}
+
+export const dropApns = (userId, token) =>
+  pool.query('delete from push_apns where user_id = $1 and token = $2', [userId, String(token || '').toLowerCase()]);
 
 // Only real push services (Apple, Google, Mozilla, Microsoft), so the api never posts to
 // an address someone made up. PUSH_TEST_ORIGIN lets the tests use a stand-in.
@@ -75,7 +105,8 @@ export const dropSub = (userId, endpoint) =>
   pool.query('delete from push_subs where user_id = $1 and endpoint = $2', [userId, String(endpoint || '')]);
 
 export async function subCount(userId) {
-  return (await pool.query('select count(*)::int as n from push_subs where user_id = $1', [userId])).rows[0].n;
+  return (await pool.query(
+    'select (select count(*) from push_subs where user_id = $1) + (select count(*) from push_apns where user_id = $1) as n', [userId])).rows[0].n * 1;
 }
 
 // Replaces this device's upcoming alerts. Alerts already sent keep their sent_at, so an
