@@ -12,6 +12,7 @@ class CentelViewController: CAPBridgeViewController, UITabBarDelegate {
         webView?.scrollView.showsVerticalScrollIndicator = false
         webView?.scrollView.showsHorizontalScrollIndicator = false
         bridge?.registerPluginInstance(NativeTabsPlugin())
+        bridge?.registerPluginInstance(GoogleAuthPlugin())
     }
 
     override func viewDidLoad() {

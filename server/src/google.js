@@ -7,6 +7,9 @@ const ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
 let keys = { at: 0, byKid: new Map() };
 
 export const googleClientId = () => process.env.GOOGLE_CLIENT_ID || '';
+// The iOS app (ios-app/) signs in with its own iOS OAuth client in the same Google project.
+export const googleIosClientId = () => process.env.GOOGLE_IOS_CLIENT_ID ?? '590849579351-ljsoeokcsmmsffdamqngq3k6qh45jf2r.apps.googleusercontent.com';
+const googleAudiences = () => [googleClientId(), googleIosClientId()].filter(Boolean);
 
 async function signingKey(kid) {
   // Google rotates keys every few days; refetch hourly or when a kid is new.
@@ -22,9 +25,10 @@ async function signingKey(kid) {
 const part = (s) => JSON.parse(Buffer.from(s, 'base64url').toString('utf8'));
 
 // Returns the token's claims, or null when it is not a valid token for this app.
-export async function verifyGoogleIdToken(token, audience = googleClientId(), now = Date.now()) {
+export async function verifyGoogleIdToken(token, audience = googleAudiences(), now = Date.now()) {
+  const auds = [].concat(audience).filter(Boolean);
   const [h, p, sig] = String(token || '').split('.');
-  if (!h || !p || !sig || !audience) return null;
+  if (!h || !p || !sig || !auds.length) return null;
   let header, claims;
   try { header = part(h); claims = part(p); } catch { return null; }
   if (header.alg !== 'RS256' || !header.kid) return null;
@@ -33,7 +37,7 @@ export async function verifyGoogleIdToken(token, audience = googleClientId(), no
   const ok = crypto.verify('RSA-SHA256', Buffer.from(`${h}.${p}`), key, Buffer.from(sig, 'base64url'));
   if (!ok) return null;
   const secs = now / 1000;
-  if (claims.aud !== audience || !ISSUERS.includes(claims.iss)) return null;
+  if (!auds.includes(claims.aud) || !ISSUERS.includes(claims.iss)) return null;
   if (!(claims.exp > secs - 60) || (claims.iat && claims.iat > secs + 300)) return null;
   if (!claims.sub) return null;
   return claims;

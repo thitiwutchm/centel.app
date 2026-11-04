@@ -1,8 +1,8 @@
 // iOS app (ios-app/): the native shell's Liquid Glass tab bar replaces .tabbar.
-// Older app builds have no NativeTabs plugin, so the call fails and .tabbar stays.
+// Older app builds have no NativeTabs plugin, so .tabbar stays.
 (() => {
   const cap = window.Capacitor;
-  if (!cap || !cap.nativePromise || !(cap.isNativePlatform && cap.isNativePlatform())) return;
+  if (!cap || !cap.nativePromise || !(cap.Plugins && cap.Plugins.NativeTabs)) return;
   const bar = document.querySelector('.tabbar');
   if (!bar) return;
   const SYMBOLS = {

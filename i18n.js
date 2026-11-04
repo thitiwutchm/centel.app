@@ -59,6 +59,7 @@ const I18N_EN = {
   '{0} งวด ถึง {1} {2}': '{0} installments until {1} {2}', '· ยอดไม่แน่นอน': '· variable amount',
 
   // Account / settings
+  'เข้าสู่ระบบด้วย Google': 'Sign in with Google', 'สมัครด้วย Google': 'Sign up with Google', 'ใช้รูปจาก Google': 'Use my Google photo',
   '📲 ติดตั้งเป็นแอปบน iPhone': '📲 Install as an iPhone app', 'เปิดหน้านี้ใน Safari': 'Open this page in Safari',
   'แตะปุ่ม': 'Tap the', 'แชร์': 'Share', '(สี่เหลี่ยมมีลูกศรขึ้น)': 'button (square with an up arrow)', 'เลือก': 'Choose',
   'เพิ่มไปยังหน้าจอโฮม': 'Add to Home Screen', 'ใช้งานแบบออฟไลน์ได้ ข้อมูลเก็บไว้ในเครื่องของคุณเท่านั้น': 'Works offline. Your data stays on your device.',

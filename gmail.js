@@ -368,9 +368,22 @@ function gmailPrepare() {
   return gmail.scriptP;
 }
 
+function gmailSaveToken(token, expiresIn) {
+  try { sessionStorage.setItem(GMAIL_TOKEN_KEY, JSON.stringify({ token, exp: Date.now() + (expiresIn || 3600) * 1000 })); } catch (e) { /* ignore */ }
+}
+
 function gmailToken() {
   const saved = gmailSavedToken();
   if (saved) return Promise.resolve(saved);
+  // iOS app: the system Google sheet (cloud.js nativeGoogle), since the popup is blocked in the app.
+  const g = typeof nativeGoogle === 'function' && nativeGoogle();
+  if (g) {
+    return g.signIn({ scopes: [GMAIL_SCOPE] }).then((r) => {
+      if (!r.accessToken || !String(r.scope || '').includes(GMAIL_SCOPE)) throw new Error('ไม่ได้รับสิทธิ์อ่าน Gmail');
+      gmailSaveToken(r.accessToken, r.expiresIn);
+      return r.accessToken;
+    }, (err) => { throw new Error(/cancel/i.test(String((err && (err.code || err.message)) || err)) ? 'ปิดหน้าต่างก่อนอนุญาต' : 'เปิดหน้าต่าง Google ไม่ได้'); });
+  }
   if (!gmail.clientId || !window.google) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า Google Client ID'));
   return new Promise((resolve, reject) => {
     gmail.tokenClient = google.accounts.oauth2.initTokenClient({
@@ -378,7 +391,7 @@ function gmailToken() {
       scope: GMAIL_SCOPE,
       callback: (r) => {
         if (r.error || !r.access_token) { reject(new Error(r.error_description || r.error || 'ไม่ได้รับสิทธิ์')); return; }
-        try { sessionStorage.setItem(GMAIL_TOKEN_KEY, JSON.stringify({ token: r.access_token, exp: Date.now() + (r.expires_in || 3600) * 1000 })); } catch (e) { /* ignore */ }
+        gmailSaveToken(r.access_token, r.expires_in);
         resolve(r.access_token);
       },
       error_callback: (e) => reject(new Error(e && e.type === 'popup_closed' ? 'ปิดหน้าต่างก่อนอนุญาต' : 'เปิดหน้าต่าง Google ไม่ได้')),
