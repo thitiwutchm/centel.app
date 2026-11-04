@@ -1,6 +1,6 @@
 'use strict';
 
-/* App icon picker in Account (iOS app only): the orange Centel icon or the green one.
+/* App icon picker in Account (iOS app only): the Centel icon, or the orange or green มีตังค์ one.
    iOS switches the Home Screen icon through the AppIcon plugin (App/AppIcon.swift) and
    shows its own short notice. Older app builds have no plugin, so nothing is shown.
    Loaded after app.js; renderSettings() calls appIconSettings(). */
@@ -9,8 +9,8 @@
   const cap = window.Capacitor;
   const plugin = cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.AppIcon;
   if (!plugin) return;
-  const ICONS = [['orange', 'ส้ม', 'icons/centel-180.png'], ['green', 'เขียว', 'icons/centel-green-180.png']];
-  let current = 'orange';
+  const ICONS = [['centel', 'Centel', 'icons/centel-180.png'], ['orange', 'ส้ม', 'icons/appicon-orange-180.png'], ['green', 'เขียว', 'icons/appicon-green-180.png']];
+  let current = 'centel';
   let busy = false;
   const rerender = () => { if (ui.tab === 'account') { const y = window.scrollY; render(); window.scrollTo(0, y); } };
   plugin.get().then((r) => { if (r && r.icon && r.icon !== current) { current = r.icon; rerender(); } }).catch(() => {});
