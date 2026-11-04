@@ -442,7 +442,10 @@ function billScheduleText(b) {
 
 function installTip() {
   const standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
-  if (standalone) return '';
+  // The iOS app (ios-app/, Capacitor) is already installed, so it needs no Add to Home Screen tip.
+  const nativeApp = (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
+    || / CentelApp\//.test(navigator.userAgent);
+  if (standalone || nativeApp) return '';
   return `
     <div class="card install-tip">
       <b>📲 ติดตั้งเป็นแอปบน iPhone</b>

@@ -12,7 +12,8 @@
   "ios": {
     "contentInset": "never",
     "scrollEnabled": true,
-    "limitsNavigationsToAppBoundDomains": false
+    "limitsNavigationsToAppBoundDomains": false,
+    "appendUserAgent": "CentelApp/1.0"
   },
   "plugins": {
     "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
