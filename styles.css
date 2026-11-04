@@ -85,6 +85,8 @@ body {
 }
 
 body.with-topbar { padding-top: calc(var(--safe-top) + 56px); }
+/* iOS app: nativetabs.js hands the tabs to the native Liquid Glass tab bar. */
+.native-tabs .tabbar { display: none; }
 
 /* Frosted band under the iOS status bar so scrolled content doesn't run under the clock.
    Zero height in a Safari tab (no safe-area inset); sits below the top bar and sheets. */
