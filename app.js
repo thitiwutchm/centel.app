@@ -234,10 +234,8 @@ function render() {
   $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : ui.billView === 'schedule' ? 'Schedule' : 'บิลทั้งหมด';
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
   const fab = $('#addBtn');
-  // Home has its own add button in the quick-action row.
   // Schedule has its own floating "รายการประจำ" button (with add inside).
-  fab.hidden = ui.tab === 'account' || ui.tab === 'home' || (bills && ui.billView === 'schedule');
-  fab.classList.toggle('ext', ui.tab === 'home' && !ui.fabMini);
+  fab.hidden = ui.tab === 'account' || (bills && ui.billView === 'schedule');
   fab.setAttribute('aria-label', bills ? 'เพิ่มบิล' : ui.tab === 'budgets' ? 'สร้างงบประมาณ' : 'เพิ่มรายการ');
   $('#addLabel').textContent = bills ? 'เพิ่มบิล' : 'เพิ่มรายการ';
   if (ui.tab === 'home') renderHome();
@@ -256,7 +254,6 @@ function render() {
 
 function setTab(tab) {
   ui.tab = tab;
-  ui.fabMini = false;
   window.scrollTo(0, 0);
   render();
 }
@@ -1448,14 +1445,6 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
   const b = e.target.closest('[data-tab]');
   if (b) setTab(b.dataset.tab);
 });
-
-// The home screen's "＋ เพิ่มรายการ" pill shrinks to a round button once you scroll.
-window.addEventListener('scroll', () => {
-  const mini = window.scrollY > 60;
-  if (mini === !!ui.fabMini) return;
-  ui.fabMini = mini;
-  $('#addBtn').classList.toggle('ext', ui.tab === 'home' && !mini);
-}, { passive: true });
 
 document.addEventListener('click', (e) => {
   const t = e.target;
