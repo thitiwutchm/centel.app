@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<dict>
+		<key>URL</key>
+		<string>https://centel.app/api/udid</string>
+		<key>DeviceAttributes</key>
+		<array>
+			<string>UDID</string>
+			<string>PRODUCT</string>
+			<string>VERSION</string>
+		</array>
+	</dict>
+	<key>PayloadOrganization</key>
+	<string>Centel</string>
+	<key>PayloadDisplayName</key>
+	<string>Centel: ขอรหัสเครื่อง (UDID)</string>
+	<key>PayloadDescription</key>
+	<string>ส่งรหัสเครื่อง (UDID) ให้ Centel เพื่อลงทะเบียน iPhone สำหรับติดตั้งแอป โปรไฟล์นี้จะไม่ถูกติดตั้งค้างไว้ในเครื่อง</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+	<key>PayloadUUID</key>
+	<string>50C48FBD-D1BB-4FA5-AD3A-822A0E1C61C7</string>
+	<key>PayloadIdentifier</key>
+	<string>app.centel.udid</string>
+	<key>PayloadType</key>
+	<string>Profile Service</string>
+</dict>
+</plist>

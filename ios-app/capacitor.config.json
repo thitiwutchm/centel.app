@@ -1,0 +1,20 @@
+{
+  "appId": "app.centel",
+  "appName": "Centel",
+  "webDir": "www",
+  "server": {
+    "url": "https://centel.app",
+    "hostname": "centel.app",
+    "iosScheme": "https",
+    "errorPath": "offline.html",
+    "allowNavigation": ["centel.app", "*.centel.app"]
+  },
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}

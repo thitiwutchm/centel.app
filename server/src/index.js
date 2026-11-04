@@ -6,12 +6,15 @@ import { lineWebhook, startReminders } from './line.js';
 import chatRoutes, { bridgeRouter, startChatJobs } from './chat.js';
 import { oauthRouter, wellKnown } from './oauth.js';
 import { mcpRouter, aiRouter } from './mcp.js';
+import { udidReply } from './udid.js';
 
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
 // LINE signs the raw body, so its webhook is read before the JSON parser and the CSRF guard.
 app.post('/api/line/webhook', express.raw({ type: '*/*', limit: '1mb' }), lineWebhook);
+// iOS posts the UDID profile reply as a signed blob with no CSRF header.
+app.post('/api/udid', express.raw({ type: '*/*', limit: '64kb' }), udidReply);
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/api/health', async (_req, res) => {
