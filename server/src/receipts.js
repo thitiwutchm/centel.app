@@ -91,6 +91,11 @@ function schemaFor(labels, cats) {
   };
 }
 
+// Today's date in Bangkok as YYYY-MM-DD, so the model can place a slip that shows no year or says "today".
+export function bangkokToday(now = new Date()) {
+  return new Date(now.getTime() + 7 * 3600e3).toISOString().slice(0, 10);
+}
+
 // categories: [{ id, name, parent? }] from the app; empty means the built-in list.
 export async function analyzeReceipt(base64, mediaType, labels = [], categories = []) {
   if (!client) return { status: 'skipped', result: null };
@@ -105,7 +110,7 @@ export async function analyzeReceipt(base64, mediaType, labels = [], categories 
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-        { type: 'text', text: `Extract the receipt fields. Choose the category only from this list, using the payee/shop name too.\n\nExpense categories (key: name):\n${categoryLines(cats)}` },
+        { type: 'text', text: `Today in Thailand is ${bangkokToday()}. A date written without a year, or as "วันนี้"/"Today"/"เมื่อวาน"/"Yesterday", is relative to that; a payment cannot be after today.\n\nExtract the receipt fields. Choose the category only from this list, using the payee/shop name too.\n\nExpense categories (key: name):\n${categoryLines(cats)}` },
       ],
     }],
   });

@@ -26,6 +26,30 @@
 ตั้ง Mac ไม่ให้หลับตอนเสียบสายชาร์จ (System Settings › Battery/Energy) ไม่อย่างนั้นผู้ช่วยจะขึ้นว่าออฟไลน์
 คำถามที่ค้างจะรอ 30 นาที ส่วนคำสั่ง ทำนัด / เตือน / จด ทำงานบนเซิร์ฟเวอร์เสมอแม้ Mac ปิด
 
+## คุยด้วยเสียง (ไม่บังคับ)
+
+ปุ่มไมค์ในห้องผู้ช่วยอัดเสียงบน iPhone แล้วให้ Mac แปลงเป็นข้อความด้วย [whisper.cpp](https://github.com/ggml-org/whisper.cpp) ก่อนส่งให้ผู้ช่วย
+คำตอบจะถูกอ่านออกเสียงบน iPhone
+
+```
+brew install whisper-cpp ffmpeg
+curl -L -o ~/.centel-bridge/ggml-large-v3-turbo.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+launchctl kickstart -k gui/$(id -u)/app.centel.bridge
+```
+log จะขึ้นว่า `voice on` ถ้าไม่มี whisper ตัวเชื่อมจะรับเฉพาะข้อความที่พิมพ์
+
+## เลขาช่วยเหลือ (ค้นเว็บ)
+
+ห้อง "เลขาช่วยเหลือ" ใช้โมเดลตัวเดียวกัน แต่ตอบได้ทุกเรื่อง และค้นเว็บได้ (DuckDuckGo + อ่านหน้าเว็บ) สำหรับข้อมูลสด เช่น รอบหนัง ข่าว อากาศ
+โมเดลต้องเรียกเครื่องมือ (tool calls) ได้ เช่น qwen3 ผ่าน Ollama (`HERMES_URL=http://127.0.0.1:11434/v1`) ห้องผู้ช่วย Centel ไม่ได้ใช้เว็บ
+อัปเดตตัวเชื่อมโดยไม่แตะไฟล์ตั้งค่า:
+```
+curl -fsSL https://centel.app/bridge/centel_bridge.py -o ~/.centel-bridge/centel_bridge.py
+launchctl kickstart -k gui/$(id -u)/app.centel.bridge
+```
+log จะขึ้นว่า `web on` และบรรทัด `tool web_search …` ตอนค้น ปิดได้ด้วย `WEB_TOOLS=0`
+
 ## ตั้งค่า (`~/.centel-bridge.env`)
 
 | ตัวแปร | ค่าเริ่มต้น | |
@@ -34,8 +58,18 @@
 | `HERMES_URL` | `http://127.0.0.1:8642/v1` | ใช้ Ollama ตรงๆ ได้: `http://127.0.0.1:11434/v1` |
 | `HERMES_KEY` | | `API_SERVER_KEY` ของ Hermes |
 | `HERMES_MODEL` | `hermes-agent` | Ollama: เช่น `hermes3` |
+| `WHISPER_MODEL` | `~/.centel-bridge/ggml-large-v3-turbo.bin` | ไฟล์โมเดล whisper.cpp (เล็กกว่า: `ggml-small.bin`) |
+| `WEB_TOOLS` | `1` | `0` ปิดการค้นเว็บของเลขาช่วยเหลือ |
+| `WHISPER_LANG` | `auto` | หรือ `th` ถ้าพูดไทยอย่างเดียว |
+| `STATUS_REPORT` | `1` | `0` ไม่ส่งสถานะเครื่องให้หน้า บัญชี › สถานะ Mac |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | ที่อยู่ Ollama สำหรับดูโมเดลที่โหลดอยู่ |
 
 ความปลอดภัย: ข้อความในแชทถูกส่งให้ Hermes บน Mac ควรปิด toolset ที่สั่ง terminal / แก้ไฟล์ของ Hermes
 สำหรับงานนี้ (`hermes tools`) เพราะคนในแชทไม่ควรสั่งเครื่อง Mac ได้
+
+สถานะ Mac: ทุก 1 นาที bridge ส่ง CPU, RAM, ดิสก์, uptime, โมเดลใน Ollama, Hermes gateway และเสียง/เว็บ เปิดอยู่ไหม
+ไปที่ `/api/bridge/status` (ตัวเลขเท่านั้น ไม่มีไฟล์หรือข้อความแชท) แสดงที่ บัญชี › ผู้ช่วย AI ในแชท › สถานะ Mac
+อัปเดต bridge โดยไม่ต้องติดตั้งใหม่:
+`curl -fsSL https://centel.app/bridge/centel_bridge.py -o ~/.centel-bridge/centel_bridge.py && launchctl kickstart -k gui/$(id -u)/app.centel.bridge`
 
 หยุด: `launchctl unload ~/Library/LaunchAgents/app.centel.bridge.plist`

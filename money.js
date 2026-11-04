@@ -14,6 +14,7 @@ const WALLET_TYPES = {
   ewallet: { label: 'e-Wallet',    icon: '📱', color: '#00b3a4' },
   saving:  { label: 'เงินออม',     icon: '🐷', color: '#e83e8c' },
   invest:  { label: 'การลงทุน',    icon: '📈', color: '#d98a00' },
+  package: { label: 'แพ็กเกจ',     icon: '🎟️', color: '#e0662b' },
 };
 
 const TX_CATS = {
@@ -70,7 +71,8 @@ const TH_DOW_FULL = ['อาทิตย์', 'จันทร์', 'อัง�
 const defaultMoney = () => ({
   wallets: [{ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0 }],
   txns: [],
-  // budgets: { id, category ('all' or TX_CATS key), amount, walletId ('total' or wallet id) } — repeats every month
+  // budgets: { id, category ('all' or TX_CATS key), amount, walletId ('total' or wallet id),
+  //   period ('month' default, 'week' = Monday–Sunday, 'custom' = startDate..endDate), name?, merchant? (shop filter) }
   budgets: [],
   // labels: { id, name } — tags a transaction can carry several of (t.labels = [label ids])
   labels: [],
@@ -121,6 +123,31 @@ function txCat(t) {
   if (!t.category) return NO_CAT;
   return catById(t.category) || catFallback(t.type);
 }
+/* ---------- Packages ----------
+   A package is paid in one go but used many times (e.g. ฿16,000 for 20 fitness sessions).
+   It lives as a wallet of type 'package' holding the prepaid value: paying for it is a transfer
+   into that wallet (not spending), and each use is an expense of one share (฿800) out of it, so
+   reports count ฿800 per use instead of ฿16,000 on the day it was paid.
+   w.pkg = { price, uses, category, merchant }. Uses left come from the balance, so a package
+   added part-way through (balance = what is left) works the same way. */
+function isPkg(w) { return !!w && w.type === 'package' && !!w.pkg && w.pkg.uses > 0; }
+function pkgPer(w) { return Math.round((w.pkg.price / w.pkg.uses) * 100) / 100; }
+function pkgLeft(w) { const per = pkgPer(w); return per > 0 ? Math.max(0, Math.round(balanceOf(w.id) / per)) : 0; }
+// One use takes one share; the last one takes whatever is left, so the uses add up to the price exactly.
+function pkgUseAmount(w) {
+  const bal = Math.round(balanceOf(w.id) * 100) / 100;
+  return pkgLeft(w) <= 1 ? Math.max(0, bal) : Math.min(pkgPer(w), bal);
+}
+function pkgSub(w) { return `เหลือ ${pkgLeft(w)}/${w.pkg.uses} ครั้ง · ครั้งละ ${baht(pkgPer(w))}`; }
+// The add-expense form, filled in for one use of a package.
+function pkgUseForm(w) {
+  const n = w.pkg.uses - pkgLeft(w) + 1;
+  txnForm(null, {
+    walletId: w.id, amount: pkgUseAmount(w), category: w.pkg.category || '', merchant: w.pkg.merchant || '',
+    note: `${w.name} ครั้งที่ ${n}/${w.pkg.uses}`,
+  });
+}
+
 function labelById(id) { return money.labels.find((l) => l.id === id); }
 // The labels on a transaction that still exist (a deleted label just disappears).
 function txLabels(t) { return (t.labels || []).map(labelById).filter(Boolean); }
@@ -265,6 +292,17 @@ function deltaFor(t, S) {
   return (S.has(t.toWalletId) ? t.amount : 0) - (S.has(t.walletId) ? t.amount : 0);
 }
 
+// What a transaction means for my own money that day: income in, spending out, counting only my
+// share of a shared bill (even when my partner paid, so it has no wallet); a transfer moves money
+// between wallets as before. The day header uses this, so a day of shared meals is not ฿0.
+function costFor(t, S) {
+  if (t.type === 'transfer') return deltaFor(t, S);
+  if (!counts(t) || !inSel(t, S)) return 0;
+  if (t.type === 'income') return t.amount;
+  if (t.type === 'expense') return -t.amount;
+  return 0;
+}
+
 function touches(t, S) {
   if (t.type === 'settle') return S.has(t.walletId) || (!!S.total && !t.walletId);
   return inSel(t, S) || (t.type === 'transfer' && S.has(t.toWalletId));
@@ -310,17 +348,52 @@ function cumDaily(ym, type, filter = () => true, value = (t) => t.amount) {
 
 // A personal budget counts my spending (my share of shared bills); a shared budget
 // counts whole shared bills, once, for the couple.
+// A budget with a shop filter (merchant) only counts spending whose shop or note contains it.
 function budgetFilter(bg) {
   const target = catById(bg.category) ? catById(bg.category).id : bg.category;
-  const cat = (t) => bg.category === 'all' || catIn(t.category, target);
+  const shop = bg.merchant ? bg.merchant.toLowerCase() : '';
+  const cat = (t) => (bg.category === 'all' || catIn(t.category, target))
+    && (!shop || `${t.merchant || ''} ${t.note || ''}`.toLowerCase().includes(shop));
   if (bg.scope === 'shared') return (t) => t.type === 'expense' && t.scope === 'shared' && t.counted && cat(t);
   const S = walletSet(bg.walletId || 'total');
   return (t) => t.type === 'expense' && counts(t) && inSel(t, S) && cat(t);
 }
 function budgetValue(bg) { return bg.scope === 'shared' ? (t) => t.total : (t) => t.amount; }
+
+// The dates a budget covers while month ym is shown: the month, the Monday–Sunday week of
+// the day in view (today in this month, else the month's last or first day), or its own range.
+function budgetWin(bg, ym) {
+  const per = bg.period || 'month';
+  if (per === 'custom' && bg.startDate && bg.endDate) return { from: bg.startDate, to: bg.endDate };
+  if (per === 'week') {
+    const cur = ymOf(new Date());
+    const ref = ym === cur ? today() : parseDs(ym < cur ? `${ym}-${pad(daysInMonth(ym))}` : `${ym}-01`);
+    const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - ((ref.getDay() + 6) % 7));
+    return { from: dateStr(d), to: dateStr(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6)) };
+  }
+  return { from: `${ym}-01`, to: `${ym}-${pad(daysInMonth(ym))}` };
+}
+function winDays(w) { return daysBetween(parseDs(w.from), parseDs(w.to)) + 1; }
+// Days of the window gone by, counting today.
+function winElapsed(w) {
+  const td = dateStr(new Date());
+  return td < w.from ? 0 : td > w.to ? winDays(w) : daysBetween(parseDs(w.from), today()) + 1;
+}
+function budgetMonthly(bg) { return (bg.period || 'month') === 'month'; }
+// The overall monthly budget (ทุกหมวด, no shop filter) that heads the Budgets page.
+function budgetIsCap(bg) { return bg.category === 'all' && budgetMonthly(bg) && !bg.merchant; }
+function budgetLabel(bg) { return bg.name || budgetCat(bg).label; }
+function budgetPeriodText(bg, ym) {
+  if (budgetMonthly(bg)) return '';
+  const w = budgetWin(bg, ym);
+  const a = parseDs(w.from), b = parseDs(w.to);
+  const span = `${thShortDate(a)} – ${thShortDate(b)}${a.getFullYear() !== b.getFullYear() || bg.period === 'custom' ? ` ${String(b.getFullYear() + BE).slice(2)}` : ''}`;
+  return bg.period === 'week' ? `ทุกสัปดาห์ · ${span}` : span;
+}
 function budgetSpent(bg, ym) {
   const f = budgetFilter(bg), v = budgetValue(bg);
-  return txnsInMonth(ym).filter(f).reduce((s, t) => s + v(t), 0);
+  const w = budgetWin(bg, ym);
+  return money.txns.filter((t) => t.date >= w.from && t.date <= w.to && f(t)).reduce((s, t) => s + v(t), 0);
 }
 
 // Share of the month that has passed: 1 for past months, 0 for future ones.
@@ -553,6 +626,7 @@ const ICONS = {
   eyeOff: '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
   chev: '<path d="M9 6l6 6-6 6"/>',
   updown: '<path d="M8 9l4-4 4 4M8 15l4 4 4-4"/>',
+  filter: '<path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
@@ -664,11 +738,12 @@ function ring(pct, cls) {
     <text x="28" y="32" text-anchor="middle">${Math.round(pct)}%</text></svg>`;
 }
 
-function budgetBar(spent, amount, ym) {
-  const pace = monthPace(ym);
+function budgetBar(spent, amount, ym, win) {
+  const td = dateStr(new Date());
+  const pace = win ? winElapsed(win) / winDays(win) : monthPace(ym);
   const cls = paceCls(spent, amount, pace);
   const pct = amount > 0 ? Math.min(100, (spent / amount) * 100) : 0;
-  const showToday = ym === ymOf(new Date());
+  const showToday = win ? td >= win.from && td <= win.to : ym === ymOf(new Date());
   const tp = (pace * 100).toFixed(1);
   return `<div class="bbar"><div class="bfill ${cls}" style="width:${pct}%"></div>${showToday ? `<i class="btoday" style="left:${tp}%"></i>` : ''}</div>
     ${showToday ? `<div class="btoday-wrap"><span class="btoday-lab" style="left:clamp(24px, ${tp}%, calc(100% - 24px))">วันนี้</span></div>` : ''}`;
@@ -723,7 +798,7 @@ function dayGroups(list, S, newestFirst = true) {
   if (newestFirst) days.reverse();
   return days.map((ds) => {
     const items = by[ds];
-    const net = items.reduce((s, t) => s + deltaFor(t, S), 0);
+    const net = items.reduce((s, t) => s + costFor(t, S), 0);
     const d = parseDs(ds);
     return `
       <div class="day-card">
@@ -749,9 +824,20 @@ function renderHome() {
   const wallets = money.wallets.slice(0, 4).map((w) => `
     <button class="item" data-wallet-edit="${w.id}">
       ${walletIco(w)}
-      <div class="main"><div class="name">${esc(w.name)}</div>${w.excluded ? '<div class="sub">ไม่รวมในยอดรวม</div>' : ''}</div>
+      <div class="main"><div class="name">${esc(w.name)}</div>${isPkg(w) ? `<div class="sub">${pkgSub(w)}</div>` : w.excluded ? '<div class="sub">ไม่รวมในยอดรวม</div>' : ''}</div>
       <div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div>
     </button>`).join('');
+  // Packages with uses left, each with a one-tap "used it today" button.
+  const pkgs = money.wallets.filter((w) => isPkg(w) && pkgLeft(w) > 0);
+  const pkgCard = pkgs.length ? `
+    <div class="section-row"><span>แพ็กเกจ</span></div>
+    <div class="card list-card">${pkgs.map((w) => `
+      <div class="item pkg-item">
+        ${walletIco(w)}
+        <div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${pkgSub(w)}</div></div>
+        <button type="button" class="chip pkg-use" data-pkg-use="${w.id}">ใช้ 1 ครั้ง</button>
+      </div>`).join('')}
+    </div>` : '';
 
   const occ = state.bills.length ? occurrences(ym).filter((o) => !o.paid) : [];
   const billsLeft = occ.reduce((s, o) => s + o.amount, 0);
@@ -780,10 +866,13 @@ function renderHome() {
       </div>
     </div>
 
+    <div class="home-grid"><div class="home-col">
     <div class="card list-card">
       <div class="card-head"><b>กระเป๋าเงินของฉัน</b><button class="link-btn" data-action="wallets">ดูทั้งหมด</button></div>
       ${wallets}
     </div>
+
+    ${pkgCard}
 
     ${chatCard()}
 
@@ -798,6 +887,7 @@ function renderHome() {
       ${occ.length ? occ.slice(0, 3).map(occItem).join('') : '<div class="muted pad">🎉 จ่ายครบทุกบิลแล้วเดือนนี้</div>'}
     </div>` : ''}
 
+    </div><div class="home-col">
     ${money.txns.length ? `
     <div class="section-row"><span>รายงานเดือนนี้</span><button class="link-btn" data-action="report" data-ym="${ym}">ดูรายงาน</button></div>
     <div class="card" id="homeReport">${homeReport(ym, S)}</div>
@@ -813,13 +903,17 @@ function renderHome() {
       ${state.bills.length || isCloud() ? '' : '<button class="btn ghost" data-action="sample">ลองใช้ข้อมูลตัวอย่าง</button>'}
     </div>`}
     ${state.bills.length || money.txns.length ? '' : installTip()}
+    </div></div>
   `;
 }
 
 function homeReport(ym, S) {
   const type = ui.reportType;
   const { income, expense } = totalsIn(txnsInMonth(ym), S);
-  const f = (t) => inSel(t, S);
+  // Optional category filter, one per tab; a parent includes its sub-categories.
+  const rc = (ui.reportCat || {})[type];
+  const fc = rc ? catById(rc) : null;
+  const f = (t) => inSel(t, S) && (!fc || catIn(t.category, fc.id));
   const dim = daysInMonth(ym);
   const day = new Date().getDate();
   const cur = cumDaily(ym, type, f).slice(0, day);
@@ -845,6 +939,9 @@ function homeReport(ym, S) {
       <button class="${type === 'expense' ? 'on exp' : ''}" data-rtype="expense"><span>ใช้จ่ายทั้งหมด</span><b class="exp">${kbaht(expense)}</b></button>
       <button class="${type === 'income' ? 'on inc' : ''}" data-rtype="income"><span>รายรับทั้งหมด</span><b class="inc">${kbaht(income)}</b></button>
     </div>
+    <div class="rcat-row">${fc
+      ? `<button class="chip on rcat" data-rcat-pick>${fc.icon} ${esc(fc.parent ? `${catById(fc.parent).label} › ${fc.label}` : fc.label)}</button><button class="rcat-x" data-rcat-clear aria-label="ทุกหมวดหมู่"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>`
+      : `<button class="chip rcat" data-rcat-pick>${svgIcon('filter')}<span>ทุกหมวดหมู่</span></button>`}</div>
     <div class="tip"><span class="muted">${day}/${m}/${parseYm(ym).y + BE}:</span> <b class="${cls}">${kbaht(now)}</b>
       ${avg.length ? `<div class="muted small">เฉลี่ย ${prev.length} เดือนก่อน ณ วันเดียวกัน: <b>${kbaht(avg[day - 1])}</b></div>` : ''}</div>
     ${chart}
@@ -857,6 +954,7 @@ function insightCard(ym, S) {
   const by = {};
   exp.forEach((t) => { const k = catRootId(t.category); by[k] = (by[k] || 0) + t.amount; });
   const [top, spent] = Object.entries(by).sort((a, b) => b[1] - a[1])[0];
+  const all = exp.reduce((sum, t) => sum + t.amount, 0);
   const c = catById(top) || catFallback('expense');
   const day = new Date().getDate();
   const lastYm = addMonths(ym, -1);
@@ -874,7 +972,7 @@ function insightCard(ym, S) {
     <div class="card insight">
       <div class="ins-top">${circleIco(c)}<div><b>${esc(c.label)}</b><div class="muted small">หมวดที่ใช้มากที่สุดเดือนนี้ · รวม <b class="exp">${baht(spent)}</b></div></div></div>
       <div class="ins-row">
-        <div><div class="muted small">เฉลี่ยเดือนนี้</div><div class="ins-avg">${baht(Math.round((spent / day) * 100) / 100)}<span class="muted">/วัน</span></div></div>
+        <div><div class="muted small">เฉลี่ยเดือนนี้</div><div class="ins-avg">${baht(Math.round((all / day) * 100) / 100)}<span class="muted">/วัน</span></div></div>
         ${cmp}
       </div>
     </div>`;
@@ -954,7 +1052,9 @@ function renderTxns() {
 }
 
 function txListHtml(sel) {
-  const S = walletSet(sel);
+  // Under ทั้งหมด the list shows every wallet's entries, also wallets kept out of the total
+  // (ไม่รวมในยอดรวม): those stay out of the balance only, not out of the day's spending.
+  const S = sel === 'total' ? Object.assign(new Set(money.wallets.map((w) => w.id)), { total: true }) : walletSet(sel);
   const q = ui.searchOpen ? ui.search.trim().toLowerCase() : '';
   if (q) {
     const hits = money.txns.filter((t) => touches(t, S) && txFilterOk(t) && [t.note, t.merchant, txCat(t).label, (walletById(t.walletId) || {}).name, String(t.amount), ...txLabels(t).map((l) => l.name)]
@@ -1038,17 +1138,26 @@ function exportCsv() {
 
 /* ---------- Report ---------- */
 
-function reportSheet(ym) {
-  ym = ym || ymOf(new Date());
+// What the report counts: the month's income/expense in the wallet and label
+// the รายการ tab is showing (all wallets elsewhere).
+function reportData(ym) {
   const S = walletSet(ui.tab === 'txns' ? ui.wallet : 'total');
   const lab = ui.tab === 'txns' ? labelById(ui.txLabel) : null;
   const list = txnsInMonth(ym).filter((t) => t.type !== 'transfer' && counts(t) && inSel(t, S) && (!lab || (t.labels || []).includes(lab.id)));
+  return { S, lab, list };
+}
+
+function reportKey(t, type) { return t.category ? catRootId(t.category, type) : '_review'; }
+
+function reportSheet(ym) {
+  ym = ym || ymOf(new Date());
+  const { S, lab, list } = reportData(ym);
   const { income, expense } = totalsIn(list, S);
   const bars = (type) => {
     // Sub-categories roll up into their parent; the split shows under the parent's bar.
     const by = {}, subs = {};
     list.filter((t) => t.type === type).forEach((t) => {
-      const k = t.category ? catRootId(t.category, type) : '_review';
+      const k = reportKey(t, type);
       by[k] = (by[k] || 0) + t.amount;
       const own = t.category && catById(t.category);
       if (own && own.id !== k) { subs[k] = subs[k] || {}; subs[k][own.id] = (subs[k][own.id] || 0) + t.amount; }
@@ -1061,8 +1170,8 @@ function reportSheet(ym) {
       const p = (v / sum) * 100;
       const split = Object.entries(subs[k] || {}).sort((a, b) => b[1] - a[1])
         .map(([id, x]) => `<div class="rep-sub"><span>${esc(catById(id).label)}</span><span>${baht(x)}</span></div>`).join('');
-      return `<div class="item rep">${circleIco(c)}<div class="main"><div class="rep-top"><span class="name">${esc(c.label)}</span><b>${baht(v)}</b></div>
-        <div class="rep-bar"><div style="width:${p}%;background:${c.color}"></div></div><div class="sub">${p.toFixed(1)}%</div>${split}</div></div>`;
+      return `<button class="item rep" data-action="report-cat" data-ym="${ym}" data-type="${type}" data-cat="${esc(k)}">${circleIco(c)}<div class="main"><div class="rep-top"><span class="name">${esc(c.label)}</span><b>${baht(v)}</b></div>
+        <div class="rep-bar"><div style="width:${p}%;background:${c.color}"></div></div><div class="sub">${p.toFixed(1)}%</div>${split}</div>${svgIcon('chev', 'svg-i sm rep-chev')}</button>`;
     }).join('')}</div>`;
   };
   openSheet(`
@@ -1077,6 +1186,66 @@ function reportSheet(ym) {
     </div>
     <div class="section-title">รายจ่ายตามหมวดหมู่</div>${bars('expense')}
     <div class="section-title">รายรับตามหมวดหมู่</div>${bars('income')}
+  `);
+}
+
+// One report row opened up: sub-category split, what was bought (grouped by
+// shop / note), and the transactions themselves. กลับ goes back to the report.
+function reportCatSheet(ym, type, k) {
+  const { S, lab, list: all } = reportData(ym);
+  const ofType = all.filter((t) => t.type === type);
+  const list = ofType.filter((t) => reportKey(t, type) === k);
+  const c = k === '_review' ? NO_CAT : catById(k) || catFallback(type);
+  const total = list.reduce((s, t) => s + t.amount, 0);
+  const typeSum = ofType.reduce((s, t) => s + t.amount, 0);
+  const pct = typeSum ? (total / typeSum) * 100 : 0;
+  const rows = (entries, sum) => `<div class="list">${entries.map(([ico, name, v, meta]) => {
+    const p = sum ? (v / sum) * 100 : 0;
+    return `<div class="item rep">${circleIco(ico)}<div class="main"><div class="rep-top"><span class="name">${name}</span><b>${baht(v)}</b></div>
+      <div class="rep-bar"><div style="width:${p}%;background:${ico.color}"></div></div><div class="sub">${p.toFixed(1)}%${meta ? ` · <span>${meta}</span>` : ''}</div></div></div>`;
+  }).join('')}</div>`;
+
+  // Sub-categories: the parent's own entries show as ไม่ระบุหมวดย่อย.
+  const subs = {};
+  list.forEach((t) => {
+    const own = t.category && catById(t.category);
+    const id = own && own.id !== k ? own.id : '_own';
+    subs[id] = subs[id] || { v: 0, n: 0 };
+    subs[id].v += t.amount; subs[id].n++;
+  });
+  const subRows = Object.entries(subs).sort((a, b) => b[1].v - a[1].v).map(([id, x]) => {
+    const sc = id === '_own' ? c : catById(id);
+    return [sc, id === '_own' ? 'ไม่ระบุหมวดย่อย' : esc(sc.label), x.v, `${x.n} รายการ`];
+  });
+  const showSubs = Object.keys(subs).some((id) => id !== '_own');
+
+  // What's inside: entries with the same shop (or note) add up together.
+  const items = {};
+  list.forEach((t) => {
+    const name = (t.merchant || t.note || '').trim();
+    const key = name.toLowerCase() || '_none';
+    items[key] = items[key] || { name, v: 0, n: 0, cat: txCat(t) };
+    items[key].v += t.amount; items[key].n++;
+  });
+  const itemList = Object.values(items).sort((a, b) => b.v - a.v);
+  const itemRows = itemList.map((x) => [x.cat, x.name ? esc(x.name) : 'ไม่ระบุร้าน/บันทึก', x.v, `${x.n} ครั้ง`]);
+  const showItems = itemList.length > 1 || (itemList[0] && itemList[0].name);
+
+  openSheet(`
+    <div class="sheet-head"><button class="link-btn" data-action="report" data-ym="${ym}">กลับ</button><h2>${thMonthYear(ym)}</h2><span style="width:40px"></span></div>
+    ${lab ? `<div class="chips"><span class="chip on lab">${svgIcon('tag', 'svg-i xs')}${esc(lab.name)}</span></div>` : ''}
+    <div class="card bd">
+      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(c.label)}</div></div></div>
+      <div class="bd-body">
+        <div class="bd-amt ${type === 'income' ? 'inc' : 'exp'}">${baht(total)}</div>
+        <div class="kv" style="padding:8px 2px 0"><span>${type === 'income' ? 'สัดส่วนของรายรับ' : 'สัดส่วนของรายจ่าย'}</span><b>${pct.toFixed(1)}%</b></div>
+        <div class="kv" style="padding:6px 2px 0"><span>จำนวน</span><span>${list.length} รายการ</span></div>
+      </div>
+    </div>
+    ${showSubs ? `<div class="section-title">หมวดย่อย</div>${rows(subRows, total)}` : ''}
+    ${showItems ? `<div class="section-title">สรุปตามร้าน/บันทึก</div>${rows(itemRows, total)}` : ''}
+    <div class="section-title">รายการ</div>
+    ${list.length ? dayGroups(list, S) : '<div class="card muted" style="text-align:center">ไม่มีรายการ</div>'}
   `);
 }
 
@@ -1097,20 +1266,22 @@ function budgetRow(bg, ym) {
   const w = bg.walletId && bg.walletId !== 'total' ? walletById(bg.walletId) : null;
   const pct = bg.amount ? (spent / bg.amount) * 100 : 0;
   const badge = `<span class="badge ${pct > 100 ? 'bad' : pct >= 80 ? 'warn' : 'muted'}">${Math.round(pct)}%</span>`;
+  const sub = [bg.name && bg.name !== c.label ? c.label : '', bg.merchant ? `ร้าน ${bg.merchant}` : '', budgetPeriodText(bg, ym), w ? w.name : ''].filter(Boolean);
   return `
     <button class="card budget" data-budget="${bg.id}">
       <div class="b-top">${circleIco(c)}
-        <div class="main"><div class="name">${esc(c.label)} ${bg.scope === 'shared' ? '<span class="badge share">ร่วม</span>' : ''} ${badge}</div>${w ? `<div class="sub">${esc(w.name)}</div>` : ''}</div>
+        <div class="main"><div class="name">${esc(budgetLabel(bg))} ${bg.scope === 'shared' ? '<span class="badge share">ร่วม</span>' : ''} ${badge}</div>${sub.length ? `<div class="sub">${esc(sub.join(' · '))}</div>` : ''}</div>
         <div class="right"><b>${baht(bg.amount)}</b><div class="sub ${left < 0 ? 'exp' : ''}">${left < 0 ? `เกินงบ ${baht(-left)}` : `เหลือ ${baht(left)}`}</div></div>
       </div>
-      ${budgetBar(spent, bg.amount, ym)}
+      ${budgetBar(spent, bg.amount, ym, budgetMonthly(bg) ? null : budgetWin(bg, ym))}
     </button>`;
 }
 
 // Summary card at the top of Budgets: my budgets, or the shared ones when I only have those.
 function budgetSummary(ym, list) {
-  const allBg = list.find((bg) => bg.category === 'all');
-  const catBgs = list.filter((bg) => bg.category !== 'all');
+  list = list.filter(budgetMonthly);
+  const allBg = list.find(budgetIsCap);
+  const catBgs = list.filter((bg) => bg !== allBg);
   const shared = list.length > 0 && list.every((bg) => bg.scope === 'shared');
   const totalBudget = allBg ? allBg.amount : catBgs.reduce((s, bg) => s + bg.amount, 0);
   const totalSpent = allBg ? budgetSpent(allBg, ym) : catBgs.reduce((s, bg) => s + budgetSpent(bg, ym), 0);
@@ -1142,9 +1313,12 @@ function budgetSummary(ym, list) {
 
 function renderBudgets() {
   const ym = budgetYm();
-  const list = visibleBudgets();
-  const shared = sharedBudgets();
-  const catBgs = list.filter((bg) => bg.category !== 'all');
+  // A custom-range budget shows in the months its range touches.
+  const inView = (bg) => bg.period !== 'custom' || !bg.startDate || (bg.startDate <= `${ym}-31` && bg.endDate >= `${ym}-01`);
+  const list = visibleBudgets().filter(inView);
+  const shared = sharedBudgets().filter(inView);
+  const cap = list.find(budgetIsCap);
+  const catBgs = list.filter((bg) => bg !== cap);
 
   view.innerHTML = `
     <div class="page-head">
@@ -1165,20 +1339,29 @@ function budgetDetail(id) {
   if (!bg) return;
   const ym = budgetYm();
   const c = budgetCat(bg);
-  const dim = daysInMonth(ym);
-  const cur = ymOf(new Date());
-  const f = budgetFilter(bg);
-  const cum = cumDaily(ym, 'expense', f, budgetValue(bg));
+  const win = budgetWin(bg, ym);
+  const dim = winDays(win);
+  const f = budgetFilter(bg), v = budgetValue(bg);
+  const list = money.txns.filter((t) => t.date >= win.from && t.date <= win.to && f(t));
+  // Cumulative spending per day of the window, index 0 = its first day.
+  const start = parseDs(win.from);
+  const cum = new Array(dim).fill(0);
+  list.forEach((t) => { cum[daysBetween(start, parseDs(t.date))] += v(t); });
+  for (let i = 1; i < dim; i++) cum[i] += cum[i - 1];
   const spent = cum[dim - 1];
   const left = bg.amount - spent;
-  const elapsed = ym === cur ? new Date().getDate() : ym < cur ? dim : 0;
+  const elapsed = winElapsed(win);
   const daysLeft = dim - elapsed;
+  const td = dateStr(new Date());
+  const now = td >= win.from && td <= win.to;
+  const future = td < win.from;
   const actualDaily = elapsed ? spent / elapsed : 0;
-  const projected = ym > cur ? 0 : spent + actualDaily * daysLeft;
-  const recommend = left > 0 ? left / Math.max(1, ym === cur ? daysLeft + 1 : ym > cur ? dim : 1) : 0;
+  const projected = future ? 0 : spent + actualDaily * daysLeft;
+  const recommend = left > 0 ? left / Math.max(1, now ? daysLeft + 1 : future ? dim : 1) : 0;
   const w = bg.walletId && bg.walletId !== 'total' ? walletById(bg.walletId) : null;
-  const { m, y } = parseYm(ym);
-  const pts = cum.slice(0, Math.max(elapsed, 1)).map((v, i) => [i, v]);
+  const end = parseDs(win.to);
+  const dlab = (d) => `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear() + BE).slice(2)}`;
+  const pts = cum.slice(0, Math.max(elapsed, 1)).map((x, i) => [i, x]);
   const proj = elapsed && daysLeft ? [[elapsed - 1, spent], [dim - 1, projected]] : [];
   const chart = lineChart({
     dim,
@@ -1187,33 +1370,34 @@ function budgetDetail(id) {
       { pts: proj, cls: projected > bg.amount ? 'exp' : 'avg', dash: true },
     ],
     hline: { v: bg.amount, cls: 'exp' },
-    xLabels: [[0, `1/${m}/${String(y + BE).slice(2)}`], [dim - 1, `${dim}/${m}/${String(y + BE).slice(2)}`]],
+    xLabels: [[0, dlab(start)], [dim - 1, dlab(end)]],
   });
-  const list = txnsInMonth(ym).filter(f);
   const S = walletSet(bg.walletId || 'total');
+  const perName = { week: 'งบรายสัปดาห์', custom: 'งบช่วงเวลาที่กำหนด' }[bg.period] || '';
 
   openSheet(`
     <div class="sheet-head">
       <button class="link-btn" data-action="close">ปิด</button>
-      <h2>${thMonthYear(ym)}</h2>
+      <h2>${budgetMonthly(bg) ? thMonthYear(ym) : perName}</h2>
       <button class="link-btn" data-action="edit-budget" data-id="${bg.id}">แก้ไข</button>
     </div>
     <div class="card bd">
-      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(c.label)}</div></div></div>
+      <div class="b-top">${circleIco(c)}<div class="main"><div class="name big-name">${esc(budgetLabel(bg))}</div>${bg.name && bg.name !== c.label ? `<div class="sub">${esc(c.label)}</div>` : ''}</div></div>
       <div class="bd-body">
         <div class="bd-amt">${baht(bg.amount)}</div>
         <div class="bd-sl"><div><span class="muted">ใช้ไป</span><b>${baht(spent)}</b></div>
           <div style="text-align:right"><span class="muted">${left < 0 ? 'เกินงบ' : 'เหลือ'}</span><b class="${left < 0 ? 'exp' : ''}">${baht(Math.abs(left))}</b></div></div>
-        ${budgetBar(spent, bg.amount, ym)}
-        <div class="bd-meta"><span>⏳</span><div>1 ${TH_MONTHS_SHORT[m - 1]} – ${dim} ${TH_MONTHS_SHORT[m - 1]} ${y + BE}<div class="muted small">${ym === cur ? `เหลืออีก ${daysLeft} วัน` : ym < cur ? 'สิ้นสุดแล้ว' : 'ยังไม่เริ่ม'}</div></div></div>
+        ${budgetBar(spent, bg.amount, ym, budgetMonthly(bg) ? null : win)}
+        <div class="bd-meta"><span>⏳</span><div>${thShortDate(start)} – ${thShortDate(end)} ${end.getFullYear() + BE}<div class="muted small">${now ? `เหลืออีก ${daysLeft} วัน` : future ? 'ยังไม่เริ่ม' : 'สิ้นสุดแล้ว'}</div></div></div>
         <div class="bd-meta"><span${wImg(w) ? ' class="has-img"' : ''}>${bg.scope === 'shared' ? '🤝' : w ? wFace(w) : '🌐'}</span><div>${bg.scope === 'shared' ? `งบร่วมกับ ${esc(partnerName())}` : w ? esc(w.name) : 'ทุกกระเป๋าเงิน'}</div></div>
+        ${bg.merchant ? `<div class="bd-meta"><span>🏪</span><div>นับเฉพาะร้าน “${esc(bg.merchant)}”</div></div>` : ''}
       </div>
     </div>
     <div class="card chart-card">
       ${chart}
       <div class="legend"><span><i class="dot bud"></i>ใช้จริงสะสม</span><span><i class="dot exp"></i>งบ ${kbaht(bg.amount)}</span>${proj.length ? '<span><i class="dot avg"></i>คาดการณ์</span>' : ''}</div>
       <div class="kv"><span>ควรใช้ต่อวัน</span><b>${baht(Math.round(recommend * 100) / 100)}</b></div>
-      <div class="kv"><span>คาดว่าจะใช้ทั้งเดือน</span><b class="${projected > bg.amount ? 'exp' : ''}">${baht(Math.round(projected * 100) / 100)}</b></div>
+      <div class="kv"><span>คาดว่าจะใช้ทั้ง${budgetMonthly(bg) ? 'เดือน' : bg.period === 'week' ? 'สัปดาห์' : 'ช่วง'}</span><b class="${projected > bg.amount ? 'exp' : ''}">${baht(Math.round(projected * 100) / 100)}</b></div>
       <div class="kv"><span>ใช้จริงเฉลี่ยต่อวัน</span><b>${baht(Math.round(actualDaily * 100) / 100)}</b></div>
     </div>
     ${list.length ? `<div class="section-title">รายการในงบนี้ (${list.length})</div>${dayGroups(list, S)}` : ''}
@@ -1222,7 +1406,8 @@ function budgetDetail(id) {
 
 function budgetForm(bg, preset = {}) {
   const isNew = !bg;
-  const d = bg ? { ...bg } : { category: 'food', amount: '', walletId: ui.wallet === 'total' ? 'total' : ui.wallet, scope: 'personal', ...preset };
+  const d = bg ? { ...bg } : { category: 'food', amount: '', walletId: ui.wallet === 'total' ? 'total' : ui.wallet, scope: 'personal', period: 'month', ...preset };
+  d.period = d.period || 'month';
   const canShare = isCloud() && !!cloud.partner;
   const chips = [['all', ALL_CAT], ...catsOf('expense')].map(([k, c]) =>
     `<button type="button" class="cat ${d.category === k ? 'on' : ''}" data-bcat="${k}">${circleIco(c, 'ico round')}<span>${esc(c.label)}</span></button>`).join('');
@@ -1241,7 +1426,14 @@ function budgetForm(bg, preset = {}) {
         <option value="total">ทุกกระเป๋าเงิน</option>
         ${money.wallets.map((w) => `<option value="${w.id}" ${d.walletId === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
       </select></div>
-      <div class="kv"><span>รอบงบประมาณ</span><span>ทุกเดือน</span></div>
+      <div class="field"><label for="bName">ชื่องบ</label><input id="bName" maxlength="60" placeholder="ไม่ใส่ก็ได้ เช่น ซูชิโร่" value="${esc(d.name || '')}"></div>
+      <div class="field"><label for="bShop">เฉพาะร้าน</label><input id="bShop" maxlength="60" placeholder="ทุกร้าน" value="${esc(d.merchant || '')}"></div>
+    </div>
+    <div class="section-title">รอบงบประมาณ</div>
+    <div class="seg" id="bPeriod"><button type="button" data-bper="month">ทุกเดือน</button><button type="button" data-bper="week">ทุกสัปดาห์</button><button type="button" data-bper="custom">กำหนดเอง</button></div>
+    <div class="form" id="bRange">
+      <div class="field"><label for="bFrom">ตั้งแต่</label><input type="date" id="bFrom" value="${esc(d.startDate || dateStr(new Date()))}"></div>
+      <div class="field"><label for="bTo">ถึง</label><input type="date" id="bTo" value="${esc(d.endDate || '')}"></div>
     </div>
     ${isNew ? '' : '<button class="btn danger" id="delBudget">ลบงบประมาณ</button>'}
   `);
@@ -1250,6 +1442,15 @@ function budgetForm(bg, preset = {}) {
     $('#bWalletRow').hidden = d.scope === 'shared';
   };
   renderScope();
+  const renderPeriod = () => {
+    document.querySelectorAll('#bPeriod button').forEach((x) => x.classList.toggle('on', x.dataset.bper === d.period));
+    $('#bRange').hidden = d.period !== 'custom';
+  };
+  renderPeriod();
+  $('#bPeriod').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bper]');
+    if (b) { d.period = b.dataset.bper; renderPeriod(); }
+  });
   if (canShare) $('#bScope').addEventListener('click', (e) => {
     const b = e.target.closest('[data-bscope]');
     if (b) { d.scope = b.dataset.bscope; renderScope(); }
@@ -1264,9 +1465,17 @@ function budgetForm(bg, preset = {}) {
     const amount = num($('#bAmount').value);
     if (!(amount > 0)) { toast('กรุณาใส่จำนวนเงิน'); $('#bAmount').focus(); return; }
     const scope = d.scope === 'shared' ? 'shared' : 'personal';
-    const out = { id: d.id || newId(), scope, category: d.category, amount, walletId: scope === 'shared' ? 'total' : $('#bWallet').value };
-    const dup = money.budgets.find((x) => x.id !== out.id && (x.scope || 'personal') === scope && x.category === out.category && (x.walletId || 'total') === out.walletId);
-    if (dup) { toast('มีงบของหมวดนี้อยู่แล้ว'); return; }
+    const out = { id: d.id || newId(), scope, category: d.category, amount, walletId: scope === 'shared' ? 'total' : $('#bWallet').value,
+      name: $('#bName').value.trim() || undefined, merchant: $('#bShop').value.trim() || undefined, period: d.period };
+    if (d.period === 'custom') {
+      out.startDate = $('#bFrom').value; out.endDate = $('#bTo').value;
+      if (!out.startDate || !out.endDate || out.endDate < out.startDate) { toast('กรุณาเลือกวันเริ่มและวันสิ้นสุด'); return; }
+    }
+    // Same category, wallet, period, name and shop = the same budget.
+    const key = (x) => [x.scope || 'personal', x.category, x.walletId || 'total', x.period || 'month', x.startDate || '', x.endDate || '',
+      (x.name || '').toLowerCase(), (x.merchant || '').toLowerCase()].join('|');
+    const dup = money.budgets.find((x) => x.id !== out.id && key(x) === key(out));
+    if (dup) { toast('มีงบนี้อยู่แล้ว ตั้งชื่องบให้ต่างกันได้'); return; }
     saveBudget(out); closeSheet(); render(); if (isNew) popIn();
     toast(isNew ? 'สร้างงบประมาณแล้ว' : 'บันทึกแล้ว');
   });
@@ -1284,7 +1493,9 @@ function budgetForm(bg, preset = {}) {
 
 // Category picker layered over the open sheet: the top-level grid, and a parent with
 // sub-categories shows its subs underneath. Picking one calls onPick(id) and closes.
-function catPicker(type, current, onPick) {
+// With opts.filter it picks a filter instead: a parent's first sub chip is ทั้งหมด (parent + subs),
+// and ทุกหมวดหมู่ clears it (onPick('')).
+function catPicker(type, current, onPick, opts = {}) {
   const old = $('#catLayer');
   if (old) old.remove();
   const layer = document.createElement('div');
@@ -1292,6 +1503,7 @@ function catPicker(type, current, onPick) {
   layer.innerHTML = `<div class="sheet-backdrop cat-layer-bg"></div><section class="sheet cat-layer" role="dialog" aria-modal="true">
     <div class="grabber"></div>
     <div class="sheet-head"><button class="close-x" data-cpclose aria-label="ยกเลิก"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button><h2>หมวดหมู่</h2><span class="sheet-head-pad"></span></div>
+    ${opts.filter ? `<div class="chips cp-all"><button type="button" class="chip ${current ? '' : 'on'}" data-cpsub="">ทุกหมวดหมู่</button></div>` : ''}
     <div class="cat-grid" id="cpGrid"></div><div class="chips sub-cats" id="cpSubs" hidden></div></section>`;
   document.body.appendChild(layer);
   let root = current ? catRootId(current, type) : '';
@@ -1302,7 +1514,7 @@ function catPicker(type, current, onPick) {
     const kids = root ? catChildren(root) : [];
     $('#cpSubs').hidden = !kids.length;
     $('#cpSubs').innerHTML = kids.length ? [catById(root), ...kids].map((c, i) =>
-      `<button type="button" class="chip sub-pick ${current === c.id ? 'on' : ''}" data-cpsub="${c.id}">${c.icon} ${i ? esc(c.label) : 'ทั่วไป'}</button>`).join('') : '';
+      `<button type="button" class="chip sub-pick ${current === c.id ? 'on' : ''}" data-cpsub="${c.id}">${c.icon} ${i ? esc(c.label) : (opts.filter ? 'ทั้งหมด' : 'ทั่วไป')}</button>`).join('') : '';
   };
   paint();
   layer.addEventListener('click', (e) => {
@@ -1389,6 +1601,12 @@ function txnForm(t, preset = {}) {
           <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div></div></div>
       <div class="tr" id="tWalletRow"><div class="tr-ico">${svgIcon('wallet')}</div>
         <div class="tr-body"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
+      ${isNew ? `<div class="tr" id="tPkgRow"><div class="tr-ico">${svgIcon('repeat')}</div>
+        <div class="tr-body"><label for="tPkg">จ่ายก้อน ใช้หลายครั้ง</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="tPkg"><span></span></label></div></div>
+      <div class="tr" id="tPkgBody" hidden><div class="tr-ico"></div>
+        <div class="tr-body col"><span class="tr-lab">แพ็กเกจ</span>
+          <div class="pkg-uses"><input id="tPkgUses" inputmode="numeric" placeholder="จำนวนครั้ง เช่น 20" aria-label="จำนวนครั้ง" autocomplete="off"><span>ครั้ง</span></div>
+          <div class="kv"><span>นับเป็นรายจ่ายครั้งละ</span><b id="tPkgPer">-</b></div></div></div>` : ''}
       <div class="tr" id="tToRow"><div class="tr-ico">${svgIcon('swap')}</div>
         <div class="tr-body"><label for="tTo">ไปยัง</label><select id="tTo"></select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
       <div class="tr" id="tNoteRow"><div class="tr-ico">${svgIcon('note')}</div>
@@ -1402,6 +1620,7 @@ function txnForm(t, preset = {}) {
       <div class="tr tr-labels"><div class="tr-ico">${svgIcon('tag')}</div>
         <div class="tr-body col"><span class="tr-lab">ป้ายกำกับ</span><div class="chips lab-pick" id="tLabels"></div></div></div>
     </div>
+    <p class="hint" id="tPkgHint" hidden>ยอดก้อนนี้ไม่นับเป็นรายจ่ายทั้งก้อน เงินจะย้ายจากกระเป๋าเงินไปเก็บเป็นแพ็กเกจ และนับเป็นรายจ่ายทีละครั้งเมื่อกด "ใช้ 1 ครั้ง" ที่หน้าหลัก</p>
     <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
     ${d.billId && !linkedBill && !isNew ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
     ${isNew ? '' : '<button class="btn danger" id="delTx">ลบรายการ</button>'}
@@ -1415,6 +1634,15 @@ function txnForm(t, preset = {}) {
     document.querySelectorAll('#tSplit button').forEach((x) => x.classList.toggle('on', x.dataset.split === d.split));
     $('#tMine').textContent = baht(myShare(num($('#tAmount').value) || 0));
   };
+  const pkgOn = () => !!$('#tPkg') && $('#tPkg').checked;
+  const paintPkg = () => {
+    if (!$('#tPkgRow')) return;
+    const on = pkgOn();
+    $('#tPkgBody').hidden = !on || $('#tPkgRow').hidden;
+    $('#tPkgHint').hidden = !on;
+    const total = num($('#tAmount').value), uses = Math.floor(num($('#tPkgUses').value));
+    $('#tPkgPer').textContent = total > 0 && uses > 0 ? baht(Math.round((total / uses) * 100) / 100) : '-';
+  };
   const renderType = () => {
     document.querySelectorAll('#txType button').forEach((x) => x.classList.toggle('on', x.dataset.ttype === d.type));
     document.querySelectorAll('#txScope button').forEach((x) => x.classList.toggle('on', x.dataset.scope === d.scope));
@@ -1427,6 +1655,13 @@ function txnForm(t, preset = {}) {
     if ($('#tBillRow')) $('#tBillRow').hidden = d.type !== 'expense';
     $('#tToRow').hidden = !transfer;
     $('#tShareRows').hidden = !sh;
+    // A package is a personal expense paid in one go; not a bill payment, not shared.
+    const canPkg = d.type === 'expense' && !sh && !d.billId && !isPkg(walletById($('#tWallet').value));
+    if ($('#tPkgRow')) {
+      $('#tPkgRow').hidden = !canPkg;
+      if (!canPkg) $('#tPkg').checked = false;
+      paintPkg();
+    }
     $('#tShareHint').hidden = !sh;
     // The wallet only matters when I am the one paying.
     $('#tWalletRow').hidden = sh && d.payerId !== me;
@@ -1485,14 +1720,27 @@ function txnForm(t, preset = {}) {
     renderType();
   });
   $('#tCatOpen').addEventListener('click', () => catPicker(d.type, d.category, (id) => { d.category = id; paintCats(); }));
-  $('#tAmount').addEventListener('input', updateShares);
+  $('#tAmount').addEventListener('input', () => { updateShares(); paintPkg(); });
+  if ($('#tPkg')) {
+    $('#tPkg').addEventListener('change', () => { paintPkg(); if (pkgOn()) $('#tPkgUses').focus(); });
+    $('#tPkgUses').addEventListener('input', paintPkg);
+  }
   $('#tSplit').addEventListener('click', (e) => {
     const b = e.target.closest('[data-split]');
     if (!b) return;
     d.split = b.dataset.split;
     updateShares();
   });
-  $('#tWallet').addEventListener('change', () => { if (d.type === 'transfer') renderType(); });
+  $('#tWallet').addEventListener('change', () => {
+    // Paying from a package fills in one use of it.
+    const w = walletById($('#tWallet').value);
+    if (d.type === 'expense' && isPkg(w)) {
+      if (!num($('#tAmount').value)) $('#tAmount').value = pkgUseAmount(w);
+      if (!d.category && w.pkg.category) d.category = w.pkg.category;
+      if (!$('#tMerchant').value && w.pkg.merchant) $('#tMerchant').value = w.pkg.merchant;
+    }
+    renderType();
+  });
   $('#tTo').addEventListener('change', (e) => { d.toWalletId = e.target.value; });
 
   // Pending bills, those whose amount is closest to `amt` first (a slip's amount usually matches one).
@@ -1536,7 +1784,8 @@ function txnForm(t, preset = {}) {
         const x = r.result;
         if (x) {
           if (x.amount) $('#tAmount').value = x.amount;
-          if (x.date) { $('#tDate').value = x.date; paintDate(); }
+          // The transaction goes on the slip's own day; a date after today is a misread, so today stays.
+          if (x.date && x.date <= dateStr(new Date())) { $('#tDate').value = x.date; paintDate(); }
           if (x.merchant) $('#tMerchant').value = x.merchant;
           if (x.note && !$('#tNote').value) $('#tNote').value = x.note;
           if (x.reference) d.slipRef = x.reference;
@@ -1565,6 +1814,8 @@ function txnForm(t, preset = {}) {
           failed: '⚠️ อ่านสลิปไม่สำเร็จ แนบรูปไว้แล้ว กรุณากรอกข้อมูลเอง',
           skipped: '🧾 แนบรูปแล้ว (ยังไม่ได้เปิดการอ่านสลิปอัตโนมัติ)',
         }[r.status] || '🧾 แนบรูปแล้ว');
+        const onDay = $('#tDate').value;
+        if (onDay && onDay !== dateStr(new Date())) $('#rcStatus').insertAdjacentHTML('beforeend', `<p class="hint rc-status">📅 วันที่ตามสลิป ${thDate(onDay)} รายการจะอยู่ในวันนั้น ไม่ใช่วันนี้ แก้วันที่ได้ด้านบน</p>`);
         if (billHit) $('#rcStatus').insertAdjacentHTML('beforeend', `<p class="hint rc-status">🧾 ยอดตรงกับบิล ${esc(billHit.bill.name)} (${thMonthYear(billHit.ym)}) จะตัดบิลนี้ให้เมื่อบันทึก</p>`);
       } catch (e) {
         status('❌ อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
@@ -1598,6 +1849,28 @@ function txnForm(t, preset = {}) {
       if (d.slipRef) out.slipRef = d.slipRef;
     }
     if (d.billId) { out.billId = d.billId; out.billYm = d.billYm; }
+    if (pkgOn() && d.type === 'expense' && !shared()) {
+      // Paid in one go for many uses: the money moves into a new package wallet (a transfer, not
+      // spending); each use later is an expense of one share out of it.
+      const uses = Math.floor(num($('#tPkgUses').value));
+      if (!(uses > 1)) { toast('กรุณาใส่จำนวนครั้ง (อย่างน้อย 2)'); $('#tPkgUses').focus(); return; }
+      if ((d.currency || 'THB') !== 'THB') { toast('แพ็กเกจรองรับเฉพาะเงินบาท'); return; }
+      const c = out.category ? catById(out.category) : null;
+      const name = (out.merchant || out.note || (c && c.label) || 'แพ็กเกจ').slice(0, 60);
+      const pw = { id: uid(), name, type: 'package', initial: 0, excluded: false,
+        pkg: { price: total, uses, category: out.category || null, merchant: out.merchant || '' } };
+      if (c) pw.icon = c.icon;
+      saveWallet(pw);
+      const tx = { id: out.id, type: 'transfer', amount: total, walletId: out.walletId, toWalletId: pw.id, date,
+        note: out.note || `ซื้อแพ็กเกจ ${name} (${uses} ครั้ง)`, scope: 'personal', labels: out.labels };
+      if (out.receiptKey) tx.receiptKey = out.receiptKey;
+      if (out.slipRef) tx.slipRef = out.slipRef;
+      saveTxn(tx);
+      if (money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
+      closeSheet(); render(); popIn();
+      toast(`สร้างแพ็กเกจ ${name} แล้ว ครั้งละ ${baht(pkgPer(pw))}`);
+      return;
+    }
     if (shared()) {
       // A record for my partner to see, counted straight away; the split only sets each person's cost.
       const mine = myShare(total);
@@ -1662,7 +1935,7 @@ function walletSheet(mode = 'pick') {
   const row = (w) => `
     <button class="item" ${mode === 'pick' ? `data-wallet-sel="${w ? w.id : 'total'}"` : w ? `data-wallet-edit="${w.id}"` : ''}>
       ${walletIco(w)}
-      <div class="main"><div class="name">${esc(w ? w.name : 'ยอดรวม')}</div><div class="sub">${masked(sbaht(balanceOf(w ? w.id : 'total')))}</div></div>
+      <div class="main"><div class="name">${esc(w ? w.name : 'ยอดรวม')}</div><div class="sub">${masked(sbaht(balanceOf(w ? w.id : 'total')))}${isPkg(w) ? ` · ${pkgSub(w)}` : ''}</div></div>
       ${mode === 'pick' && ui.wallet === (w ? w.id : 'total') ? '<span class="tick">✓</span>' : ''}
       ${mode === 'edit' && w ? svgIcon('chev', 'svg-i sm muted') : ''}
     </button>`;
@@ -1711,9 +1984,15 @@ function walletForm(w) {
     <div class="form">
       <div class="field"><label for="wName">ชื่อ</label><input id="wName" placeholder="เช่น KBank ออมทรัพย์" value="${esc(d.name)}" autocomplete="off"></div>
       <div class="field"><label for="wInit">ยอดเริ่มต้น (฿)</label><input id="wInit" inputmode="decimal" placeholder="0" value="${d.initial === '' ? '' : d.initial}"></div>
-      <div class="field"><label for="wExcl">ไม่รวมในยอดรวม</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="wExcl" ${d.excluded ? 'checked' : ''}><span></span></label></div>
+      <div id="wPkgRows">
+        <div class="field"><label for="wPkgPrice">ราคาแพ็กเกจ (฿)</label><input id="wPkgPrice" inputmode="decimal" placeholder="เช่น 16000" value="${d.pkg ? d.pkg.price : ''}"></div>
+        <div class="field"><label for="wPkgUses">จำนวนครั้ง</label><input id="wPkgUses" inputmode="numeric" placeholder="เช่น 20" value="${d.pkg ? d.pkg.uses : ''}"></div>
+        <div class="field"><label>หมวดหมู่</label><span style="flex:1"></span><button type="button" class="chip" id="wPkgCat"></button></div>
+        <div class="kv"><span>ตกครั้งละ</span><b id="wPkgPer">-</b></div>
+      </div>
+      <div class="field" id="wExclRow"><label for="wExcl">ไม่รวมในยอดรวม</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="wExcl" ${d.excluded ? 'checked' : ''}><span></span></label></div>
     </div>
-    <p class="hint">บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000</p>
+    <p class="hint" id="wHint">บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000</p>
     ${isNew ? '' : `<button class="btn danger" id="delWallet">ลบกระเป๋าเงิน${used ? 'และรายการทั้งหมด' : ''}</button>`}
   `);
   $('#wTypes').addEventListener('click', (e) => {
@@ -1722,7 +2001,27 @@ function walletForm(w) {
     d.type = c.dataset.wtype;
     document.querySelectorAll('#wTypes .chip').forEach((x) => x.classList.toggle('on', x === c));
     paintPic();
+    paintPkg();
   });
+  // A package holds prepaid value: its balance is what is left to use, always part of the total
+  // (otherwise its uses would drop out of the reports).
+  const pkgCat = { id: d.pkg ? d.pkg.category || '' : '' };
+  const paintPkg = () => {
+    const on = d.type === 'package';
+    $('#wPkgRows').hidden = !on;
+    $('#wExclRow').hidden = on;
+    $('#wHint').textContent = on
+      ? 'ยอดเริ่มต้น = มูลค่าที่ยังเหลือใช้ (แพ็กเกจใหม่ใส่เท่าราคาเต็ม) ทุกครั้งที่ใช้ บันทึกเป็นรายจ่ายครั้งละส่วน ไม่ใช่ทั้งก้อน'
+      : 'บัตรเครดิตที่มียอดค้างชำระ ให้ใส่ยอดเริ่มต้นเป็นค่าติดลบ เช่น -12000';
+    const price = num($('#wPkgPrice').value), uses = Math.floor(num($('#wPkgUses').value));
+    $('#wPkgPer').textContent = price > 0 && uses > 0 ? baht(Math.round((price / uses) * 100) / 100) : '-';
+    const c = pkgCat.id ? catById(pkgCat.id) : null;
+    $('#wPkgCat').textContent = c ? `${c.icon} ${c.label}` : 'เลือกหมวดหมู่';
+  };
+  paintPkg();
+  $('#wPkgPrice').addEventListener('input', paintPkg);
+  $('#wPkgUses').addEventListener('input', paintPkg);
+  $('#wPkgCat').addEventListener('click', () => catPicker('expense', pkgCat.id, (id) => { pkgCat.id = id; paintPkg(); }));
   const paintPic = () => {
     $('#wAvatar').innerHTML = walletIco(d, 'w-avatar-in') + '<span class="w-cam">✎</span>';
     $('#wReset').hidden = !d.icon;
@@ -1754,6 +2053,13 @@ function walletForm(w) {
     const initial = raw.startsWith('-') ? -num(raw.slice(1)) : num(raw);
     const out = { id: d.id || uid(), name, type: d.type, initial, excluded: $('#wExcl').checked };
     if (d.icon) out.icon = d.icon;
+    if (d.type === 'package') {
+      const price = num($('#wPkgPrice').value), uses = Math.floor(num($('#wPkgUses').value));
+      if (!(price > 0)) { toast('กรุณาใส่ราคาแพ็กเกจ'); $('#wPkgPrice').focus(); return; }
+      if (!(uses > 0)) { toast('กรุณาใส่จำนวนครั้ง'); $('#wPkgUses').focus(); return; }
+      out.excluded = false;
+      out.pkg = { ...(d.pkg || {}), price, uses, category: pkgCat.id || null };
+    }
     saveWallet(out); render(); walletSheet('edit');
     toast(isNew ? 'เพิ่มกระเป๋าเงินแล้ว' : 'บันทึกแล้ว');
   });
@@ -2114,7 +2420,7 @@ function accountTop() {
     </div>
     <div class="section-title">กระเป๋าเงิน</div>
     <div class="list">
-      ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
+      ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${isPkg(w) ? pkgSub(w) : wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
       <button class="item add-row" data-action="add-wallet"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มกระเป๋าเงิน</div></div></button>
     </div>
     <div class="section-title">หมวดหมู่และป้ายกำกับ</div>
@@ -2212,6 +2518,8 @@ function moneyClick(t) {
   if (bud) { budgetDetail(bud.dataset.budget); return true; }
   const ws = t.closest('[data-wallet-sel]');
   if (ws) { ui.wallet = ws.dataset.walletSel; closeSheet(); render(); return true; }
+  const pu = t.closest('[data-pkg-use]');
+  if (pu) { const w = walletById(pu.dataset.pkgUse); if (isPkg(w)) pkgUseForm(w); return true; }
   const we = t.closest('[data-wallet-edit]');
   if (we) { const w = walletById(we.dataset.walletEdit); if (w) walletForm(w); return true; }
   const per = t.closest('[data-period]');
@@ -2220,6 +2528,13 @@ function moneyClick(t) {
   if (bo) { ui.budgetOff = Number(bo.dataset.boff); render(); return true; }
   const rt = t.closest('[data-rtype]');
   if (rt) { ui.reportType = rt.dataset.rtype; $('#homeReport').innerHTML = homeReport(ymOf(new Date()), walletSet('total')); return true; }
+  const repaintReport = () => { if ($('#homeReport')) $('#homeReport').innerHTML = homeReport(ymOf(new Date()), walletSet('total')); };
+  if (t.closest('[data-rcat-clear]')) { ui.reportCat = { ...ui.reportCat, [ui.reportType]: '' }; repaintReport(); return true; }
+  if (t.closest('[data-rcat-pick]')) {
+    const type = ui.reportType;
+    catPicker(type, (ui.reportCat || {})[type] || '', (id) => { ui.reportCat = { ...ui.reportCat, [type]: id }; repaintReport(); }, { filter: true });
+    return true;
+  }
   const go = t.closest('[data-goto]');
   if (go) { closeSheet(); setTab(go.dataset.goto); return true; }
   return false;
@@ -2247,6 +2562,7 @@ function moneyAction(action, el) {
     case 'label-filter': labelFilterSheet(); break;
     case 'csv': closeSheet(); exportCsv(); break;
     case 'report': reportSheet(el.dataset.ym); break;
+    case 'report-cat': reportCatSheet(el.dataset.ym, el.dataset.type, el.dataset.cat); break;
     case 'add-budget': budgetForm(); break;
     case 'add-budget-all': budgetForm(null, { category: 'all' }); break;
     case 'add-budget-shared': budgetForm(null, { scope: 'shared', category: 'all' }); break;

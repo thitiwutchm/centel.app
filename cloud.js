@@ -1,5 +1,7 @@
-/* Signed-in mode: the account, the couple link and shared expenses live in the
-   centel.app API (/api, see server/). Signed out, the app keeps working from localStorage.
+/* Signed-in mode: the account, the couple link, wallets, transactions, budgets, shared expenses
+   and the bill planner (bills, monthly records, settings, invoice files) live in the centel.app
+   API (/api, see server/), so every device signed in to the account shows the same data.
+   Signed out, the app keeps working from localStorage.
    Loaded before money.js; `money`, `render`, `toast` and friends are looked up at call time. */
 
 const CLOUD_KEY = 'centel.cloud.v1';
@@ -18,6 +20,7 @@ const cloud = {
   features: {},
   ids: new Set(),
   queue: Promise.resolve(),
+  fresh: false, // got the server copy at least once since signing in (not just the cached one)
 };
 
 function isCloud() { return cloud.on; }
@@ -137,7 +140,8 @@ function applyBootstrap(b) {
   money = {
     wallets: b.wallets.length ? b.wallets : [{ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0 }],
     txns,
-    budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId })),
+    budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId,
+      name: x.name || undefined, period: x.period || 'month', startDate: x.startDate || undefined, endDate: x.endDate || undefined, merchant: x.merchant || undefined })),
     labels: (b.labels || []).map((l) => ({ id: l.id, name: l.name })),
     prefs,
   };
@@ -151,8 +155,12 @@ async function cloudRefresh() {
     cloud.available = true;
     applyBootstrap(b);
     notesAdopt();
-    try { localStorage.setItem(CLOUD_KEY, JSON.stringify(b)); } catch (e) { /* full */ }
+    const first = !cloud.fresh;
+    cloud.fresh = true;
+    plannerMergeIn(b.user.id, b.planner);
+    try { localStorage.setItem(CLOUD_KEY, JSON.stringify({ ...b, planner: undefined })); } catch (e) { /* full */ }
     render();
+    if (first) setTimeout(billFilesSweep, 1500);
     if (needNickname() && $('#sheet').hidden) nicknameSheet();
     chatBoot();
     return b;
@@ -177,6 +185,8 @@ function scheduleRefresh() {
 
 function cloudSignedOut() {
   cloud.on = false;
+  cloud.fresh = false;
+  clearTimeout(planner.timer);
   cloud.user = cloud.partner = cloud.coupleId = cloud.invite = null;
   cloud.settlements = [];
   cloud.notes = [];
@@ -508,6 +518,7 @@ async function googleSignedIn(credential) {
 
 async function signedIn() {
   const local = loadMoney();
+  cloud.fresh = false;
   const b = await cloudRefresh();
   closeSheet();
   if (!b) { toast('เชื่อมต่อไม่สำเร็จ'); return; }
@@ -582,6 +593,234 @@ async function cloudImport(data) {
   } catch (e) {
     toast(cloudErr(e));
   }
+}
+
+/* ---------- Bill planner sync ----------
+   The planner (state: bills, records, settings) is one document per account with a revision
+   number. Each device keeps the last copy it agreed on with the server (the base) and merges
+   three ways: whatever changed on only one side since the base is kept, and when both sides
+   changed the same field this device's edit wins. A device seeing the account for the first
+   time adds its bills to the account's, matching bills that look the same (name + category). */
+
+const PLANNER_BASE_KEY = 'centel.planner.base.v1'; // { userId, rev, data }
+
+const planner = { timer: null, sending: null, again: false };
+
+function plannerBase(userId) {
+  try {
+    const b = JSON.parse(localStorage.getItem(PLANNER_BASE_KEY) || 'null');
+    return b && b.userId === userId ? b : null;
+  } catch (e) { return null; }
+}
+function setPlannerBase(userId, rev, data) {
+  try { localStorage.setItem(PLANNER_BASE_KEY, JSON.stringify({ userId, rev, data })); } catch (e) { /* full */ }
+}
+
+// The server stores JSON with its keys reordered, so compare by content, not by text.
+function stableJson(v) {
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+const sameJson = (a, b) => (a === undefined && b === undefined) || (a !== undefined && b !== undefined && stableJson(a) === stableJson(b));
+
+function pickMerged(base, local, remote) {
+  if (sameJson(local, base)) return remote;
+  if (sameJson(remote, base)) return local;
+  const obj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+  if (!obj(local) || !obj(remote)) return local;
+  const out = {};
+  new Set([...Object.keys(remote), ...Object.keys(local)]).forEach((k) => {
+    const v = pickMerged(obj(base) ? base[k] : undefined, local[k], remote[k]);
+    if (v !== undefined) out[k] = v;
+  });
+  return out;
+}
+
+function plannerDoc(s) { return { bills: s.bills, records: s.records, settings: s.settings }; }
+const emptyPlanner = () => ({ bills: [], records: {}, settings: {} });
+const flatRecords = (records) => {
+  const out = {};
+  Object.entries(records || {}).forEach(([ym, m]) => Object.entries(m || {}).forEach(([id, r]) => { out[`${ym}|${id}`] = r; }));
+  return out;
+};
+
+function mergePlanner(base, local, remote) {
+  const moved = {};
+  if (!base) {
+    // First sync on this device: the same bill typed on two devices becomes one.
+    const key = (b) => `${String(b.name || '').trim().toLowerCase()}|${b.category}|${b.type}`;
+    const remoteIds = new Set(remote.bills.map((b) => b.id));
+    const localIds = new Set(local.bills.map((b) => b.id));
+    const free = new Map();
+    remote.bills.filter((b) => !localIds.has(b.id)).forEach((b) => { if (!free.has(key(b))) free.set(key(b), b.id); });
+    local.bills.forEach((b) => {
+      if (remoteIds.has(b.id) || !free.has(key(b))) return;
+      moved[b.id] = free.get(key(b));
+      free.delete(key(b));
+    });
+    if (Object.keys(moved).length) {
+      const records = {};
+      Object.entries(local.records).forEach(([ym, m]) => {
+        records[ym] = {};
+        Object.entries(m).forEach(([id, r]) => { records[ym][moved[id] || id] = r; });
+      });
+      local = { ...local, bills: local.bills.map((b) => (moved[b.id] ? { ...b, id: moved[b.id] } : b)), records };
+    }
+    // Settings: the account's values win, this device fills in what the account has not set.
+    base = emptyPlanner();
+    local = { ...local, settings: { ...local.settings, ...remote.settings } };
+  }
+  const B = Object.fromEntries((base.bills || []).map((b) => [b.id, b]));
+  const L = Object.fromEntries(local.bills.map((b) => [b.id, b]));
+  const R = Object.fromEntries(remote.bills.map((b) => [b.id, b]));
+  const order = [...remote.bills.map((b) => b.id), ...local.bills.map((b) => b.id).filter((id) => !(id in R))];
+  const bills = [...new Set(order)].map((id) => pickMerged(B[id], L[id], R[id])).filter(Boolean);
+  const fb = flatRecords(base.records), fl = flatRecords(local.records), fr = flatRecords(remote.records);
+  const records = {};
+  new Set([...Object.keys(fr), ...Object.keys(fl)]).forEach((k) => {
+    const r = pickMerged(fb[k], fl[k], fr[k]);
+    if (!r || !Object.keys(r).length) return;
+    const [ym, id] = k.split('|');
+    (records[ym] = records[ym] || {})[id] = r;
+  });
+  const settings = pickMerged(base.settings || {}, local.settings || {}, remote.settings || {}) || {};
+  return { doc: { bills, records, settings }, moved };
+}
+
+// Bring the account's planner into `state`, then send it back if this device has more.
+function plannerMergeIn(userId, remote) {
+  if (!remote) return;
+  const base = plannerBase(userId);
+  const rdoc = remote.data ? { ...emptyPlanner(), ...remote.data } : emptyPlanner();
+  const { doc, moved } = mergePlanner(base && base.data, plannerDoc(state), rdoc);
+  if (Object.keys(moved).length) plannerMovedBills(moved);
+  setPlannerBase(userId, remote.rev, rdoc);
+  if (!sameJson(doc, plannerDoc(state))) {
+    state = { ...state, ...doc, settings: { ...defaultState().settings, ...doc.settings } };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* full */ }
+    updateBadge();
+  }
+  if (!sameJson(plannerDoc(state), rdoc)) plannerChanged(0);
+}
+
+// Bills matched to the account's copy got the account's id: follow it in this device's
+// own transactions and stored invoice files.
+function plannerMovedBills(moved) {
+  try {
+    const local = JSON.parse(localStorage.getItem(MONEY_KEY) || 'null');
+    if (local && Array.isArray(local.txns)) {
+      local.txns.forEach((t) => { if (t.billId && moved[t.billId]) t.billId = moved[t.billId]; });
+      localStorage.setItem(MONEY_KEY, JSON.stringify(local));
+    }
+  } catch (e) { /* ignore */ }
+  Object.entries(moved).forEach(([from, to]) => billFileMove(from, to));
+}
+
+// Called by save() in app.js whenever the planner changes on this device.
+function plannerChanged(delay = 800) {
+  if (!cloud.on || !cloud.fresh) return; // merged on the next refresh instead
+  clearTimeout(planner.timer);
+  planner.timer = setTimeout(plannerSend, delay);
+}
+
+async function plannerSend() {
+  if (planner.sending) { planner.again = true; return; }
+  const userId = cloud.user && cloud.user.id;
+  if (!userId) return;
+  planner.sending = (async () => {
+    for (let i = 0; i < 4; i++) {
+      const base = plannerBase(userId);
+      const data = JSON.parse(JSON.stringify(plannerDoc(state)));
+      if (base && sameJson(data, base.data)) return;
+      try {
+        const r = await api('PUT', '/planner', { data, baseRev: base ? base.rev : 0 });
+        setPlannerBase(userId, r.rev, data);
+        return;
+      } catch (e) {
+        // Another device saved first: merge its copy, then try again on top of it.
+        if (e.status === 409 && e.data && e.data.error === 'stale') { plannerMergeIn(userId, e.data); render(); continue; }
+        if (e.status === 401) { cloudSignedOut(); return; }
+        return; // offline: kept locally, merged on the next refresh
+      }
+    }
+  })();
+  await planner.sending;
+  planner.sending = null;
+  if (planner.again) { planner.again = false; plannerSend(); }
+}
+
+// A computer left open never goes to the background, so the bills are also looked at again
+// every minute and when its window gets focus (the full refresh runs on visibilitychange in app.js).
+async function plannerPull() {
+  if (!cloud.on || !cloud.fresh || planner.sending || document.visibilityState !== 'visible') return;
+  const userId = cloud.user.id;
+  try {
+    const r = await api('GET', '/planner');
+    const base = plannerBase(userId);
+    if (!cloud.on || cloud.user.id !== userId || planner.sending || (base && base.rev === r.rev)) return;
+    const before = stableJson(plannerDoc(state));
+    plannerMergeIn(userId, r);
+    if (stableJson(plannerDoc(state)) !== before) {
+      const y = window.scrollY;
+      render();
+      window.scrollTo(0, y);
+    }
+  } catch (e) { /* offline: next time */ }
+}
+setInterval(plannerPull, 60000);
+window.addEventListener('focus', plannerPull);
+
+/* ---------- Bill invoice files in the account (receipts bucket) ---------- */
+
+function billFilesOn() { return isCloud() && cloud.features && cloud.features.storage; }
+const billFilePath = (billId, ym) => `/api/bill-files/${encodeURIComponent(billId)}/${ym}`;
+
+async function billFileUpload(billId, ym) {
+  if (!billFilesOn()) return false;
+  const f = await billFileGet(billId, ym).catch(() => null);
+  if (!f || !f.blob) return false;
+  const type = /pdf/i.test(f.type) ? 'application/pdf' : (f.type || 'image/jpeg');
+  try {
+    const res = await fetch(billFilePath(billId, ym), {
+      method: 'PUT', credentials: 'same-origin', headers: { 'content-type': type, 'x-centel': '1' }, body: f.blob,
+    });
+    if (!res.ok) return false;
+  } catch (e) { return false; }
+  if (record(ym, billId).file) { setRecord(ym, billId, { fileCloud: true }); save(); }
+  return true;
+}
+
+// A file attached on another device: fetch it from the account and keep a copy here.
+async function billFileDownload(billId, ym) {
+  if (!isCloud() || !record(ym, billId).fileCloud) return null;
+  const res = await fetch(billFilePath(billId, ym), { credentials: 'same-origin' });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  const f = { name: record(ym, billId).file || 'invoice', type: blob.type || 'application/pdf', blob, added: new Date().toISOString() };
+  await filesTx('readwrite', (s) => s.put(f, billFileKey(billId, ym))).catch(() => {});
+  return f;
+}
+
+function billFileRemoteDel(billId, ym) {
+  if (!billFilesOn()) return;
+  fetch(billFilePath(billId, ym), { method: 'DELETE', credentials: 'same-origin', headers: { 'x-centel': '1' } }).catch(() => {});
+}
+
+// Files attached before signing in (or while offline) go up once the account is reachable.
+let sweeping = false;
+async function billFilesSweep() {
+  if (sweeping || !billFilesOn()) return;
+  sweeping = true;
+  try {
+    for (const [ym, m] of Object.entries(state.records)) {
+      for (const [id, r] of Object.entries(m)) {
+        if (r.file && !r.fileCloud) await billFileUpload(id, ym);
+      }
+    }
+  } finally { sweeping = false; }
 }
 
 async function logout() {

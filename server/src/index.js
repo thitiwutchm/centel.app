@@ -4,6 +4,8 @@ import { loadUser, csrfGuard } from './auth.js';
 import routes from './routes.js';
 import { lineWebhook, startReminders } from './line.js';
 import chatRoutes, { bridgeRouter, startChatJobs } from './chat.js';
+import { oauthRouter, wellKnown } from './oauth.js';
+import { mcpRouter, aiRouter } from './mcp.js';
 import { udidReply } from './udid.js';
 
 const app = express();
@@ -22,6 +24,11 @@ app.get('/api/health', async (_req, res) => {
 // The Mac bridge signs in with its own token (Authorization: Bearer), not the cookie.
 app.use('/api/bridge', bridgeRouter);
 app.use('/api/chat', loadUser, csrfGuard, chatRoutes);
+// Claude / ChatGPT: the MCP server, its OAuth sign-in, and the app's own settings for it.
+app.use('/.well-known', wellKnown);
+app.use('/mcp', mcpRouter);
+app.use('/api/oauth', oauthRouter);
+app.use('/api/ai', loadUser, csrfGuard, aiRouter);
 app.use('/api', loadUser, csrfGuard, routes);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 

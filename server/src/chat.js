@@ -3,12 +3,13 @@ import express from 'express';
 import { pool } from './db.js';
 import { requireUser, rateLimit } from './auth.js';
 import { pushTo } from './push.js';
-import { noteCommand, saveNoteCommand } from './line.js';
-import { remindAt, thaiToday } from './noteparse.js';
+import { noteCommand, saveNoteCommand, reminderHooks, REMIND_TEXT } from './line.js';
+import { parseNote, remindAt, thaiToday } from './noteparse.js';
 import { noteOut } from './routes.js';
 
-/* In-app chat (chat.js in the PWA). Two rooms per person: 'couple', shared by the two
-   linked accounts, and 'ai', a private room with the assistant. New messages, edits,
+/* In-app chat (chat.js in the PWA). Rooms per person: 'couple', shared by the two
+   linked accounts, 'ai', a private room with the app's assistant, and 'sec' (เลขาช่วยเหลือ),
+   a private room with the same Mac model for anything at all, allowed to search the web. New messages, edits,
    read marks and typing reach open apps through one Server-Sent Events stream per
    device (/api/chat/stream); a partner with no app open gets a Web Push.
 
@@ -25,12 +26,14 @@ export const bridgeRouter = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status, expose: true });
 const isUuid = (s) => typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
-const ROOMS = new Set(['couple', 'ai']);
+const ROOMS = new Set(['couple', 'ai', 'sec']);
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '👌'];
 const MAX_TEXT = 4000;
 const JOB_TTL_MIN = Number(process.env.CHAT_JOB_TTL_MIN) || 30;
 const BRIDGE_ONLINE_MS = 75000;
 const AI_NAME = 'ผู้ช่วย';
+const SEC_NAME = 'เลขา';
+const aiName = (room) => (room === 'sec' ? SEC_NAME : AI_NAME);
 // "@ผู้ช่วย", "@ai", "@hermes" call the assistant in the couple room.
 const MENTION = /@(?:ผู้ช่วย|ai|hermes|bot)/i;
 const MENTIONS = new RegExp(MENTION.source, 'gi');
@@ -58,7 +61,7 @@ function roomOk(me, room) {
   if (room === 'couple' && !me.coupleId) throw bad('no_partner', 409);
 }
 // SQL for "messages in this room as seen by me": $1 = couple id or user id.
-const roomSql = (room) => (room === 'couple' ? "room = 'couple' and couple_id = $1" : "room = 'ai' and owner_id = $1");
+const roomSql = (room) => (room === 'couple' ? "room = 'couple' and couple_id = $1" : `room = '${room === 'sec' ? 'sec' : 'ai'}' and owner_id = $1`);
 const roomKey = (me, room) => (room === 'couple' ? me.coupleId : me.id);
 
 const msgOut = (m) => ({
@@ -71,6 +74,12 @@ const msgOut = (m) => ({
 
 const streams = new Map(); // user id → Set of open SSE responses
 const isOpen = (id) => (streams.get(id)?.size || 0) > 0;
+// Whether the app is on screen, as each client reports it (and repeats every minute while visible).
+// A phone that went to the background can keep its stream open for a while, so an open stream alone
+// does not mean the person would see a new message.
+const views = new Map(); // user id → { visible, at }
+const VIEW_FRESH_MS = Number(process.env.CHAT_VIEW_FRESH_MS || 90000);
+const onScreen = (id) => { const v = views.get(id); return !!v && v.visible && isOpen(id) && Date.now() - v.at < VIEW_FRESH_MS; };
 function emit(userIds, ev) {
   const data = `data: ${JSON.stringify(ev)}\n\n`;
   for (const id of new Set(userIds)) for (const res of streams.get(id) || []) res.write(data);
@@ -104,7 +113,7 @@ router.get('/stream', (req, res) => {
 
 async function bridgeState(me) {
   const ids = [me.id, me.partnerId].filter(Boolean);
-  const { rows } = await pool.query('select user_id, created_at, last_seen, info from bridge_tokens where user_id = any($1)', [ids]);
+  const { rows } = await pool.query('select user_id, created_at, last_seen, info, caps from bridge_tokens where user_id = any($1)', [ids]);
   const seen = rows.map((r) => r.last_seen).filter(Boolean).map((d) => +new Date(d));
   const last = seen.length ? Math.max(...seen) : 0;
   const mine = rows.find((r) => r.user_id === me.id);
@@ -112,6 +121,8 @@ async function bridgeState(me) {
     online: !!last && Date.now() - last < BRIDGE_ONLINE_MS,
     lastSeen: last ? new Date(last).toISOString() : null,
     set: rows.length > 0,
+    // Voice needs Whisper on the Mac; the last thing a bridge reported is what counts.
+    voice: rows.some((r) => /\bstt\b/.test(r.caps || '')),
     mine: mine ? { createdAt: mine.created_at, lastSeen: mine.last_seen, info: mine.info || undefined } : null,
   };
 }
@@ -125,16 +136,18 @@ async function reads(me, room) {
 
 async function pending(me, room) {
   const { rows } = await pool.query(
-    `select status from chat_jobs where room = $1 and ${room === 'couple' ? 'couple_id' : 'user_id'} = $2
+    `select status, kind from chat_jobs where room = $1 and ${room === 'couple' ? 'couple_id' : 'user_id'} = $2
        and status in ('queued', 'taken') order by created_at desc limit 1`, [room, roomKey(me, room)]);
-  return rows[0] ? (rows[0].status === 'taken' ? 'typing' : 'queued') : null;
+  if (!rows[0]) return null;
+  if (rows[0].kind === 'transcribe') return 'listening';
+  return rows[0].status === 'taken' ? 'typing' : 'queued';
 }
 
 // Home card and room list: last message and unread count per room, and the assistant's state.
 router.get('/state', wrap(async (req, res) => {
   const me = await whoIs(req.user.id);
   const out = { rooms: {}, bridge: await bridgeState(me), reactions: REACTIONS };
-  for (const room of me.coupleId ? ['couple', 'ai'] : ['ai']) {
+  for (const room of me.coupleId ? ['couple', 'ai', 'sec'] : ['ai', 'sec']) {
     const k = roomKey(me, room);
     const last = (await pool.query(`select * from chat_messages where ${roomSql(room)} order by created_at desc limit 1`, [k])).rows[0];
     const r = await reads(me, room);
@@ -144,7 +157,18 @@ router.get('/state', wrap(async (req, res) => {
       [k, me.id, r.me])).rows[0].n;
     out.rooms[room] = { last: last ? msgOut(last) : null, unread, reads: r, pending: await pending(me, room) };
   }
+  if (me.coupleId) out.rooms.couple.name = (await pool.query('select chat_name from couples where id = $1', [me.coupleId])).rows[0]?.chat_name || null;
   res.json(out);
+}));
+
+// Rename the shared room; an empty name goes back to the default.
+router.put('/room', wrap(async (req, res) => {
+  const me = await whoIs(req.user.id);
+  roomOk(me, 'couple');
+  const name = String(req.body?.name || '').replace(/\s+/g, ' ').trim().slice(0, 40) || null;
+  await pool.query('update couples set chat_name = $2 where id = $1', [me.coupleId, name]);
+  emit(audience(me, 'couple'), { type: 'room', room: 'couple', name });
+  res.json({ name });
 }));
 
 // One page of a room, oldest first: the newest 60, or 60 before `before`, or everything after `after`.
@@ -176,7 +200,8 @@ async function addMessage({ id = crypto.randomUUID(), room, me, senderId = null,
 
 // A push to whoever in the room has no app open (the sender never gets one).
 function notify(me, room, m, title) {
-  const to = audience(me, room).filter((id) => id !== m.senderId && !isOpen(id));
+  // Everyone else gets a push unless the app is on their screen; then the app shows its own banner.
+  const to = audience(me, room).filter((id) => id !== m.senderId && !onScreen(id));
   if (!to.length) return;
   const plain = m.ai ? m.text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s+/gm, '') : m.text;
   const body = plain.length > 140 ? `${plain.slice(0, 140)}…` : plain;
@@ -185,6 +210,65 @@ function notify(me, room, m, title) {
 
 const jobWaiters = new Set();
 function wakeBridges() { for (const w of jobWaiters) w(); }
+
+// The assistant's part of a new message: a note command is saved at once; a question for the
+// assistant (its room, @ผู้ช่วย, or a reply to it) becomes a job for the Mac.
+async function assistantPart(me, room, m, { replyAi = false, context = null } = {}) {
+  const text = m.text;
+  const plain = text.replace(MENTIONS, ' ').replace(/\s+/g, ' ').trim();
+  let called = room !== 'couple' || replyAi || MENTION.test(text);
+  // A bare "@ผู้ช่วย" sent on its own calls the assistant for the sender's next message.
+  if (!called) {
+    const prev = (await pool.query(
+      `select text, sender_id from chat_messages where ${roomSql(room)} and id <> $2 and created_at > now() - interval '5 minutes'
+       order by created_at desc limit 1`, [roomKey(me, room), m.id])).rows[0];
+    called = !!prev && prev.sender_id === me.id && MENTION.test(prev.text) && !prev.text.replace(MENTIONS, '').trim();
+  }
+  const cmd = noteCommand({ text: plain });
+  let assistant = null;
+  if (cmd && cmd.text) {
+    const done = await saveNoteCommand(cmd, { user_id: me.id, name: me.name }).catch((e) => { console.error('chat note', e.message); return null; });
+    if (done && done.note) {
+      // The card shows the details, so the bubble keeps only the first line of the LINE answer.
+      assistant = await addMessage({ room, me, ai: true, text: done.text.split('\n')[0], replyTo: room === 'couple' ? m.id : null, action: { type: 'note', note: noteOut(done.note) } });
+      emit([me.id, me.partnerId].filter(Boolean), { type: 'note', note: noteOut(done.note) });
+    }
+  }
+  if (!assistant && called && plain) {
+    const ctx = context && typeof context === 'object' ? JSON.stringify(context).slice(0, 20000) : null;
+    await pool.query(
+      'insert into chat_jobs (id, message_id, user_id, room, couple_id, context) values ($1, $2, $3, $4, $5, $6)',
+      [crypto.randomUUID(), m.id, me.id, room, room === 'couple' ? me.coupleId : null, ctx]);
+    const online = (await bridgeState(me)).online;
+    emit(audience(me, room), { type: 'ai', room, state: online ? 'queued' : 'offline' });
+    wakeBridges();
+  }
+  return assistant;
+}
+
+// A spoken question: the recording waits for the Mac, which turns it into text (Whisper); that
+// text then goes in as the person's message and is answered like a typed one.
+const VOICE_MAX = 1.5 * 1024 * 1024;
+router.post('/voice', rateLimit(30, 60000), wrap(async (req, res) => {
+  const me = await whoIs(req.user.id);
+  const b = req.body || {};
+  const room = String(b.room || '');
+  roomOk(me, room);
+  if (!isUuid(b.id)) throw bad('bad_id');
+  const mime = /^audio\/[a-z0-9.+-]+(;.*)?$/i.test(b.mime || '') ? String(b.mime).slice(0, 60) : null;
+  const audio = Buffer.from(String(b.audio || ''), 'base64');
+  if (!mime || audio.length < 1000 || audio.length > VOICE_MAX) throw bad('bad_audio');
+  if (!(await bridgeState(me)).voice) throw bad('no_voice', 409);
+  const context = { msgId: b.id, context: b.context && typeof b.context === 'object' ? b.context : null };
+  await pool.query(
+    `insert into chat_jobs (id, user_id, room, couple_id, context, kind, audio, audio_mime)
+     values ($1, $2, $3, $4, $5, 'transcribe', $6, $7)`,
+    [crypto.randomUUID(), me.id, room, room === 'couple' ? me.coupleId : null, JSON.stringify(context).slice(0, 25000), audio, mime]);
+  const online = (await bridgeState(me)).online;
+  emit(audience(me, room), { type: 'ai', room, state: online ? 'listening' : 'offline' });
+  wakeBridges();
+  res.json({ ok: true, online });
+}));
 
 router.post('/messages', rateLimit(120, 60000), wrap(async (req, res) => {
   const me = await whoIs(req.user.id);
@@ -207,30 +291,8 @@ router.post('/messages', rateLimit(120, 60000), wrap(async (req, res) => {
     return res.json({ message: msgOut(dup) });
   }
   const m = await addMessage({ id: b.id, room, me, senderId: me.id, text, replyTo });
-  notify(me, room, m, room === 'couple' ? me.name : AI_NAME);
-
-  // The assistant's part.
-  const called = room === 'ai' || replyAi || MENTION.test(text);
-  const plain = text.replace(MENTIONS, ' ').replace(/\s+/g, ' ').trim();
-  const cmd = noteCommand({ text: plain });
-  let assistant = null;
-  if (cmd && cmd.text) {
-    const done = await saveNoteCommand(cmd, { user_id: me.id, name: me.name }).catch((e) => { console.error('chat note', e.message); return null; });
-    if (done && done.note) {
-      // The card shows the details, so the bubble keeps only the first line of the LINE answer.
-      assistant = await addMessage({ room, me, ai: true, text: done.text.split('\n')[0], replyTo: room === 'couple' ? m.id : null, action: { type: 'note', note: noteOut(done.note) } });
-      emit([me.id, me.partnerId].filter(Boolean), { type: 'note', note: noteOut(done.note) });
-    }
-  }
-  if (!assistant && called && plain) {
-    const context = b.context && typeof b.context === 'object' ? JSON.stringify(b.context).slice(0, 20000) : null;
-    await pool.query(
-      'insert into chat_jobs (id, message_id, user_id, room, couple_id, context) values ($1, $2, $3, $4, $5, $6)',
-      [crypto.randomUUID(), m.id, me.id, room, room === 'couple' ? me.coupleId : null, context]);
-    const online = (await bridgeState(me)).online;
-    emit(audience(me, room), { type: 'ai', room, state: online ? 'queued' : 'offline' });
-    wakeBridges();
-  }
+  notify(me, room, m, room === 'couple' ? me.name : aiName(room));
+  const assistant = await assistantPart(me, room, m, { replyAi, context: b.context });
   res.json({ message: m, assistant });
 }));
 
@@ -258,7 +320,7 @@ router.delete('/messages/:id', wrap(async (req, res) => {
   const me = await whoIs(req.user.id);
   const r = await ownMessage(me, req.params.id);
   // Your own messages, and the assistant's in your private room.
-  if (!(r.sender_id === me.id && !r.from_ai) && !(r.from_ai && r.room === 'ai')) throw bad('forbidden', 403);
+  if (!(r.sender_id === me.id && !r.from_ai) && !(r.from_ai && r.room !== 'couple')) throw bad('forbidden', 403);
   const { rows } = await pool.query("update chat_messages set deleted_at = now(), text = '', action = null where id = $1 returning *", [r.id]);
   const m = msgOut(rows[0]);
   emit(audience(me, r.room), { type: 'msg', room: r.room, msg: m });
@@ -292,6 +354,11 @@ router.post('/read', wrap(async (req, res) => {
     [me.id, room]);
   emit(audience(me, room), { type: 'read', room, userId: me.id, at: rows[0].last_read });
   res.json({ at: rows[0].last_read });
+}));
+
+router.post('/view', wrap(async (req, res) => {
+  views.set(req.user.id, { visible: !!req.body?.visible, at: Date.now() });
+  res.json({ ok: true });
 }));
 
 router.post('/typing', wrap(async (req, res) => {
@@ -328,21 +395,113 @@ router.delete('/bridge', wrap(async (req, res) => {
 bridgeRouter.use(wrap(async (req, _res, next) => {
   const m = /^Bearer\s+(cb_[A-Za-z0-9_-]{32})$/.exec(req.get('authorization') || '');
   if (!m) throw bad('unauthorized', 401);
+  const caps = String(req.get('x-bridge-caps') || '').slice(0, 60);
   const { rows } = await pool.query(
-    'update bridge_tokens set last_seen = now(), info = coalesce($2, info) where token_hash = $1 returning user_id',
-    [hashToken(m[1]), String(req.get('x-bridge-info') || '').slice(0, 120) || null]);
+    'update bridge_tokens set last_seen = now(), info = coalesce($2, info), caps = $3 where token_hash = $1 returning user_id',
+    [hashToken(m[1]), String(req.get('x-bridge-info') || '').slice(0, 120) || null, caps]);
   if (!rows[0]) throw bad('unauthorized', 401);
   const me = await whoIs(rows[0].user_id);
-  req.bridge = { userId: me.id, users: [me.id, me.partnerId].filter(Boolean) };
+  // Older bridges cannot transcribe, so they only get typed questions.
+  const stt = /\bstt\b/.test(caps);
+  req.bridge = { userId: me.id, users: [me.id, me.partnerId].filter(Boolean), stt };
+  if (!stt) await dropVoice(req.bridge.users);
   next();
 }));
 
-async function takeJob(users) {
+/* ---------- Mac status (Account › สถานะ Mac) ---------- */
+
+// Only plain numbers and short strings from the bridge are kept, so the page never shows
+// anything the Mac did not mean to report.
+const num = (v, max = 1e15) => (Number.isFinite(+v) && +v >= 0 && +v <= max ? Math.round(+v * 100) / 100 : null);
+const str = (v, n = 80) => (v == null ? null : String(v).slice(0, n));
+function cleanStatus(b) {
+  const s = b && typeof b === 'object' ? b : {};
+  const o = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  const cpu = o(s.cpu), mem = o(s.mem), disk = o(s.disk), ol = o(s.ollama), he = o(s.hermes), br = o(s.bridge);
+  const models = (list, n) => (Array.isArray(list) ? list : []).slice(0, n).map((m) => ({
+    name: str(o(m).name, 60), size: num(o(m).size), vram: num(o(m).vram), until: str(o(m).until, 40),
+  })).filter((m) => m.name);
+  return {
+    host: str(s.host, 40), model: str(s.model, 60), os: str(s.os, 40), chip: str(s.chip, 60),
+    uptime: num(s.uptime),
+    cpu: { cores: num(cpu.cores, 512), load: Array.isArray(cpu.load) ? cpu.load.slice(0, 3).map((x) => num(x, 1e4)) : [], usage: num(cpu.usage, 100) },
+    mem: { total: num(mem.total), used: num(mem.used), pressure: num(mem.pressure, 100), swap: num(mem.swap) },
+    disk: { total: num(disk.total), free: num(disk.free) },
+    ollama: { up: !!ol.up, version: str(ol.version, 20), running: models(ol.running, 8), models: models(ol.models, 30) },
+    hermes: { up: he.up == null ? null : !!he.up, ms: num(he.ms, 1e6), url: str(he.url, 80) },
+    voice: !!s.voice, web: !!s.web,
+    bridge: { version: str(br.version, 20), since: str(br.since, 40), answered: num(br.answered), failed: num(br.failed),
+      heard: num(br.heard), lastMs: num(br.lastMs), avgMs: num(br.avgMs), lastError: str(br.lastError, 200), lastErrorAt: str(br.lastErrorAt, 40) },
+  };
+}
+
+const pct = (a, b) => (a != null && b ? Math.round((a / b) * 1000) / 10 : null);
+
+// The bridge reports about once a minute; a sample for the charts is kept every 5 minutes.
+bridgeRouter.post('/status', wrap(async (req, res) => {
+  const st = cleanStatus(req.body);
+  await pool.query('update bridge_tokens set status = $2, status_at = now() where user_id = $1', [req.bridge.userId, st]);
+  await pool.query(
+    `insert into mac_samples (user_id, cpu, mem, disk)
+     select $1, $2, $3, $4 where not exists (select 1 from mac_samples where user_id = $1 and at > now() - interval '290 seconds')`,
+    [req.bridge.userId, st.cpu.usage, st.mem.pressure ?? pct(st.mem.used, st.mem.total),
+      st.disk.total ? pct(st.disk.total - (st.disk.free || 0), st.disk.total) : null]);
+  if (Math.random() < 0.02) await pool.query("delete from mac_samples where at < now() - interval '2 days'");
+  res.json({ ok: true, every: 60 });
+}));
+
+// Every Mac serving this couple, with its last report and the last 24 hours of samples.
+router.get('/mac', wrap(async (req, res) => {
+  const me = await whoIs(req.user.id);
+  const ids = [me.id, me.partnerId].filter(Boolean);
+  const { rows } = await pool.query(
+    `select b.user_id, b.created_at, b.last_seen, b.info, b.caps, b.status, b.status_at, u.display_name, u.nickname
+       from bridge_tokens b join users u on u.id = b.user_id where b.user_id = any($1) order by b.user_id = $2 desc`, [ids, me.id]);
+  const macs = [];
+  for (const r of rows) {
+    const samples = (await pool.query(
+      `select extract(epoch from at)::bigint * 1000 as t, cpu, mem, disk from mac_samples
+        where user_id = $1 and at > now() - interval '24 hours' order by at`, [r.user_id])).rows
+      .map((x) => ({ t: Number(x.t), cpu: x.cpu, mem: x.mem, disk: x.disk }));
+    macs.push({
+      mine: r.user_id === me.id,
+      owner: r.nickname || r.display_name || null,
+      online: !!r.last_seen && Date.now() - new Date(r.last_seen) < BRIDGE_ONLINE_MS,
+      lastSeen: r.last_seen, linkedAt: r.created_at, info: r.info || null,
+      voice: /\bstt\b/.test(r.caps || ''),
+      status: r.status, statusAt: r.status_at, samples,
+    });
+  }
+  const jobs = (await pool.query(
+    `select count(*) filter (where status = 'done' and created_at > now() - interval '24 hours')::int as done,
+            count(*) filter (where status = 'failed' and created_at > now() - interval '24 hours')::int as failed,
+            count(*) filter (where status in ('queued', 'taken'))::int as waiting
+       from chat_jobs where user_id = any($1)`, [ids])).rows[0];
+  res.json({ macs, jobs, now: new Date().toISOString() });
+}));
+
+// A Mac that is on but cannot hear (no Whisper) would leave a voice question waiting forever, so it
+// is dropped with a note to type instead, unless another bridge for the couple can still hear.
+const NO_VOICE_TEXT = 'ขอโทษครับ Mac ยังฟังเสียงไม่ได้ (ยังไม่ได้ติดตั้ง Whisper) พิมพ์ถามแทนได้เลยครับ ⌨️';
+async function dropVoice(users) {
+  const other = (await pool.query("select 1 from bridge_tokens where user_id = any($1) and caps ~ '\\mstt\\M' and last_seen > now() - make_interval(secs => $2) limit 1",
+    [users, BRIDGE_ONLINE_MS / 1000])).rows[0];
+  if (other) return;
+  const { rows } = await pool.query(
+    "update chat_jobs set status = 'failed', audio = null where kind = 'transcribe' and status = 'queued' and user_id = any($1) returning *", [users]);
+  for (const job of rows) {
+    const asker = await whoIs(job.user_id).catch(() => null);
+    if (asker) await addMessage({ room: job.room, me: asker, ai: true, text: NO_VOICE_TEXT });
+  }
+}
+
+async function takeJob({ users, stt }) {
   const { rows } = await pool.query(
     `update chat_jobs set status = 'taken', taken_at = now()
      where id = (select id from chat_jobs where status = 'queued' and user_id = any($1) and created_at > now() - make_interval(mins => $2)
+                   and ($3 or kind = 'reply')
                  order by created_at for update skip locked limit 1)
-     returning *`, [users, JOB_TTL_MIN]);
+     returning *`, [users, JOB_TTL_MIN, stt]);
   return rows[0] || null;
 }
 
@@ -351,7 +510,7 @@ bridgeRouter.get('/next', wrap(async (req, res) => {
   const w = Number(req.query.wait ?? 25);
   const wait = Math.min(Math.max(Number.isFinite(w) ? w : 25, 0), 25) * 1000;
   const until = Date.now() + wait;
-  let job = await takeJob(req.bridge.users);
+  let job = await takeJob(req.bridge);
   while (!job && Date.now() < until) {
     let closed = false;
     await new Promise((resolve) => {
@@ -361,12 +520,14 @@ bridgeRouter.get('/next', wrap(async (req, res) => {
       req.once('close', () => { closed = true; done(); });
     });
     if (closed || res.writableEnded) return;
-    job = await takeJob(req.bridge.users);
+    job = await takeJob(req.bridge);
   }
   if (!job) return res.status(204).end();
   const asker = await whoIs(job.user_id);
+  if (job.kind === 'transcribe') return res.json({ id: job.id, kind: 'transcribe', mime: job.audio_mime, audio: job.audio.toString('base64') });
   emit(audience(asker, job.room), { type: 'ai', room: job.room, state: 'typing' });
-  res.json({ id: job.id, messages: await buildPrompt(job, asker) });
+  // web: the bridge may let the model search the web (เลขาช่วยเหลือ only).
+  res.json({ id: job.id, kind: 'reply', web: job.room === 'sec', messages: await buildPrompt(job, asker) });
 }));
 
 // The answer for a job: { reply } or { error }. A <centel-note>{…}</centel-note> block in
@@ -376,6 +537,7 @@ bridgeRouter.post('/jobs/:id', wrap(async (req, res) => {
   const job = (await pool.query("select * from chat_jobs where id = $1 and status = 'taken' and user_id = any($2)", [req.params.id, req.bridge.users])).rows[0];
   if (!job) throw bad('not_found', 404);
   const asker = await whoIs(job.user_id);
+  if (job.kind === 'transcribe') return res.json(await transcribed(job, asker, req.body || {}));
   const raw = String(req.body?.reply || '').slice(0, 12000);
   if (!raw.trim()) {
     await pool.query("update chat_jobs set status = 'failed' where id = $1", [job.id]);
@@ -391,9 +553,36 @@ bridgeRouter.post('/jobs/:id', wrap(async (req, res) => {
     action: note ? { type: 'note', note: noteOut(note) } : null,
   });
   if (note) emit([asker.id, asker.partnerId].filter(Boolean), { type: 'note', note: noteOut(note) });
-  notify(asker, job.room, m, AI_NAME);
+  notify(asker, job.room, m, aiName(job.room));
   res.json({ ok: true, message: m });
 }));
+
+// The Mac's text for a voice question becomes the person's message (marked as spoken), then the
+// assistant answers it as usual.
+async function transcribed(job, asker, body) {
+  const text = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT);
+  await pool.query("update chat_jobs set status = $2, audio = null where id = $1", [job.id, text ? 'done' : 'failed']);
+  if (!text) {
+    if (body.error) console.error('bridge transcribe failed', String(body.error).slice(0, 300));
+    await addMessage({ room: job.room, me: asker, ai: true, text: 'ขอโทษครับ ฟังไม่ชัด ลองพูดใหม่อีกครั้งนะครับ 🎤' });
+    return { ok: true };
+  }
+  const ctx = job.context || {};
+  const id = isUuid(ctx.msgId) && !(await pool.query('select 1 from chat_messages where id = $1', [ctx.msgId])).rows[0] ? ctx.msgId : crypto.randomUUID();
+  const m = await addMessage({ id, room: job.room, me: asker, senderId: asker.id, text, action: { type: 'voice' } });
+  notify(asker, job.room, m, job.room === 'couple' ? asker.name : aiName(job.room));
+  await assistantPart(asker, job.room, m, { context: ctx.context });
+  return { ok: true, message: m };
+}
+
+// The date and time the person wrote in the question, read the same way as the LINE group.
+async function askedWhen(job) {
+  if (!job.message_id) return {};
+  const q = (await pool.query('select text from chat_messages where id = $1', [job.message_id])).rows[0];
+  if (!q) return {};
+  const p = parseNote(String(q.text || '').replace(/@\S+/g, ' '));
+  return p.date && !p.timeOnly ? { date: p.date, time: p.time || null } : {};
+}
 
 const NOTE_TAG = /<centel-note>([\s\S]*?)<\/centel-note>/i;
 const LEADS = new Set([0, 120, 360, 1440, 2880]);
@@ -406,8 +595,12 @@ async function applyActions(raw, job, asker) {
   try { a = JSON.parse(m[1].trim()); } catch (e) { return { text, note: null }; }
   const noteText = String(a.text || '').trim().slice(0, 500);
   if (!noteText) return { text, note: null };
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(a.date || '') ? a.date : null;
-  const time = date && /^([01]\d|2[0-3]):[0-5]\d$/.test(a.time || '') ? a.time : null;
+  let date = /^\d{4}-\d{2}-\d{2}$/.test(a.date || '') ? a.date : null;
+  let time = date && /^([01]\d|2[0-3]):[0-5]\d$/.test(a.time || '') ? a.time : null;
+  // A small model on the Mac can be a day out ("วันที่ 2 November" saved on the 1st), so a date or
+  // time written plainly in the question wins over the model's.
+  const said = await askedWhen(job);
+  if (said.date) { date = said.date; if (said.time) time = said.time; }
   const remind = date ? (LEADS.has(a.remind) ? a.remind : 0) : null;
   const { rows } = await pool.query(
     `insert into notes (id, owner_id, couple_id, text, date, time, remind, remind_at)
@@ -420,11 +613,28 @@ async function applyActions(raw, job, asker) {
 
 const baht = (n) => `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })} บาท`;
 
+// เลขาช่วยเหลือ: anything at all, with the web for live facts; no money data in its prompt.
+function secSystem(job, asker) {
+  const t = thaiToday();
+  return [
+    `คุณคือ "เลขาช่วยเหลือ" เลขาส่วนตัวของ ${asker.name} ในแอป Centel ช่วยได้ทุกเรื่อง: ตอบคำถามทั่วไป หาข้อมูล แปลภาษา เขียนข้อความ วางแผน คิดเลข แนะนำร้าน/หนัง/ที่เที่ยว`,
+    `วันนี้: ${t.weekday} ${t.date} เวลา ${t.time} (ประเทศไทย)`,
+    'ตอบสั้น กระชับ เป็นกันเอง ใช้ภาษาเดียวกับที่ถาม (ปกติภาษาไทย ลงท้ายด้วย ครับ) ไม่ต้องใช้ Markdown ตาราง',
+    'เรื่องที่เปลี่ยนตลอด (รอบหนัง ข่าว อากาศ ราคา เวลาเปิดปิด) ให้ใช้ web_search แล้ว read_page ถ้าจำเป็น ก่อนตอบ และบอกแหล่งที่มาสั้นๆ ถ้าค้นแล้วไม่เจอให้บอกตรงๆ ห้ามแต่งรอบเวลา ราคา หรือข่าวเอง',
+    'ถ้าไม่มีเครื่องมือค้นเว็บ ให้ตอบจากความรู้ที่มี และบอกว่าข้อมูลอาจไม่เป็นปัจจุบัน',
+    'ถ้าถูกขอให้จด นัด หรือเตือนอะไร ให้ใส่บล็อกนี้หนึ่งบล็อกท้ายคำตอบ แล้วแอปจะบันทึกเป็นโน้ตให้:',
+    '<centel-note>{"text": "สิ่งที่ต้องทำ", "date": "YYYY-MM-DD หรือ null", "time": "HH:MM หรือ null", "remind": 0}</centel-note>',
+    'remind คือเตือนก่อนกี่นาที เลือก 0, 120, 360, 1440 หรือ 2880 · ปี พ.ศ. ลบ 543 เป็น ค.ศ.',
+    'ห้ามรันคำสั่งหรือแตะไฟล์บนเครื่อง งานนี้มาจากแชทในแอปเท่านั้น',
+  ].join('\n');
+}
+
 async function buildPrompt(job, asker) {
+  if (job.room === 'sec') return [{ role: 'system', content: secSystem(job, asker) }, ...(await chatTurns(job, asker))];
   const t = thaiToday();
   const ym = t.date.slice(0, 7);
   const notes = (await pool.query(
-    `select text, date, time, done from notes where not done and (owner_id = $1 or (couple_id is not null and couple_id = $2))
+    `select text, date, time, done from notes where kind = 'todo' and not done and (owner_id = $1 or (couple_id is not null and couple_id = $2))
      order by date nulls last, time nulls first limit 25`, [asker.id, asker.coupleId])).rows;
   const spend = (await pool.query(
     `select scope, coalesce(category, 'รอตรวจสอบ') as category, sum(amount) as total, count(*)::int as n from expenses
@@ -432,7 +642,7 @@ async function buildPrompt(job, asker) {
        and ((scope = 'personal' and owner_id = $1) or (scope = 'shared' and couple_id = $2))
      group by scope, category order by total desc`, [asker.id, asker.coupleId, ym])).rows;
   const budgets = (await pool.query(
-    `select scope, category, amount from budgets where (scope = 'personal' and owner_id = $1) or (scope = 'shared' and couple_id = $2)`,
+    `select scope, category, amount from budgets where period = 'month' and ((scope = 'personal' and owner_id = $1) or (scope = 'shared' and couple_id = $2))`,
     [asker.id, asker.coupleId])).rows;
   const recent = (await pool.query(
     `select date, coalesce(merchant, note, '') as what, amount, category, scope from expenses
@@ -479,6 +689,11 @@ async function buildPrompt(job, asker) {
     ...data,
   ].join('\n');
 
+  return [{ role: 'system', content: system }, ...(await chatTurns(job, asker))];
+}
+
+// The room's last messages up to the question, as chat turns.
+async function chatTurns(job, asker) {
   const k = job.room === 'couple' ? job.couple_id : job.user_id;
   const history = (await pool.query(
     `select * from (select * from chat_messages where ${roomSql(job.room)} and deleted_at is null
@@ -488,10 +703,20 @@ async function buildPrompt(job, asker) {
   const turns = history.map((m) => (m.from_ai
     ? { role: 'assistant', content: m.text }
     : { role: 'user', content: job.room === 'couple' ? `${names.get(m.sender_id) || 'สมาชิก'}: ${m.text}` : m.text }));
-  return [{ role: 'system', content: system }, ...turns];
+  return turns;
 }
 
 /* ---------- Questions nobody answered ---------- */
+
+// A due to-do reminder also lands in the chat, like the LINE group gets it: shared notes in the
+// couple room, personal ones in the owner's assistant room. The push already went out (line.js).
+reminderHooks.push(async (n) => {
+  const me = await whoIs(n.owner_id);
+  const room = n.couple_id && n.couple_id === me.coupleId ? 'couple' : 'ai';
+  const lines = [`🔔 ${REMIND_TEXT[n.remind] || 'เตือนความจำ'}`];
+  if (room === 'couple') lines.push(`👥 ${[me.name, me.partnerName].filter(Boolean).map((x) => `@${x}`).join(' ')}`);
+  await addMessage({ room, me, ai: true, text: lines.join('\n'), action: { type: 'note', note: noteOut(n) } });
+});
 
 export function startChatJobs() {
   const tick = async () => {
@@ -499,11 +724,13 @@ export function startChatJobs() {
       // A job a bridge took but never answered goes back in the queue once.
       await pool.query("update chat_jobs set status = 'queued', taken_at = null where status = 'taken' and taken_at < now() - interval '3 minutes' and created_at > now() - interval '10 minutes'");
       const { rows } = await pool.query(
-        `update chat_jobs set status = 'failed' where status in ('queued', 'taken') and created_at < now() - make_interval(mins => $1) returning *`, [JOB_TTL_MIN]);
+        `update chat_jobs set status = 'failed', audio = null where status in ('queued', 'taken') and created_at < now() - make_interval(mins => $1) returning *`, [JOB_TTL_MIN]);
       for (const job of rows) {
         const asker = await whoIs(job.user_id).catch(() => null);
         if (!asker) continue;
-        await addMessage({ room: job.room, me: asker, ai: true, replyTo: job.message_id, text: 'ขอโทษครับ ตอนนั้นผู้ช่วยออฟไลน์อยู่ (Mac ปิดหรือหลับ) เลยตอบไม่ทัน ถามใหม่ได้เลยครับ' });
+        await addMessage({ room: job.room, me: asker, ai: true, replyTo: job.message_id, text: job.kind === 'transcribe'
+          ? 'ขอโทษครับ ข้อความเสียงนั้นไม่ได้ถูกฟัง (Mac ปิด หลับ หรือยังไม่ได้ติดตั้ง Whisper) พิมพ์ถามแทนได้เลยครับ'
+          : 'ขอโทษครับ ตอนนั้นผู้ช่วยออฟไลน์อยู่ (Mac ปิดหรือหลับ) เลยตอบไม่ทัน ถามใหม่ได้เลยครับ' });
       }
       if (rows.length) wakeBridges();
     } catch (e) { console.error('chat jobs', e.message); }

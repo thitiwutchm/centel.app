@@ -75,6 +75,8 @@ function save() {
   updateBadge();
   calFeedChanged(); // signed in with a calendar subscription: send the new calendar (calfeed.js)
   pushAlertsChanged(); // notifications on: send this device's upcoming bill alerts (push.js)
+  aiBillsChanged(); // Claude / ChatGPT connected: send them a copy of the bills (ai.js)
+  plannerChanged(); // signed in: send the bills to the account so every device shows them (cloud.js)
 }
 
 /* ---------- Date helpers ---------- */
@@ -128,6 +130,21 @@ function dueDateFor(b, ym) {
     return new Date(yy, mm - 1, dd);
   }
   return new Date(y, m - 1, Math.min(b.dueDay || 1, daysInMonth(ym)));
+}
+
+// Credit cards can also keep their statement cut-off day (b.cutDay, 1-31), separate from the due day.
+// The statement a bill month pays was cut that month when the cut day comes before the due day,
+// otherwise in the month before (e.g. cut on the 25th, due on the 10th of the next month).
+function hasCutDay(b) { return !!(b && b.cutDay && b.category === 'credit' && b.type !== 'once'); }
+function cutDateFor(b, ym) {
+  if (!hasCutDay(b)) return null;
+  const cm = b.cutDay < (b.dueDay || 1) ? ym : addMonths(ym, -1);
+  const { y, m } = parseYm(cm);
+  return new Date(y, m - 1, Math.min(b.cutDay, daysInMonth(cm)));
+}
+function cutDayOptions(cur) {
+  return `<option value="">ไม่ระบุ</option>` + Array.from({ length: 31 }, (_, i) => i + 1)
+    .map((d) => `<option value="${d}" ${Number(cur) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
 }
 
 // Days before the due date a bill counts as "soon"; a bill can override the app default.
@@ -211,6 +228,7 @@ function render() {
   const bills = ui.tab === 'bills';
   const nav = bills && (ui.billView === 'month' || ui.billView === 'calendar');
   document.body.classList.toggle('with-topbar', bills);
+  document.body.dataset.tab = ui.tab;
   $('.topbar').hidden = !bills;
   $('.topbar').classList.toggle('hide-nav', !nav);
   $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : ui.billView === 'schedule' ? 'Schedule' : 'บิลทั้งหมด';
@@ -245,9 +263,10 @@ function setTab(tab) {
 
 function occItem(o) {
   const b = o.bill;
-  const dueTxt = `ครบกำหนด ${thShortDate(o.due)}`;
+  const cut = cutDateFor(b, o.ym);
+  const dueTxt = `${cut ? `ตัดรอบ ${thShortDate(cut)} · ` : ''}ครบกำหนด ${thShortDate(o.due)}`;
   const extra = [o.inst ? `งวด ${o.inst.n}/${o.inst.of}` : '', record(o.ym, b.id).file ? '📎' : '', b.note ? esc(b.note) : ''].filter(Boolean).join(' · ');
-  const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : 'ระบุยอด'}</span>` : baht(o.amount);
+  const amt = o.needsAmount ? `<span class="badge warn">${b.pea ? '⚡ ดึงยอด' : b.gmail ? '📧 ดึงยอด' : 'ระบุยอด'}</span>` : baht(o.amount);
   return `
     <div class="item ${o.paid ? 'paid' : ''}" data-occ="${b.id}" data-ym="${o.ym}" role="button" tabindex="0">
       ${icoHtml(b)}
@@ -458,12 +477,13 @@ function renderSettings() {
     ${calFeedSettings()}
     ${lineSettings()}
     ${chatSettings()}
+    ${aiSettings()}
 
     <div class="section-title">สำรองข้อมูล</div>
     <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
     <button class="btn ghost" data-action="import">⬆️ นำเข้าข้อมูล</button>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
-    <p class="hint">${isCloud() ? 'รายการรับจ่าย งบประมาณ และรายจ่ายร่วมซิงก์กับบัญชีออนไลน์ ส่วนรายการบิลเก็บในเครื่องนี้ ควรส่งออกเก็บไว้เป็นระยะ' : 'ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ'}</p>
+    <p class="hint">${isCloud() ? 'บิล ประวัติการจ่าย ไฟล์ใบแจ้งหนี้ รายการรับจ่าย และงบประมาณ ซิงก์กับบัญชีออนไลน์ทุกเครื่องที่เข้าสู่ระบบ' : 'ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ'}</p>
 
     ${installTip()}
 
@@ -485,6 +505,7 @@ function renderSettings() {
   lineSettingsBind();
   pushSettingsBind();
   chatSettingsBind();
+  aiSettingsBind();
   view.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.themePick === themeId()) return;
     setTheme(b.dataset.themePick);
@@ -739,13 +760,15 @@ function billForm(b, opts = {}) {
     const days = Array.from({ length: 31 }, (_, i) => i + 1)
       .map((d) => `<option value="${d}" ${Number(draft.dueDay) === d ? 'selected' : ''}>วันที่ ${d}</option>`).join('');
     let html = '';
+    const cutRow = draft.category === 'credit'
+      ? `<div class="field"><label for="fCut">วันตัดรอบ</label><select id="fCut">${cutDayOptions(draft.cutDay)}</select></div>` : '';
     if (draft.auto) {
-      html = `<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
+      html = `${cutRow}<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
         <div class="field"><label for="fStart">เริ่มเดือน</label><input type="month" id="fStart" value="${draft.startMonth || ui.ym}"></div>`;
     } else if (draft.type === 'once') {
       html = `<div class="field"><label for="fOnce">วันที่จ่าย</label><input type="date" id="fOnce" value="${draft.onceDate}"></div>`;
     } else {
-      html = `<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
+      html = `${cutRow}<div class="field"><label for="fDue">ครบกำหนด</label><select id="fDue">${days}</select></div>
         <div class="field"><label for="fStart">เริ่มเดือน</label><input type="month" id="fStart" value="${draft.startMonth || ui.ym}"></div>`;
       if (draft.type === 'installment') {
         html += `<div class="field"><label for="fMonths">จำนวนงวด</label><input id="fMonths" inputmode="numeric" value="${draft.months || 12}"></div>`;
@@ -770,6 +793,7 @@ function billForm(b, opts = {}) {
     draft.walletId = $('#fWallet').value;
     draft.remind = $('#fRemind').value === '' ? undefined : Number($('#fRemind').value);
     if ($('#fDue')) draft.dueDay = Number($('#fDue').value);
+    if ($('#fCut')) draft.cutDay = $('#fCut').value ? Number($('#fCut').value) : undefined;
     if ($('#fStart')) draft.startMonth = $('#fStart').value || ui.ym;
     if ($('#fEnd')) draft.endMonth = $('#fEnd').value || undefined;
     // An end before the start would hide the bill entirely, so it falls back to no end.
@@ -787,6 +811,7 @@ function billForm(b, opts = {}) {
         account: $('#fGAcc').value.replace(/[\s-]/g, ''),
         day: Number($('#fGDay').value),
         payDays: Number($('#fGPay').value),
+        pdfPass: $('#fGPass').value.trim() || undefined,
       };
     }
   };
@@ -873,8 +898,9 @@ function billForm(b, opts = {}) {
           <div class="field"><label for="fGAcc">เบอร์/เลขบัญชี</label><input id="fGAcc" inputmode="numeric" placeholder="ไม่บังคับ" value="${esc(g.account || '')}" autocomplete="off"></div>
           <div class="field"><label for="fGDay">ดึงทุกเดือน</label><select id="fGDay">${gmailDayOptions(g.day)}</select></div>
           <div class="field"><label for="fGPay">จ่ายภายใน</label><select id="fGPay">${gmailPayOptions(g.payDays)}</select></div>
+          <div class="field"><label for="fGPass">รหัสเปิด PDF</label><input id="fGPass" placeholder="ไม่บังคับ" value="${esc(g.pdfPass || '')}" autocomplete="off" autocapitalize="off"></div>
         </div>
-        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · "จ่ายภายใน" ตั้งวันครบกำหนดเป็นจำนวนวันหลังดึงบิล แทนวันที่ในอีเมล · เลือกหมวดหมู่ด้านล่าง</p>`;
+        <p class="hint">ใส่อีเมลเต็มเพื่อดึงเฉพาะผู้ส่งนั้น หรือแค่โดเมน (เช่น ktc.co.th) เพื่อดึงทุกอีเมลจากบริษัทนั้น ใส่หลายรายการคั่นด้วยเว้นวรรคได้ · ใส่เบอร์/เลขบัญชีเมื่อมีหลายบิลจากผู้ส่งเดียวกัน · ตั้งแต่วันที่เลือก แอปจะดึงบิลของเดือนให้เองเมื่อเปิดแอป · "จ่ายภายใน" ตั้งวันครบกำหนดเป็นจำนวนวันหลังดึงบิล แทนวันที่ในอีเมล · ใส่ "รหัสเปิด PDF" เมื่อยอดอยู่ใน PDF ที่ล็อกรหัส (เช่น AIS) · เลือกหมวดหมู่ด้านล่าง</p>`;
     }
     box.innerHTML = html;
     const chipsEl = $('#srcChips');
@@ -907,7 +933,10 @@ function billForm(b, opts = {}) {
     paintHero();
     if (['credit', 'electric', 'water'].includes(draft.category) && isNew) $('#fVariable').checked = true;
     if (['loan', 'insurance', 'rent', 'subscription', 'internet'].includes(draft.category) && isNew) $('#fVariable').checked = false;
-    if (draft.category === 'loan' && isNew && draft.type === 'monthly') { sync(); draft.type = 'installment'; renderSched(); }
+    // Re-draw the schedule rows: the type may change and credit cards add the cut-off day row.
+    sync();
+    if (draft.category === 'loan' && isNew && draft.type === 'monthly') draft.type = 'installment';
+    renderSched();
     renderPea();
   });
   $('#typeSeg').addEventListener('click', (e) => {
@@ -947,6 +976,7 @@ function billForm(b, opts = {}) {
       out.dueDay = Math.min(31, Math.max(1, draft.dueDay || 1));
       out.startMonth = draft.startMonth || ui.ym;
       if (draft.type === 'installment') out.months = Math.max(1, draft.months || 1);
+      if (out.category === 'credit' && draft.cutDay) out.cutDay = Math.min(31, Math.max(1, draft.cutDay));
       if (draft.type === 'monthly' && !draft.auto && draft.endMonth) out.endMonth = draft.endMonth;
     }
     if (draft.auto && draft.source === 'pea') {
@@ -1034,6 +1064,7 @@ function occurrenceSheet(id, ym) {
       <div class="hero-ico${billImg(b) ? ' has-img' : ''}" style="background:${c.color}2e">${billFace(b)}</div>
       <h3>${esc(b.name)}</h3>
       <div class="sub">${c.label} · ครบกำหนด ${thShortDate(o.due)} ${o.due.getFullYear() + BE}</div>
+      ${(() => { const cd = cutDateFor(b, ym); return cd ? `<div class="sub">ตัดรอบ ${thShortDate(cd)} ${cd.getFullYear() + BE}</div>` : ''; })()}
       <div style="margin-top:6px">${statusBadge(o)}</div>
     </div>
     <div class="form rows">
@@ -1050,6 +1081,7 @@ function occurrenceSheet(id, ym) {
     ${peaNeeded ? `<div class="alert warn">⚡<div>บิลนี้ผูกกับ PEA ต้องดึงยอด${thMonthYear(ym)}ก่อนจึงจะกดจ่ายได้</div></div>` : ''}
     ${b.pea ? `<button class="btn ${peaNeeded ? '' : 'ghost'}" id="oPea" type="button">⚡ ดึงยอด${peaNeeded ? 'เดือนนี้' : ''}จาก PEA</button>` : ''}
     ${peaNeeded && peaFetchDay(b, ym) ? `<p class="hint">แอปจะดึงยอดให้เองตั้งแต่วันที่ ${peaFetchDay(b, ym)} เมื่อเปิดแอป</p>` : ''}
+    ${b.gmail ? `<button class="btn ${rec.amount == null && !o.paid ? '' : 'ghost'}" id="oGmail" type="button">📧 ดึงยอดจาก Gmail</button>` : ''}
     ${o.paid
       ? `<button class="btn ghost" id="oSave">บันทึกยอด</button><button class="btn danger" id="oUnpay">ยกเลิกสถานะจ่ายแล้ว</button>`
       : `${slips ? `<button type="button" class="scan-btn pay-slip" id="oSlip">${SCAN_ICON}<span class="scan-text">จ่ายด้วยสลิป</span></button>
@@ -1162,6 +1194,17 @@ function occurrenceSheet(id, ym) {
       toast(err.message || 'แนบไฟล์ไม่สำเร็จ');
     }
   });
+  const oGmail = $('#oGmail');
+  if (oGmail) {
+    // Load Google's script now so the sign-in popup can open straight from the tap.
+    gmailPrepare().catch(() => {});
+    oGmail.addEventListener('click', async () => {
+      oGmail.disabled = true; oGmail.textContent = 'กำลังดึง…';
+      const res = await gmailRunRules([b], false);
+      if (res && !res.rows.some((r) => r.rule === b)) toast(`ไม่พบอีเมลบิลของ ${b.name} ใน 4 เดือนที่ผ่านมา ตรวจอีเมลผู้ส่งและเบอร์ในกฎ`);
+      if ($('#oGmail')) occurrenceSheet(id, ym);
+    });
+  }
   const oPea = $('#oPea');
   if (oPea) oPea.addEventListener('click', async () => {
     const label = oPea.textContent;
@@ -1447,7 +1490,8 @@ document.addEventListener('click', (e) => {
     case 'gmail-auto': gmailAutoRun(false); break;
     case 'reset':
       if (isCloud()) {
-        if (confirm('ลบข้อมูลบิลในเครื่องนี้? (รายการรับจ่ายในบัญชีออนไลน์จะไม่ถูกลบ)')) {
+        if (confirm('ลบบิลและประวัติการจ่ายทั้งหมด? จะลบจากบัญชีออนไลน์และทุกเครื่องด้วย (รายการรับจ่ายไม่ถูกลบ)')) {
+          Object.entries(state.records).forEach(([ym, m]) => Object.entries(m).forEach(([id, r]) => { if (r.file) billFileDel(id, ym); }));
           state = defaultState(); save(); render(); toast('ลบข้อมูลบิลแล้ว');
         }
       } else if (confirm('ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้')) {
@@ -1470,11 +1514,25 @@ document.addEventListener('keydown', (e) => {
 
 // Re-render when returning to the app so "today" and statuses stay current.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); pushAlertsChanged(); } peaAutoTry(); }
+  if (document.visibilityState === 'visible') { render(); updateBadge(); if (isCloud()) { scheduleRefresh(); calFeedChanged(); pushAlertsChanged(); aiBillsChanged(); } peaAutoTry(); }
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // The iPhone keeps a home-screen app alive for days, so a new version is looked for each time the
+  // app comes back to the screen, and once it is in, the page reloads the next time it is put away
+  // or brought back (never while someone is mid-way through a screen).
+  let fresh = false;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return; // first install: nothing old to replace
+    fresh = true;
+    if (document.hidden) location.reload();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (fresh) { location.reload(); return; }
+    if (!document.hidden) navigator.serviceWorker.getRegistration().then((r) => r && r.update()).catch(() => {});
+  });
 }
 
 render();
@@ -1482,4 +1540,5 @@ updateBadge();
 cloudStart();
 calFeedChanged();
 pushAlertsChanged();
+aiBillsChanged();
 setTimeout(peaAutoTry, 1500);

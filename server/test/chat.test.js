@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { parseNote } from '../src/noteparse.js';
 
 const API = process.env.API_URL || 'http://localhost:3999';
 const run = crypto.randomBytes(4).toString('hex');
@@ -47,7 +48,7 @@ test('chat: setup a couple and an outsider', async () => {
 
 test('chat: the couple room is shared, private to the two, with unread and read marks', async () => {
   const st0 = await A('GET', '/chat/state');
-  assert.deepEqual(Object.keys(st0.rooms).sort(), ['ai', 'couple']);
+  assert.deepEqual(Object.keys(st0.rooms).sort(), ['ai', 'couple', 'sec']);
   assert.equal((await C('GET', '/chat/state')).rooms.couple, undefined);
   assert.equal((await send(C, 'couple', 'hi')).status, 409);
 
@@ -74,6 +75,20 @@ test('chat: the couple room is shared, private to the two, with unread and read 
   assert.equal((await B('POST', '/chat/messages', { id, room: 'couple', text: 'steal' })).status, 409);
   assert.equal((await send(A, 'couple', '   ')).status, 400);
   assert.equal((await send(A, 'nope', 'x')).status, 400);
+});
+
+test('chat: the couple can rename their room', async () => {
+  assert.equal((await A('GET', '/chat/state')).rooms.couple.name, null);
+  assert.equal((await A('PUT', '/chat/room', { name: '  บ้าน  ลำพูน ' })).name, 'บ้าน ลำพูน');
+  assert.equal((await B('GET', '/chat/state')).rooms.couple.name, 'บ้าน ลำพูน');
+  assert.equal((await C('PUT', '/chat/room', { name: 'x' })).status, 409);
+  assert.equal((await B('PUT', '/chat/room', { name: '' })).name, null);
+  assert.equal((await A('GET', '/chat/state')).rooms.couple.name, null);
+});
+
+test('chat: the app reports whether it is on screen', async () => {
+  assert.equal((await A('POST', '/chat/view', { visible: true })).ok, true);
+  assert.equal((await A('POST', '/chat/view', { visible: false })).ok, true);
 });
 
 test('chat: edit, delete and reactions', async () => {
@@ -108,6 +123,23 @@ test('chat: a ทำนัด line becomes a shared note at once', async () => {
   assert.equal(r.assistant.action.note.shared, true);
   const notes = (await B('GET', '/bootstrap')).notes;
   assert.ok(notes.some((n) => n.id === r.assistant.action.note.id));
+});
+
+test('chat: a due reminder lands in the couple room', async () => {
+  // Five minutes ago in Bangkok, so the next reminder tick sends it.
+  const t = new Date(Date.now() + 7 * 3600e3 - 5 * 60e3);
+  const hhmm = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
+  const date = `${t.getUTCDate()}/${t.getUTCMonth() + 1}/${t.getUTCFullYear()}`;
+  const r = await send(B, 'couple', `ทำนัด ${date} ${hhmm} รับลูกที่โรงเรียน เตือนตรงเวลา`);
+  assert.equal(r.assistant.action.note.remind, 0);
+  let hit;
+  for (let i = 0; i < 40 && !hit; i++) {
+    await new Promise((res) => setTimeout(res, 250));
+    hit = (await A('GET', '/chat/messages?room=couple')).messages.find((m) => m.ai && /^🔔 ถึงเวลาแล้ว/.test(m.text));
+  }
+  assert.ok(hit, 'reminder posted');
+  assert.match(hit.text, /@พ่อบุ๊ค|@แม่เฟิร์น/);
+  assert.equal(hit.action.note.text, 'รับลูกที่โรงเรียน');
 });
 
 let token;
@@ -155,6 +187,25 @@ test('chat: questions go to the Mac and the answer comes back, with a note', asy
   assert.equal((await A('GET', '/chat/messages?room=ai')).messages.length, 0);
   assert.equal((await bridge(token, 'POST', `/jobs/${job.id}`, { reply: 'again' })).status, 404);
 
+  // A bare @ผู้ช่วย followed by the question still asks.
+  await send(A, 'couple', '@ผู้ช่วย');
+  assert.equal((await bridge(token, 'GET', '/next?wait=0')).status, 204);
+  await send(A, 'couple', 'สวัสดีครับ');
+  const j0 = await bridge(token, 'GET', '/next?wait=2');
+  assert.equal(j0.status, 200);
+  assert.match(j0.messages.at(-1).content, /สวัสดีครับ/);
+  await bridge(token, 'POST', `/jobs/${j0.id}`, { reply: 'สวัสดีครับ' });
+
+  // A date written in the question wins when the model's note is a day out.
+  await send(A, 'couple', '@ผู้ช่วย แจ้งเตือน วันที่ 2 November มีนัดล้างแอร์ 9:00 am แจ้งเตือนล่วงหน้า 1 วัน');
+  const jd = await bridge(token, 'GET', '/next?wait=2');
+  const off = await bridge(token, 'POST', `/jobs/${jd.id}`, {
+    reply: '<centel-note>{"text": "นัดล้างแอร์", "date": "2026-11-01", "time": "08:00", "remind": 1440}</centel-note>',
+  });
+  assert.equal(off.message.action.note.date, parseNote('วันที่ 2 November').date);
+  assert.match(off.message.action.note.date, /-11-02$/);
+  assert.equal(off.message.action.note.time, '09:00');
+
   // In the couple room: @ผู้ช่วย asks, and a failed answer says so.
   await send(A, 'couple', '@ผู้ช่วย สรุปรายจ่ายเดือนนี้');
   const j2 = await bridge(token, 'GET', '/next?wait=2');
@@ -196,6 +247,109 @@ test('chat: a long poll wakes when a question arrives, and the stream delivers e
   assert.ok(events.some((e) => e.type === 'msg' && e.msg.text === '@ผู้ช่วย บิลที่ยังไม่จ่าย'));
   assert.ok(events.some((e) => e.type === 'ai' && e.state === 'typing'));
   assert.ok(events.some((e) => e.type === 'msg' && e.msg.ai && e.msg.text === 'ไม่มีบิลค้างครับ'));
+});
+
+test('chat: a spoken question is heard on the Mac, then answered', async () => {
+  const id = crypto.randomUUID();
+  const audio = crypto.randomBytes(4000).toString('base64');
+  const sttNext = async (wait) => fetch(API + `/api/bridge/next?wait=${wait}`, { headers: { authorization: `Bearer ${token}`, 'x-bridge-caps': 'stt' } });
+  // No Mac that can hear yet: no mic, and a recording is turned away instead of waiting forever.
+  assert.equal((await B('GET', '/chat/state')).bridge.voice, false);
+  const no = await B('POST', '/chat/voice', { id, room: 'ai', audio, mime: 'audio/mp4' });
+  assert.equal(no.status, 409);
+  assert.equal((await sttNext(0)).status, 204);
+  assert.equal((await B('GET', '/chat/state')).bridge.voice, true);
+  assert.equal((await B('POST', '/chat/voice', { id, room: 'ai', audio: 'abc', mime: 'audio/mp4' })).status, 400);
+  const v = await B('POST', '/chat/voice', { id, room: 'ai', audio, mime: 'audio/mp4' });
+  assert.equal(v.ok, true);
+  assert.equal((await B('GET', '/chat/state')).rooms.ai.pending, 'listening');
+  const job = await (await sttNext(2)).json();
+  assert.equal(job.kind, 'transcribe');
+  assert.equal(job.audio, audio);
+  const done = await bridge(token, 'POST', `/jobs/${job.id}`, { text: '  งบอาหารเหลือ   เท่าไหร่ ' });
+  assert.equal(done.message.id, id);
+  assert.equal(done.message.text, 'งบอาหารเหลือ เท่าไหร่');
+  assert.equal(done.message.action.type, 'voice');
+  const reply = await (await sttNext(2)).json();
+  assert.equal(reply.kind, 'reply');
+  assert.equal(reply.messages.at(-1).content, 'งบอาหารเหลือ เท่าไหร่');
+  await (await fetch(API + `/api/bridge/jobs/${reply.id}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-bridge-caps': 'stt', 'content-type': 'application/json' }, body: JSON.stringify({ reply: 'ยังไม่ได้ตั้งงบครับ' }) })).json();
+  // Nothing heard: the room is told.
+  await B('POST', '/chat/voice', { id: crypto.randomUUID(), room: 'ai', audio, mime: 'audio/webm' });
+  const j2 = await (await sttNext(2)).json();
+  await fetch(API + `/api/bridge/jobs/${j2.id}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-bridge-caps': 'stt', 'content-type': 'application/json' }, body: JSON.stringify({ text: '' }) });
+  assert.match((await B('GET', '/chat/messages?room=ai')).messages.at(-1).text, /ฟังไม่ชัด/);
+  // The Mac comes back without Whisper: a waiting recording is dropped with a note, not left hanging.
+  await sttNext(0);
+  await B('POST', '/chat/voice', { id: crypto.randomUUID(), room: 'ai', audio, mime: 'audio/mp4' });
+  assert.equal((await bridge(token, 'GET', '/next?wait=0')).status, 204);
+  const st = await B('GET', '/chat/state');
+  assert.equal(st.rooms.ai.pending, null);
+  assert.equal(st.bridge.voice, false);
+  assert.match((await B('GET', '/chat/messages?room=ai')).messages.at(-1).text, /Whisper/);
+});
+
+test('chat: เลขาช่วยเหลือ is a private room for anything, with the web', async () => {
+  assert.ok('sec' in (await B('GET', '/chat/state')).rooms);
+  await send(B, 'sec', 'รอบหนังเซ็นทรัลเฟสติวัลเชียงใหม่วันนี้');
+  const job = await bridge(token, 'GET', '/next?wait=2');
+  assert.equal(job.kind, 'reply');
+  assert.equal(job.web, true);
+  assert.match(job.messages[0].content, /เลขาช่วยเหลือ/);
+  assert.match(job.messages[0].content, /web_search/);
+  assert.doesNotMatch(job.messages[0].content, /รายจ่ายเดือน/);
+  assert.equal(job.messages.at(-1).content, 'รอบหนังเซ็นทรัลเฟสติวัลเชียงใหม่วันนี้');
+  const ans = await bridge(token, 'POST', `/jobs/${job.id}`, { reply: 'มีรอบ 13:00 กับ 16:30 ครับ' });
+  assert.equal(ans.ok, true);
+  const page = await B('GET', '/chat/messages?room=sec');
+  assert.equal(page.messages.length, 2);
+  assert.equal((await A('GET', '/chat/messages?room=sec')).messages.length, 0);
+  // The app assistant's own room does not get the web.
+  await send(B, 'ai', 'สวัสดี');
+  const j2 = await bridge(token, 'GET', '/next?wait=2');
+  assert.equal(j2.web, false);
+  await bridge(token, 'POST', `/jobs/${j2.id}`, { reply: 'สวัสดีครับ' });
+});
+
+test('chat: the Mac reports its status for the สถานะ Mac page', async () => {
+  const before = await A('GET', '/chat/mac');
+  assert.equal(before.macs.length, 1);
+  assert.equal(before.macs[0].status, null);
+  const st = await bridge(token, 'POST', '/status', {
+    host: 'KB-Mac-mini', chip: 'Apple M4 Pro', os: 'macOS 26.1', uptime: 3600 * 30,
+    cpu: { cores: 12, load: [1.5, 1.2, 0.9], usage: 23.4 },
+    mem: { total: 32 * 1024 ** 3, used: 20 * 1024 ** 3, secret: 'x' },
+    disk: { total: 500e9, free: 200e9 },
+    ollama: { up: true, version: '0.12.0', running: [{ name: 'qwen3:14b', size: 10e9, vram: 10e9 }], models: [{ name: 'qwen3:14b', size: 9e9 }] },
+    hermes: { up: true, ms: 12 }, voice: true, web: true,
+    bridge: { version: '2', answered: 5, avgMs: 8200 },
+    evil: '<script>',
+  });
+  assert.equal(st.ok, true);
+  await bridge(token, 'POST', '/status', { cpu: { usage: 50 }, mem: { total: 100, used: 40 } });
+  // The partner sees the couple's Mac too, with its last report and one chart sample (5-minute spacing).
+  const out = await B('GET', '/chat/mac');
+  const m = out.macs[0];
+  assert.equal(m.online, true);
+  assert.equal(m.mine, false);
+  assert.equal(m.status.cpu.usage, 50);
+  assert.equal(m.samples.length, 1);
+  assert.equal(m.samples[0].cpu, 23.4);
+  assert.equal(Math.round(m.samples[0].mem), 63);
+  assert.equal(m.samples[0].disk, 60);
+  assert.equal(m.status.evil, undefined);
+  assert.equal(m.status.mem.secret, undefined);
+  assert.ok(out.jobs.done >= 1);
+  // Junk numbers are dropped, not stored.
+  await bridge(token, 'POST', '/status', { host: 'x'.repeat(500), cpu: { usage: 'lots', cores: -1 } });
+  const m2 = (await A('GET', '/chat/mac')).macs[0];
+  assert.equal(m2.status.host.length, 40);
+  assert.equal(m2.status.cpu.usage, null);
+  assert.equal(m2.status.cpu.cores, null);
+  assert.equal(m2.mine, true);
+  // Someone outside the couple sees no Mac.
+  assert.equal((await C('GET', '/chat/mac')).macs.length, 0);
+  assert.equal((await bridge('cb_' + 'x'.repeat(32), 'POST', '/status', {})).status, 401);
 });
 
 test('chat: revoking the token stops the bridge', async () => {

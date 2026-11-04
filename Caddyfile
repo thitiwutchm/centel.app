@@ -31,6 +31,13 @@
 		respond `{"googleClientId":"{$GOOGLE_CLIENT_ID}"}` 200
 	}
 
+	# Claude / ChatGPT connect to Centel's MCP server (server/src/mcp.js) and find its
+	# OAuth sign-in through the well-known documents; both are served by the api.
+	@mcp path /mcp /mcp/* /.well-known/oauth-protected-resource* /.well-known/oauth-authorization-server* /.well-known/openid-configuration*
+	handle @mcp {
+		reverse_proxy {$API_UPSTREAM:api.railway.internal:8080}
+	}
+
 	# Everything else under /api is the centel API, its own Railway service on the private network.
 	# Named matchers keep their written order, so the PEA route above still wins for /api/pea-bill.
 	@api path /api/*

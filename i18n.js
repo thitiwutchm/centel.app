@@ -63,8 +63,8 @@ const I18N_EN = {
   'แตะปุ่ม': 'Tap the', 'แชร์': 'Share', '(สี่เหลี่ยมมีลูกศรขึ้น)': 'button (square with an up arrow)', 'เลือก': 'Choose',
   'เพิ่มไปยังหน้าจอโฮม': 'Add to Home Screen', 'ใช้งานแบบออฟไลน์ได้ ข้อมูลเก็บไว้ในเครื่องของคุณเท่านั้น': 'Works offline. Your data stays on your device.',
   'วันครบกำหนด': 'On the due date', 'วัน': 'days', '{0} วัน': '{0} days',
-  'รายการรับจ่าย งบประมาณ และรายจ่ายร่วมซิงก์กับบัญชีออนไลน์ ส่วนรายการบิลเก็บในเครื่องนี้ ควรส่งออกเก็บไว้เป็นระยะ':
-    'Transactions, budgets and shared expenses sync with your online account; bills are kept on this device. Export a backup now and then.',
+  'บิล ประวัติการจ่าย ไฟล์ใบแจ้งหนี้ รายการรับจ่าย และงบประมาณ ซิงก์กับบัญชีออนไลน์ทุกเครื่องที่เข้าสู่ระบบ':
+    'Bills, payment history, invoice files, transactions and budgets sync with your online account on every signed-in device.',
   'ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ':
     'All data is stored on this device (localStorage) and sent nowhere. Export a backup now and then.',
   'การแจ้งเตือน': 'Reminders', 'เตือนล่วงหน้า': 'Remind me',
@@ -76,6 +76,14 @@ const I18N_EN = {
   // Calendar subscription (calfeed.js)
   '📆 ซิงก์บิลเข้าปฏิทิน iPhone อัตโนมัติ': '📆 Auto-sync bills to iPhone Calendar',
   '📆 ปฏิทิน iPhone: ซิงก์อัตโนมัติอยู่': '📆 iPhone Calendar: auto sync on',
+  // Connect Claude / ChatGPT (ai.js)
+  'เชื่อมกับ AI': 'Connect AI', 'เชื่อมกับ AI อยู่ {0} แอป': 'Connected to {0} AI app(s)',
+  'ให้ Claude / ChatGPT อ่านข้อมูลสรุปให้': 'Let Claude / ChatGPT read and summarise',
+  'ลิงก์ MCP ของ Centel (ใช้ได้ทั้ง Claude และ ChatGPT)': 'Centel MCP link (works with Claude and ChatGPT)',
+  'แอปที่เชื่อมอยู่': 'Connected apps', 'ยังไม่เคยใช้': 'not used yet', 'ใช้ล่าสุด {0}': 'Last used {0}',
+  'ยังไม่มี เชื่อมแล้วกลับมาหน้านี้ จะเห็นชื่อแอปที่นี่': 'None yet. Once connected, the app shows up here.',
+  'ต้องเข้าสู่ระบบก่อน AI อ่านข้อมูลจากบัญชีออนไลน์ของคุณ': 'Sign in first: the AI reads your online account.',
+  'ยกเลิกการเชื่อมแอปนี้? AI จะอ่านข้อมูล Centel ไม่ได้อีก จนกว่าจะเชื่อมใหม่': 'Remove this app? It can no longer read Centel until you connect it again.',
   'สมัครปฏิทินครั้งเดียว แล้วทุกบิลที่มีกำหนดจ่ายจะไปอยู่ในปฏิทิน iPhone พร้อมเสียงเตือน และอัปเดตเองเมื่อเพิ่ม แก้ไข หรือจ่ายบิล':
     'Subscribe once and every bill with a due date goes into iPhone Calendar with alerts, updating by itself when you add, edit or pay bills.',
   'สมัครปฏิทินครั้งเดียว แล้วทุกบิลที่มีกำหนดจ่ายจะไปอยู่ในปฏิทิน iPhone พร้อมเสียงเตือน และอัปเดตเองเมื่อเพิ่ม แก้ไข หรือจ่ายบิล (ต้องเข้าสู่ระบบ)':
@@ -138,6 +146,7 @@ const I18N_EN = {
   'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ครั้งเดียว': 'Once', 'ทุกเดือน': 'Monthly', 'ผ่อนงวด': 'Installments',
   'หมวดหมู่': 'Category', 'ยอดไม่แน่นอน': 'Variable amount', 'กรอกยอดจริงทุกเดือน': 'Enter the real amount each month',
   'จ่ายจาก': 'Pay from', 'เตือน': 'Remind', 'ตัดบัญชีอัตโนมัติ': 'Autopay', 'วันที่ {0}': 'Day {0}',
+  'วันตัดรอบ': 'Statement date', 'ตัดรอบ {0}': 'Statement {0}', 'ตัดรอบ {0} {1}': 'Statement {0} {1}', 'ตัดรอบ {0} · ครบกำหนด {1}': 'Statement {0} · due {1}',
   'ครบกำหนด': 'Due', 'เริ่มเดือน': 'Starts', 'วันที่จ่าย': 'Payment date', 'จำนวนงวด': 'Installments', 'สิ้นสุด': 'Ends',
   'ไม่มีวันสิ้นสุด': 'Never', 'เช่น ebill@ktc.co.th': 'e.g. ebill@ktc.co.th', 'ไม่บังคับ': 'Optional',
   'กฎดึงบิลจาก Gmail': 'Gmail bill rule', 'อีเมลผู้ส่ง': 'Sender email', 'เบอร์/เลขบัญชี': 'Phone / account no.',
@@ -179,7 +188,10 @@ const I18N_EN = {
   '{0} จ่าย{1}{2}': '{0} Pay {1}{2}', 'อีก {0} วันครบกำหนด {1}': '{1} is due in {0} days', 'วันนี้ครบกำหนด {0}': '{0} is due today',
   'ทุกบิลตั้งเป็นตัดบัญชีอัตโนมัติ': 'Every bill is on autopay', 'ข้อมูลตัวอย่างใช้ได้เฉพาะเมื่อไม่ได้เข้าสู่ระบบ': 'Sample data only works when signed out',
   'แทนที่ข้อมูลปัจจุบันด้วยข้อมูลตัวอย่าง?': 'Replace your current data with sample data?', 'เพิ่มข้อมูลตัวอย่างแล้ว': 'Sample data added',
-  'ลบข้อมูลบิลในเครื่องนี้? (รายการรับจ่ายในบัญชีออนไลน์จะไม่ถูกลบ)': 'Delete the bills on this device? (Transactions in your online account are kept)',
+  'ลบบิลและประวัติการจ่ายทั้งหมด? จะลบจากบัญชีออนไลน์และทุกเครื่องด้วย (รายการรับจ่ายไม่ถูกลบ)': 'Delete all bills and payment history? This removes them from your online account and every device (transactions are kept)',
+  'ดาวน์โหลดไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not download the file. Try again',
+  'ไม่พบไฟล์ในเครื่องนี้ (แนบจากเครื่องอื่นก่อนซิงก์ไฟล์ ให้แนบใหม่ที่เครื่องนั้น)': 'File not found on this device (it was attached on another device before files synced; attach it again there)',
+  'ไฟล์ไม่รองรับ': 'File type not supported',
   'ลบข้อมูลบิลแล้ว': 'Bills deleted', 'ลบบิล รายการรับจ่าย งบประมาณ และประวัติทั้งหมด? ไม่สามารถกู้คืนได้': 'Delete all bills, transactions, budgets and history? This cannot be undone.',
   'ลบข้อมูลแล้ว': 'Data deleted',
 
@@ -211,7 +223,8 @@ const I18N_EN = {
   'ส่งออกรายการ (CSV)': 'Export transactions (CSV)', 'วันที่': 'Date', 'ประเภท': 'Type', 'กระเป๋าเงิน': 'Wallet', 'ไปยัง': 'To',
   'จำนวนเงิน': 'Amount', 'ร้านค้า': 'Merchant', 'ขอบเขต': 'Scope', 'ยอดรวมทั้งบิล': 'Bill total', 'สถานะ': 'Status',
   'รายจ่าย': 'Expense', 'รายรับ': 'Income', 'อนุมัติแล้ว': 'Approved', 'ไม่มีรายการ': 'No transactions',
-  'รายงาน {0}': 'Report {0}', 'คงเหลือสุทธิ': 'Net', 'รายจ่ายตามหมวดหมู่': 'Spending by category', 'รายรับตามหมวดหมู่': 'Income by category',
+  'รายงาน {0}': 'Report {0}', 'คงเหลือสุทธิ': 'Net', 'รายจ่ายตามหมวดหมู่': 'Spending by category', 'ไม่ระบุหมวดย่อย': 'No sub-category', 'สรุปตามร้าน/บันทึก': 'By shop / note', 'ไม่ระบุร้าน/บันทึก': 'No shop or note',
+  'สัดส่วนของรายจ่าย': 'Share of spending', 'สัดส่วนของรายรับ': 'Share of income', '{0} ครั้ง': '{0}×', 'รายรับตามหมวดหมู่': 'Income by category',
 
   // Budgets
   'เกินงบ {0}': 'Over by {0}', 'เหลือ {0}': '{0} left', 'สิ้นสุดแล้ว': 'Ended', 'เดือนหน้า': 'Next month', 'รวมทุกงบ': 'All budgets', 'งบร่วมทั้งหมด': 'All shared budgets',
@@ -363,6 +376,11 @@ const I18N_EN = {
   'กำลังเชื่อม Google…': 'Connecting to Google…', 'กำลังค้นหาอีเมลบิล…': 'Searching for bill emails…',
   'ถึงรอบดึงบิลจาก Gmail: {0} แตะเพื่อดึงบิลเดือนนี้': 'Time to fetch bills from Gmail: {0}. Tap to fetch this month.',
   'Gmail AutoSync: นำเข้า {0} บิล': 'Gmail AutoSync: imported {0} bills', 'Gmail AutoSync: ยังไม่มีบิลใหม่': 'Gmail AutoSync: no new bills yet',
+  '📧 ดึงยอด': '📧 Fetch amount', '📧 ดึงยอดจาก Gmail': '📧 Fetch amount from Gmail', 'รหัสเปิด PDF': 'PDF password',
+  '{0}: PDF ล็อกรหัส ใส่รหัสเปิด PDF ในกฎเพื่ออ่านยอด': '{0}: the PDF is locked. Add its PDF password to the rule to read the amount.',
+  '{0}: พบอีเมลบิลแต่อ่านยอดไม่ได้ กรอกยอดเอง': '{0}: found the bill email but could not read the amount. Enter it yourself.',
+  'PDF ล็อกรหัส ใส่รหัสเปิด PDF ในกฎเพื่ออ่านยอด': 'The PDF is locked. Add its PDF password to the rule to read the amount.',
+  'ไม่พบอีเมลบิลของ {0} ใน 4 เดือนที่ผ่านมา ตรวจอีเมลผู้ส่งและเบอร์ในกฎ': 'No bill email for {0} in the last 4 months. Check the rule\'s sender and number.',
   'Gmail AutoSync ไม่สำเร็จ:': 'Gmail AutoSync failed:', 'Gmail AutoSync ไม่สำเร็จ: {0}': 'Gmail AutoSync failed: {0}',
   'ดึงทุกวันที่ {0}': 'Fetches monthly on day {0}', 'ดึงเองเท่านั้น': 'Manual only', 'ดึงล่าสุด {0}': 'Last fetched {0}',
   '🔄 ดึงบิลทุกกฎตอนนี้': '🔄 Fetch all rules now', 'ตัดการเชื่อม Gmail': 'Disconnect Gmail',
@@ -451,10 +469,10 @@ const I18N_EN = {
   'ส่งแล้ว ดูการแจ้งเตือนบนเครื่อง': 'Sent, check your notifications', 'ไม่พบเครื่องที่เปิดการแจ้งเตือน ลองปิดแล้วเปิดใหม่': 'No device with notifications on. Turn it off and on again',
 
   // Chat mini app (chat.js)
-  'แชท': 'Chat', 'บ้านเรา': 'Our home', 'ผู้ช่วย Centel': 'Centel assistant', 'ผู้ช่วย': 'Assistant', 'ข้อความ': 'Message',
+  'แชท': 'Chat', 'บ้านเรา': 'Our home', 'แก้ชื่อห้อง': 'Rename room', 'ชื่อห้อง': 'Room name', 'ผู้ช่วย Centel': 'Centel assistant', 'ผู้ช่วย': 'Assistant', 'ข้อความ': 'Message',
   'พิมพ์ข้อความ': 'Type a message', 'ส่ง': 'Send', 'กลับ': 'Back', 'ตอบกลับ': 'Reply', 'คัดลอก': 'Copy', 'คัดลอกแล้ว': 'Copied',
-  'ผู้ช่วยออนไลน์': 'Assistant online', 'ผู้ช่วยออฟไลน์': 'Assistant offline', 'ยังไม่ได้เชื่อม Mac': 'Mac not connected',
-  'ผู้ช่วยกำลังพิมพ์…': 'Assistant is typing…', '{0} กำลังพิมพ์…': '{0} is typing…', 'ผู้ช่วยออฟไลน์ · จะตอบเมื่อ Mac เปิด': 'Assistant offline · answers when the Mac is on',
+  'ผู้ช่วยออนไลน์': 'Assistant online', 'เลขาช่วยเหลือ': 'Helper', 'เลขา': 'Helper', 'เลขาออนไลน์': 'Helper online', 'เลขาออฟไลน์': 'Helper offline', 'เลขากำลังพิมพ์…': 'Helper is typing…', 'เลขากำลังฟังเสียง…': 'Helper is listening…', 'เลขาออฟไลน์ · จะตอบเมื่อ Mac เปิด': 'Helper offline · answers when the Mac is on', 'รอบหนังวันนี้': "Today's showtimes", 'อากาศพรุ่งนี้': "Tomorrow's weather", 'ข่าวเด่นวันนี้': "Today's top news", 'แปลเป็นภาษาอังกฤษ': 'Translate to English', 'ผู้ช่วยออฟไลน์': 'Assistant offline', 'ยังไม่ได้เชื่อม Mac': 'Mac not connected',
+  'ผู้ช่วยกำลังพิมพ์…': 'Assistant is typing…', 'ผู้ช่วยกำลังฟังเสียง…': 'Assistant is listening…', 'พูด': 'Speak', 'แตะ ↑ เพื่อส่ง': 'Tap ↑ to send', 'อ่านออกเสียง': 'Read aloud', 'ข้อความเสียง': 'Voice message', 'อัดเสียงไม่สำเร็จ': 'Recording failed', 'เปิดไมค์ไม่ได้ ลองอนุญาตไมโครโฟนให้แอปก่อน': 'Could not use the mic. Allow microphone access first', 'เสียงสั้นหรือยาวเกินไป (ไม่เกิน 1 นาที)': 'Too short or too long (1 minute max)', '{0} กำลังพิมพ์…': '{0} is typing…', 'ผู้ช่วยออฟไลน์ · จะตอบเมื่อ Mac เปิด': 'Assistant offline · answers when the Mac is on',
   'ข้อความถูกลบ': 'Message deleted', 'แก้ไขแล้ว': 'edited', 'ดูข้อความก่อนหน้า': 'Earlier messages', 'กำลังโหลด…': 'Loading…',
   'เรื่อง': 'What', 'เมื่อ': 'When', 'เสร็จแล้ว': 'Done', 'ไม่ระบุวัน': 'No date', 'ลบแล้ว': 'Deleted', 'เปิดดู / แก้ไข': 'Open / edit',
   'คุณ:': 'You:', 'ตอบกลับ {0}': 'Reply to {0}', 'แก้ไขข้อความ': 'Edit message', 'ยกเลิกการตอบกลับ': 'Cancel reply', 'ยกเลิกการแก้ไข': 'Cancel edit',
@@ -465,6 +483,21 @@ const I18N_EN = {
   'คัดลอกคำสั่ง': 'Copy command', '🔑 เชื่อม Mac ที่รัน Hermes Agent': '🔑 Connect the Mac running Hermes Agent',
   '🔑 สร้าง token ใหม่ (ตัวเก่าจะใช้ไม่ได้)': '🔑 New token (the old one stops working)', 'ยกเลิกการเชื่อม Mac เครื่องนี้': 'Disconnect this Mac',
   'ยกเลิกการเชื่อม Mac?': 'Disconnect the Mac?', 'ยกเลิกการเชื่อมแล้ว': 'Disconnected', 'ยกเลิกการเชื่อม': 'Disconnect',
+  // สถานะ Mac (mac.js)
+  'สถานะ Mac': 'Mac status', '🖥️ สถานะ Mac': '🖥️ Mac status', 'รีเฟรช': 'Refresh',
+  'ดิสก์': 'Disk', '{0} คอร์': '{0} cores', 'ว่าง {0}': '{0} free', 'สูงมาก': 'Very high', 'ค่อนข้างสูง': 'High', 'ปกติ': 'Normal',
+  'เปิดเครื่องมา {0}': 'Up for {0}', 'เห็นล่าสุด {0}': 'Last seen {0}', 'ข้อมูลล่าสุดเมื่อ {0}': 'Last report {0}', 'เมื่อสักครู่': 'just now',
+  '{0} นาทีที่แล้ว': '{0} min ago', '{0} ชม.ที่แล้ว': '{0} h ago', '{0} วัน {1} ชม.': '{0} d {1} h', '{0} ชม. {1} นาที': '{0} h {1} min', '{0} นาที': '{0} min',
+  'ย้อนหลัง 24 ชั่วโมง': 'Last 24 hours', 'ยังไม่มีข้อมูลพอ': 'Not enough data yet', 'ตอนนี้ {0}% · เฉลี่ย {1}% · สูงสุด {2}%': 'Now {0}% · avg {1}% · max {2}%',
+  '24 ชม.ก่อน': '24 h ago', '12 ชม.ก่อน': '12 h ago', 'ตอนนี้': 'Now', 'บริการ': 'Services', 'ทำงาน': 'Running', 'ทำงาน · {0}': 'Running · {0}', 'ไม่ตอบ': 'Not responding',
+  'โมเดลที่โหลดอยู่': 'Loaded model', 'ไม่มี (โหลดเมื่อมีคำถาม)': 'None (loads on the next question)', 'ไม่ได้ใช้ (ต่อ Ollama ตรง)': 'Not used (direct to Ollama)',
+  'ฟังเสียง (Whisper)': 'Voice (Whisper)', 'ค้นเว็บ': 'Web search', 'เปิดอยู่': 'On', 'โมเดลในเครื่อง': 'Models on this Mac',
+  'ตอบแล้ว 24 ชม.': 'Answered, 24 h', 'เวลาตอบเฉลี่ย': 'Avg answer time', 'ตอบไม่ได้ 24 ชม.': 'Failed, 24 h', 'รอคิว': 'Waiting', 'ผิดพลาดล่าสุด': 'Last error',
+  '{0} วิ': '{0} s', 'bridge v{0} · เริ่ม {1} · ตอบไป {2} ครั้ง': 'bridge v{0} · started {1} · {2} answers', ' · ของ {0}': ' · {0}\'s',
+  'bridge บน Mac ยังเป็นรุ่นเก่า': 'The bridge on the Mac is an older version',
+  'อัปเดตครั้งเดียวเพื่อให้ Mac ส่งสถานะเครื่องมาแสดงที่นี่ วางคำสั่งนี้ใน Terminal บน Mac (ค่าที่ตั้งไว้ไม่หาย)': 'Update it once so the Mac reports its status here. Paste this in Terminal on the Mac (your settings stay).',
+  'เชื่อม Mac ที่รัน Hermes Agent ได้ที่ บัญชี › ผู้ช่วย AI ในแชท แล้วสถานะเครื่องจะขึ้นที่นี่': 'Connect the Mac running Hermes Agent in Account › Chat assistant (AI) and its status shows here.',
+  'อัปเดต {0} · รีเฟรชเองทุก 30 วินาที': 'Updated {0} · refreshes every 30 seconds', 'โหลดสถานะไม่ได้: {0}': 'Couldn\'t load status: {0}',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

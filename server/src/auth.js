@@ -20,7 +20,7 @@ export async function verifyPassword(pw, stored) {
   return crypto.timingSafeEqual(want, got);
 }
 
-const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
+export const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 export async function createSession(res, userId) {
   const token = crypto.randomBytes(32).toString('base64url');
@@ -41,7 +41,7 @@ export async function destroySession(req, res) {
   res.clearCookie(COOKIE, { path: '/api' });
 }
 
-function readCookie(req) {
+export function readCookie(req) {
   const raw = req.headers.cookie || '';
   for (const part of raw.split(';')) {
     const i = part.indexOf('=');

@@ -283,7 +283,7 @@ export async function noteEditFromLine({ noteId, body, cancel }, lineUserId, now
 /* ---------- Reminder sender ---------- */
 
 const TH_DATE = new Intl.DateTimeFormat('th-TH-u-ca-buddhist', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const REMIND_TEXT = { 0: 'ถึงเวลาแล้ว', 60: 'อีก 1 ชั่วโมง', 120: 'อีก 2 ชั่วโมง', 180: 'อีก 3 ชั่วโมง', 360: 'อีก 6 ชั่วโมง', 1440: 'พรุ่งนี้', 2880: 'อีก 2 วัน', 4320: 'อีก 3 วัน' };
+export const REMIND_TEXT = { 0: 'ถึงเวลาแล้ว', 60: 'อีก 1 ชั่วโมง', 120: 'อีก 2 ชั่วโมง', 180: 'อีก 3 ชั่วโมง', 360: 'อีก 6 ชั่วโมง', 1440: 'พรุ่งนี้', 2880: 'อีก 2 วัน', 4320: 'อีก 3 วัน' };
 
 function reminderWhen(n) {
   const long = (ds) => { const [y, m, d] = ds.split('-').map(Number); return TH_DATE.format(new Date(Date.UTC(y, m - 1, d))); };
@@ -308,6 +308,9 @@ export function reminderPush(n) {
 // A note goes to its owner's active group and, when shared, the partner's too. Each
 // group's owner can name LINE users (line_people); those who are the note's people
 // (the owner, plus the partner on a shared note) are @mentioned.
+// Other places a due reminder goes (the in-app chat adds itself here).
+export const reminderHooks = [];
+
 export async function sendDueReminders() {
   const { rows } = await pool.query(
     `with due as (
@@ -321,6 +324,7 @@ export async function sendDueReminders() {
      from due join users u on u.id = due.owner_id`);
   if (!rows.length) return 0;
   for (const n of rows) await pushTo(n.people_ids, reminderPush(n)).catch((e) => console.error('push note', n.id, e.message));
+  for (const n of rows) for (const hook of reminderHooks) await hook(n).catch((e) => console.error('reminder hook', n.id, e.message));
   if (!lineEnabled) return rows.length;
   const users = [...new Set(rows.flatMap((n) => n.people_ids))];
   const targets = (await pool.query(

@@ -1,5 +1,5 @@
 // Bump CACHE when shipping changes so installed apps pick up the new files.
-const CACHE = 'billplanner-v61';
+const CACHE = 'billplanner-v83';
 const ASSETS = [
   './',
   'index.html',
@@ -11,12 +11,14 @@ const ASSETS = [
   'money.js',
   'notes.js',
   'chat.js',
+  'mac.js',
   'app.js',
   'billfiles.js',
   'gmail.js',
   'schedule.js',
   'calfeed.js',
   'push.js',
+  'ai.js',
   'manifest.webmanifest',
   'icons/centel-192.png',
   'icons/centel-512.png',
