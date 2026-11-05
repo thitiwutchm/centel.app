@@ -502,6 +502,22 @@ const I18N_EN = {
   'อัปเดตครั้งเดียวเพื่อให้ Mac ส่งสถานะเครื่องมาแสดงที่นี่ วางคำสั่งนี้ใน Terminal บน Mac (ค่าที่ตั้งไว้ไม่หาย)': 'Update it once so the Mac reports its status here. Paste this in Terminal on the Mac (your settings stay).',
   'เชื่อม Mac ที่รัน Hermes Agent ได้ที่ บัญชี › ผู้ช่วย AI ในแชท แล้วสถานะเครื่องจะขึ้นที่นี่': 'Connect the Mac running Hermes Agent in Account › Chat assistant (AI) and its status shows here.',
   'อัปเดต {0} · รีเฟรชเองทุก 30 วินาที': 'Updated {0} · refreshes every 30 seconds', 'โหลดสถานะไม่ได้: {0}': 'Couldn\'t load status: {0}',
+  // Profiles (profiles.js)
+  'สลับโปรไฟล์': 'Switch profile', 'ใช้อยู่: {0} · {1} โปรไฟล์': 'Using: {0} · {1} profiles',
+  'แยกข้อมูลเป็นหลายชุด เช่น ส่วนตัว / ธุรกิจ': 'Keep separate sets of data, e.g. personal / business',
+  'โปรไฟล์': 'Profiles', 'กำลังใช้อยู่': 'In use', 'แตะเพื่อสลับ': 'Tap to switch', 'กำลังใช้อยู่ · โปรไฟล์หลัก': 'In use · main profile',
+  'แตะเพื่อสลับ · โปรไฟล์หลัก': 'Tap to switch · main profile', 'ลบโปรไฟล์': 'Delete profile', 'เพิ่มโปรไฟล์': 'Add profile',
+  'แต่ละโปรไฟล์แยกข้อมูลกันทั้งหมด ทั้งกระเป๋าเงิน รายการ บิล งบประมาณ หมวดหมู่ ป้ายกำกับ โน้ต และการเชื่อมบัญชีคู่ ไม่รวมยอดหรือใช้ร่วมกัน เข้าสู่ระบบด้วยบัญชีเดียวแล้วสลับได้ในเครื่องนี้':
+    'Each profile keeps its own data: wallets, transactions, bills, budgets, categories, labels, notes and couple link. Nothing is shared or added up across profiles. Sign in once and switch on this device.',
+  'สร้าง': 'Create', 'ชื่อโปรไฟล์': 'Profile name', 'เช่น ธุรกิจ, ร้านกาแฟ': 'e.g. Business, Coffee shop',
+  'โปรไฟล์ใหม่เริ่มว่างเปล่า มีกระเป๋าเงินสด หมวดหมู่ตั้งต้น และไม่มีข้อมูลจากโปรไฟล์อื่น เปลี่ยนรูปและชื่อได้ภายหลังจากการ์ดบัญชี':
+    'A new profile starts empty with a cash wallet and the default categories, and nothing from other profiles. Change its picture and name later from the account card.',
+  'กรุณาใส่ชื่อโปรไฟล์': 'Please enter a profile name', 'สร้างโปรไฟล์แล้ว': 'Profile created', 'กำลังสลับโปรไฟล์…': 'Switching profile…',
+  'ยังบันทึกบิลของโปรไฟล์นี้ขึ้นบัญชีไม่ได้ ลองใหม่เมื่อออนไลน์': "This profile's bills are not saved online yet. Try again when online",
+  'ลบโปรไฟล์ "{0}"? ข้อมูลทั้งหมดในโปรไฟล์นี้จะถูกลบถาวร กู้คืนไม่ได้': 'Delete profile "{0}"? Everything in it is deleted for good and cannot be recovered.',
+  'ลบโปรไฟล์แล้ว': 'Profile deleted', 'มีโปรไฟล์ครบจำนวนแล้ว': 'You have the most profiles allowed', 'ลบโปรไฟล์หลักไม่ได้': 'The main profile cannot be deleted',
+  'สลับไปโปรไฟล์อื่นก่อนแล้วค่อยลบ': 'Switch to another profile before deleting this one',
+  'โปรไฟล์นี้ยังมีรายจ่ายร่วมกับคู่ ลบไม่ได้': 'This profile still has shared expenses with a partner and cannot be deleted',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

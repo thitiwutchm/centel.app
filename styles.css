@@ -1880,3 +1880,13 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .pkg-uses input { flex: 1; font-size: 17px; }
 .pkg-uses span { color: var(--muted); }
 .pkg-item .pkg-use { flex: 0 0 auto; white-space: nowrap; }
+
+/* Profiles (profiles.js) */
+.pf-faces { display: inline-flex; margin-right: 4px; }
+.avatar.pf-mini { width: 26px; height: 26px; flex: 0 0 26px; font-size: 14px; margin-left: -8px; border: 2px solid var(--card); }
+.pf-row { padding: 0 8px 0 0; }
+.pf-open { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; padding: 10px 6px 10px 14px; border: 0; background: none; color: inherit; text-align: left; font: inherit; }
+.avatar.pf-av { width: 42px; height: 42px; flex: 0 0 42px; font-size: 21px; }
+.pf-check { color: var(--accent); font-weight: 700; font-size: 18px; padding: 0 6px; }
+.pf-row.on .name { color: var(--accent); }
+.avatar.pf-big { width: 84px; height: 84px; flex: 0 0 84px; font-size: 44px; margin: 0 auto; }
