@@ -124,7 +124,7 @@ const I18N_EN = {
   'ปิดการซิงก์ปฏิทินแล้ว': 'Calendar sync turned off',
   'บิลที่ต้องจ่าย · centel': 'Bills to pay · centel',
   'สำรองข้อมูล': 'Backup', '⬇️ ส่งออกข้อมูล (JSON)': '⬇️ Export data (JSON)', '⬆️ นำเข้าข้อมูล': '⬆️ Import data',
-  'ลบข้อมูลทั้งหมด': 'Delete all data', 'Centel · เวอร์ชัน 2.0': 'Centel · version 2.0', 'บันทึกแล้ว': 'Saved',
+  'ลบข้อมูลทั้งหมด': 'Delete all data', 'Centel · เวอร์ชัน 2.0': 'Centel · version 2.0', 'METANG · เวอร์ชัน 2.0': 'METANG · version 2.0', 'บันทึกแล้ว': 'Saved',
   'ภาษา · Language': 'Language',
 
   // PEA electricity
@@ -420,7 +420,7 @@ const I18N_EN = {
   'ของใช้ลูก': 'Baby supplies', 'ของขวัญวันเกิดเพื่อน': 'Friend’s birthday gift',
 
   // Colour themes (theme.js)
-  'ธีม': 'Theme', 'ฟ้า': 'Blue', 'ชมพูพาสเทล': 'Pastel pink', 'ดำสนิท': 'Black', 'ขาว': 'White',
+  'ธีม': 'Theme', 'ฟ้า': 'Blue', 'ชมพูพาสเทล': 'Pastel pink', 'ดำสนิท': 'Black', 'ขาว': 'White', 'ส้ม': 'Orange', 'เขียว': 'Green',
   'ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่':
     'The blue theme follows the phone’s light / dark mode · The theme is remembered on this device · On iPhone the status bar colour changes the next time you open the app',
 
