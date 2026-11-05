@@ -1,5 +1,5 @@
 // Bump CACHE when shipping changes so installed apps pick up the new files.
-const CACHE = 'billplanner-v90';
+const CACHE = 'billplanner-v91';
 const ASSETS = [
   './',
   'index.html',
@@ -23,6 +23,7 @@ const ASSETS = [
   'nativetabs.js',
   'widget.js',
   'appicon.js',
+  'share.js',
   'manifest.webmanifest',
   'icons/centel-192.png',
   'icons/centel-512.png',

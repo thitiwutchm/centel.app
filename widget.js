@@ -70,6 +70,8 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') window.widgetChanged(0); });
   // The widget's links: centel://bills, centel://todos, centel://home, centel://add (new transaction).
   window.centelWidgetOpen = (what) => {
+    // centel://share: a picture shared from the iOS share sheet (share.js).
+    if (what === 'share') { if (window.centelShareOpen) window.centelShareOpen(); return; }
     setTab(what === 'bills' ? 'bills' : 'home');
     if (what === 'todos') notesAction('notes');
     if (what === 'add') txnForm();

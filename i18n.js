@@ -241,7 +241,7 @@ const I18N_EN = {
   'รายการในงบนี้ ({0})': 'Transactions in this budget ({0})', 'แก้ไข': 'Edit', 'ใช้ไป': 'Spent', 'ใช้จริงสะสม': 'Actual to date',
   'งบ {0}': 'Budget {0}', 'ควรใช้ต่อวัน': 'Can spend per day', 'คาดว่าจะใช้ทั้งเดือน': 'Projected for the month', 'ใช้จริงเฉลี่ยต่อวัน': 'Actual per day',
   'แก้ไขงบประมาณ': 'Edit budget', 'งบส่วนตัว': 'Personal budget', 'งบร่วมกัน': 'Shared budget', 'ลบงบประมาณ': 'Delete budget',
-  'รอบงบประมาณ': 'Budget period', 'กรุณาใส่จำนวนเงิน': 'Please enter an amount', 'มีงบของหมวดนี้อยู่แล้ว': 'This category already has a budget',
+  'รอบงบประมาณ': 'Budget period', 'กรุณาใส่จำนวนเงิน': 'Please enter an amount', 'ยังอ่านสลิปไม่ได้ตอนนี้ กรอกรายการเองได้เลย': "Can't read the picture right now. Fill in the purchase yourself", 'ลงชื่อเข้าใช้ก่อน AI ถึงจะอ่านรูปให้ได้': 'Sign in so AI can read the picture', 'มีงบของหมวดนี้อยู่แล้ว': 'This category already has a budget',
   'สร้างงบประมาณแล้ว': 'Budget created', 'ลบงบประมาณนี้?': 'Delete this budget?',
 
   // Transaction form
