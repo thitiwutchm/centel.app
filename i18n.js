@@ -518,6 +518,10 @@ const I18N_EN = {
   'ลบโปรไฟล์แล้ว': 'Profile deleted', 'มีโปรไฟล์ครบจำนวนแล้ว': 'You have the most profiles allowed', 'ลบโปรไฟล์หลักไม่ได้': 'The main profile cannot be deleted',
   'สลับไปโปรไฟล์อื่นก่อนแล้วค่อยลบ': 'Switch to another profile before deleting this one',
   'โปรไฟล์นี้ยังมีรายจ่ายร่วมกับคู่ ลบไม่ได้': 'This profile still has shared expenses with a partner and cannot be deleted',
+  'กำลังใช้': 'In use', 'หลัก': 'Main',   'แตะโปรไฟล์ที่มีเครื่องหมาย − เพื่อลบ ข้อมูลในโปรไฟล์นั้นจะหายถาวร': 'Tap a profile marked − to delete it. Its data is removed for good.',
+  'แต่ละโปรไฟล์แยกข้อมูลกันทั้งหมด ทั้งกระเป๋าเงิน รายการ บิล งบประมาณ หมวดหมู่ ป้ายกำกับ โน้ต และการเชื่อมบัญชีคู่ ไม่รวมยอดหรือใช้ร่วมกัน':
+    'Each profile keeps its own data: wallets, transactions, bills, budgets, categories, labels, notes and couple link. Nothing is shared or added up.',
+  'กำลังเปิดโปรไฟล์…': 'Opening profile…', 'กำลังสร้างโปรไฟล์…': 'Creating profile…', 'พร้อมใช้งาน': 'Ready',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

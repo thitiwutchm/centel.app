@@ -1884,9 +1884,31 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 /* Profiles (profiles.js) */
 .pf-faces { display: inline-flex; margin-right: 4px; }
 .avatar.pf-mini { width: 26px; height: 26px; flex: 0 0 26px; font-size: 14px; margin-left: -8px; border: 2px solid var(--card); }
-.pf-row { padding: 0 8px 0 0; }
-.pf-open { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; padding: 10px 6px 10px 14px; border: 0; background: none; color: inherit; text-align: left; font: inherit; }
-.avatar.pf-av { width: 42px; height: 42px; flex: 0 0 42px; font-size: 21px; }
-.pf-check { color: var(--accent); font-weight: 700; font-size: 18px; padding: 0 6px; }
-.pf-row.on .name { color: var(--accent); }
+.pf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 10px; padding: 14px 4px 22px; }
+.pf-tile { display: flex; flex-direction: column; align-items: center; min-width: 0; animation: pf-pop .32s cubic-bezier(.2, .9, .3, 1.2) both; animation-delay: calc(var(--i) * 35ms); }
+.pf-face { position: relative; border: 0; background: none; padding: 0; border-radius: 50%; cursor: pointer; transition: transform .15s ease; }
+.pf-face:active { transform: scale(.93); }
+.avatar.pf-av { width: 76px; height: 76px; flex: 0 0 76px; font-size: 38px; background: var(--sheet-card); box-shadow: 0 6px 18px rgba(4, 22, 48, .14); }
+.pf-tile.on .avatar.pf-av { box-shadow: 0 0 0 3px var(--accent), 0 0 0 6px var(--accent-soft), 0 8px 22px rgba(4, 22, 48, .18); }
+.pf-tick { position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; border: 2.5px solid var(--sheet-card); }
+.pf-tick svg { width: 15px; height: 15px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.pf-minus { position: absolute; left: -2px; top: -2px; width: 26px; height: 26px; border-radius: 50%; background: var(--bad); color: #fff; font-size: 20px; line-height: 24px; font-weight: 700; border: 2.5px solid var(--sheet-card); }
+.pf-tile.del .avatar.pf-av { animation: pf-jiggle .28s ease-in-out infinite alternate; }
+.pf-plus { color: var(--accent); font-size: 30px; background: transparent !important; box-shadow: none !important; border: 2px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
+.pf-name { margin-top: 9px; font-weight: 600; font-size: 14.5px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-tile.on .pf-name { color: var(--accent); }
+.pf-sub { font-size: 12px; color: var(--muted); min-height: 16px; }
+.pf-hint { margin-top: 0; text-align: center; }
+@keyframes pf-pop { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: none; } }
+@keyframes pf-jiggle { from { transform: rotate(-2.5deg); } to { transform: rotate(2.5deg); } }
+.pf-curtain { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%); opacity: 0; transition: opacity .3s ease; pointer-events: none; }
+.pf-curtain.show { opacity: 1; pointer-events: auto; }
+.pf-curtain-in { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--on-bg); transform: scale(.9); transition: transform .4s cubic-bezier(.2, .9, .3, 1.2); }
+.pf-curtain.show .pf-curtain-in { transform: none; }
+.pf-curtain b { font-size: 22px; margin-top: 10px; }
+.pf-curtain span { color: var(--on-bg-muted); font-size: 14px; }
+.pf-curtain .avatar.pf-big { width: 104px; height: 104px; flex: 0 0 104px; font-size: 54px; box-shadow: 0 0 0 4px rgba(255, 255, 255, .85), 0 16px 40px rgba(0, 0, 0, .3); }
+.pf-curtain:not(.done) .avatar.pf-big { animation: pf-breathe 1.2s ease-in-out infinite alternate; }
+@keyframes pf-breathe { to { transform: scale(1.06); } }
 .avatar.pf-big { width: 84px; height: 84px; flex: 0 0 84px; font-size: 44px; margin: 0 auto; }
+@media (prefers-reduced-motion: reduce) { .pf-tile, .pf-tile.del .avatar.pf-av, .pf-curtain .avatar.pf-big { animation: none; } }
