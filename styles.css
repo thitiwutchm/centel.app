@@ -955,10 +955,38 @@ body::before {
   .tabbar button { color: #9cadc2; }
 }
 
+/* iOS crystal / Liquid Glass + button: see-through body, strong blur, bright refractive rim. */
 .fab {
-  background: var(--ink); color: var(--ink-text); border: 0.5px solid var(--glass-edge);
-  box-shadow: 0 10px 28px rgba(4, 22, 48, .35);
+  color: var(--accent); border: 0;
+  background:
+    radial-gradient(75% 45% at 50% 6%, rgba(255, 255, 255, .9), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(85% 60% at 50% 105%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%),
+    color-mix(in srgb, var(--accent) 6%, rgba(255, 255, 255, .34));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .9), inset 0 1.5px 1px rgba(255, 255, 255, .95),
+    inset 0 -4px 8px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 0 0 0.5px rgba(3, 14, 30, .1), 0 10px 26px rgba(3, 14, 30, .2);
+  -webkit-backdrop-filter: blur(14px) saturate(200%) brightness(1.08); backdrop-filter: blur(14px) saturate(200%) brightness(1.08);
 }
+.fab .fab-plus { font-size: 30px; font-weight: 500; }
+:root[data-backdrop="dark"] .fab {
+  color: #fff;
+  background:
+    radial-gradient(110% 80% at 30% 12%, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 55%),
+    radial-gradient(90% 70% at 75% 95%, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 60%),
+    rgba(255, 255, 255, .08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28), inset 0 1px 1px rgba(255, 255, 255, .5),
+    inset 0 -1px 2px rgba(255, 255, 255, .15), 0 10px 26px rgba(0, 0, 0, .4);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-backdrop]) .fab {
+    color: #fff;
+    background:
+      radial-gradient(110% 80% at 30% 12%, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 55%),
+      radial-gradient(90% 70% at 75% 95%, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 60%),
+      rgba(255, 255, 255, .08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28), inset 0 1px 1px rgba(255, 255, 255, .5),
+      inset 0 -1px 2px rgba(255, 255, 255, .15), 0 10px 26px rgba(0, 0, 0, .4);
+} }
 
 /* Sheets float inset with rounded corners, like Revolut's bottom sheets */
 .sheet-backdrop { background: rgba(3, 14, 30, .38); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
