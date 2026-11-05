@@ -55,7 +55,7 @@ struct Snapshot: Decodable {
 
     static let thaiWords = Words(spend: "ใช้จ่ายเดือนนี้", income: "รายรับ", bills: "บิลที่ใกล้ถึง", todos: "สิ่งที่ต้องทำ",
                                  noBills: "ไม่มีบิลค้างจ่าย", noTodos: "ไม่มีสิ่งที่ต้องทำ", today: "วันนี้", tomorrow: "พรุ่งนี้",
-                                 late: "เลยกำหนด", inDays: "อีก {0} วัน", needsAmount: "ระบุยอด", open: "เปิด Centel เพื่ออัปเดต",
+                                 late: "เลยกำหนด", inDays: "อีก {0} วัน", needsAmount: "ระบุยอด", open: "เปิด METANG เพื่ออัปเดต",
                                  expenses: "ใช้จ่าย", vsLast: "เทียบเดือนก่อน")
     static let sample = Snapshot(
         lang: "th", words: thaiWords, monthLabel: "พฤศจิกายน 2569", expense: 18450, income: 42000, currency: "฿",
@@ -214,7 +214,7 @@ struct EmptyState: View {
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: "c.circle.fill").font(.system(size: 28)).foregroundStyle(Color(red: 1, green: 0.48, blue: 0))
-            Text("เปิด Centel เพื่ออัปเดต").font(.system(size: 12)).multilineTextAlignment(.center).foregroundStyle(.secondary)
+            Text("เปิด METANG เพื่ออัปเดต").font(.system(size: 12)).multilineTextAlignment(.center).foregroundStyle(.secondary)
         }
     }
 }
@@ -404,7 +404,7 @@ struct CentelOverviewWidget: Widget {
         StaticConfiguration(kind: "CentelOverview", provider: Provider()) { entry in
             OverviewView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Centel")
+        .configurationDisplayName("METANG")
         .description("ใช้จ่ายเดือนนี้และบิลที่ใกล้ครบกำหนด")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular, .accessoryInline])
     }

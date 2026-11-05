@@ -25,7 +25,7 @@ class ShareViewController: UIViewController {
         card.backgroundColor = .secondarySystemBackground
         card.layer.cornerRadius = 22
         card.translatesAutoresizingMaskIntoConstraints = false
-        label.text = thai ? "กำลังส่งไป Centel…" : "Sending to Centel…"
+        label.text = thai ? "กำลังส่งไป METANG…" : "Sending to METANG…"
         label.font = .preferredFont(forTextStyle: .headline)
         label.numberOfLines = 0
         label.textAlignment = .center
@@ -95,7 +95,7 @@ class ShareViewController: UIViewController {
             extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
         } else {
             // iOS did not let us open the app: the picture waits in the Inbox.
-            fail(thai ? "ส่งแล้ว เปิด Centel เพื่อยืนยันรายการ" : "Sent. Open Centel to confirm the purchase.", done: true)
+            fail(thai ? "ส่งแล้ว เปิด METANG เพื่อยืนยันรายการ" : "Sent. Open METANG to confirm the purchase.", done: true)
         }
     }
 

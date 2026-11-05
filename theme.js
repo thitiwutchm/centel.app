@@ -8,6 +8,9 @@ const THEMES = [
   { id: 'pink', label: 'ชมพูพาสเทล', bar: '#fbdbe7', light: true },
   { id: 'black', label: 'ดำสนิท', bar: '#000000', light: false },
   { id: 'white', label: 'ขาว', bar: '#ffffff', light: true },
+  // Match the orange and green มีตังค์ app icons (METANG).
+  { id: 'orange', label: 'ส้ม', bar: '#ffe2d4', light: true },
+  { id: 'green', label: 'เขียว', bar: '#d3f1f1', light: true },
 ];
 
 function themeId() {
