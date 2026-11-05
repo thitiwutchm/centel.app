@@ -29,32 +29,66 @@ function profileRow() {
         ${faces ? `<span class="pf-faces">${faces}</span>` : ''}${svgIcon('chev', 'svg-i sm muted')}</button>`;
 }
 
-function profilesSheet() {
+// "Who's using?" grid: big round faces, the one in use ringed with a check. แก้ไข shows a
+// remove badge on the profiles that can be deleted (not the main one, not the one in use).
+function profilesSheet(editing = false) {
   if (!isCloud()) { loginSheet(); return; }
   const list = profilesList().length ? profilesList() : [{ ...cloud.user, main: true, current: true }];
   const max = (cloud.profilesMax || 5) + 1;
-  const rows = list.map((p) => `
-      <div class="item pf-row${p.current ? ' on' : ''}">
-        <button class="pf-open" data-pf-switch="${esc(p.id)}">
+  const canEdit = list.some((p) => !p.main && !p.current);
+  const tiles = list.map((p, i) => {
+    const del = editing && !p.main && !p.current;
+    return `
+      <div class="pf-tile${p.current ? ' on' : ''}${del ? ' del' : ''}" style="--i:${i}">
+        <button class="pf-face" ${del ? `data-pf-del="${esc(p.id)}" aria-label="ลบโปรไฟล์"` : `data-pf-switch="${esc(p.id)}"`}>
           ${userAvatar(p, 'avatar pf-av')}
-          <div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${p.current ? 'กำลังใช้อยู่' : 'แตะเพื่อสลับ'}${p.main ? ' · โปรไฟล์หลัก' : ''}</div></div>
-          ${p.current ? '<span class="pf-check" aria-label="กำลังใช้อยู่">✓</span>' : ''}
+          ${p.current ? '<span class="pf-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg></span>' : ''}
+          ${del ? '<span class="pf-minus" aria-hidden="true">−</span>' : ''}
         </button>
-        ${!p.main && !p.current ? `<button class="round-btn sm" data-pf-del="${esc(p.id)}" aria-label="ลบโปรไฟล์">${svgIcon('trash')}</button>` : ''}
-      </div>`).join('');
+        <div class="pf-name">${esc(p.nickname || p.name)}</div>
+        <div class="pf-sub">${p.current ? 'กำลังใช้' : p.main ? 'หลัก' : ''}</div>
+      </div>`;
+  }).join('');
+  const add = !editing && list.length < max ? `
+      <div class="pf-tile add" style="--i:${list.length}">
+        <button class="pf-face" id="pfAdd" aria-label="เพิ่มโปรไฟล์"><span class="avatar pf-av pf-plus">＋</span></button>
+        <div class="pf-name">เพิ่ม</div><div class="pf-sub"></div>
+      </div>` : '';
   openSheet(`
-    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>โปรไฟล์</h2><span style="width:40px"></span></div>
-    <div class="list">${rows}</div>
-    ${list.length < max ? `<div class="list" style="margin-top:18px">
-      <button class="item add-row" id="pfAdd"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มโปรไฟล์</div></div></button>
-    </div>` : ''}
-    <p class="hint">แต่ละโปรไฟล์แยกข้อมูลกันทั้งหมด ทั้งกระเป๋าเงิน รายการ บิล งบประมาณ หมวดหมู่ ป้ายกำกับ โน้ต และการเชื่อมบัญชีคู่ ไม่รวมยอดหรือใช้ร่วมกัน เข้าสู่ระบบด้วยบัญชีเดียวแล้วสลับได้ในเครื่องนี้</p>
+    <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>สลับโปรไฟล์</h2>
+      ${canEdit ? `<button class="link-btn${editing ? ' strong' : ''}" id="pfEdit">${editing ? 'เสร็จ' : 'แก้ไข'}</button>` : '<span style="width:40px"></span>'}</div>
+    <div class="pf-grid">${tiles}${add}</div>
+    <p class="hint pf-hint">${editing ? 'แตะโปรไฟล์ที่มีเครื่องหมาย − เพื่อลบ ข้อมูลในโปรไฟล์นั้นจะหายถาวร' : 'แต่ละโปรไฟล์แยกข้อมูลกันทั้งหมด ทั้งกระเป๋าเงิน รายการ บิล งบประมาณ หมวดหมู่ ป้ายกำกับ โน้ต และการเชื่อมบัญชีคู่ ไม่รวมยอดหรือใช้ร่วมกัน'}</p>
   `);
   $('#sheet').querySelectorAll('[data-pf-switch]').forEach((b) => b.addEventListener('click', () => switchProfile(b.dataset.pfSwitch)));
   $('#sheet').querySelectorAll('[data-pf-del]').forEach((b) => b.addEventListener('click', () => deleteProfile(b.dataset.pfDel)));
-  const add = $('#pfAdd');
-  if (add) add.addEventListener('click', newProfileSheet);
+  const ed = $('#pfEdit');
+  if (ed) ed.addEventListener('click', () => profilesSheet(!editing));
+  const a = $('#pfAdd');
+  if (a) a.addEventListener('click', newProfileSheet);
 }
+
+// Full-screen card while the app swaps to another profile; shown again for a moment after the reload.
+const PF_SWITCH_KEY = 'centel.pfswitch';
+function profileCurtain(p, text) {
+  let el = document.getElementById('pfCurtain');
+  if (!el) { el = document.createElement('div'); el.id = 'pfCurtain'; el.className = 'pf-curtain'; document.body.appendChild(el); }
+  el.innerHTML = `<div class="pf-curtain-in">${userAvatar(p, 'avatar pf-big')}<b>${esc(p.nickname || p.name)}</b><span>${esc(text)}</span></div>`;
+  requestAnimationFrame(() => el.classList.add('show'));
+  return el;
+}
+(function profileWelcome() {
+  let p = null;
+  try { p = JSON.parse(sessionStorage.getItem(PF_SWITCH_KEY) || 'null'); sessionStorage.removeItem(PF_SWITCH_KEY); } catch (e) { /* ignore */ }
+  if (!p) return;
+  const show = () => {
+    const el = profileCurtain(p, 'พร้อมใช้งาน');
+    el.classList.add('show', 'done');
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, 650);
+  };
+  // After every script has loaded (esc, userAvatar live in later files).
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
+})();
 
 function newProfileSheet() {
   const d = { avatar: PROFILE_EMOJIS[1] };
@@ -72,7 +106,7 @@ function newProfileSheet() {
     $('#sheet').querySelectorAll('[data-pfemoji]').forEach((x) => x.classList.toggle('on', x.dataset.pfemoji === d.avatar));
   };
   paint();
-  $('#pfBack').addEventListener('click', profilesSheet);
+  $('#pfBack').addEventListener('click', () => profilesSheet());
   $('#pfEmojis').addEventListener('click', (e) => { const c = e.target.closest('[data-pfemoji]'); if (c) { d.avatar = c.dataset.pfemoji; paint(); } });
   $('#pfSave').addEventListener('click', async () => {
     const name = $('#pfName').value.trim();
@@ -81,6 +115,7 @@ function newProfileSheet() {
     btn.disabled = true;
     try {
       const r = await api('POST', '/profiles', { name, avatar: d.avatar });
+      cloud.profiles = [...profilesList(), { id: r.id, name, nickname: name.slice(0, 20), avatar: d.avatar, main: false, current: false }];
       await switchProfile(r.id, true);
     } catch (e) {
       toast(profileErr(e));
@@ -104,10 +139,15 @@ async function switchProfile(id, created = false) {
     await plannerSend();
     const base = plannerBase(cloud.user.id);
     if (!base || !sameJson(plannerDoc(state), base.data)) { toast('ยังบันทึกบิลของโปรไฟล์นี้ขึ้นบัญชีไม่ได้ ลองใหม่เมื่อออนไลน์'); return; }
+    const target = profilesList().find((x) => x.id === id) || { id, name: created || '', avatar: undefined };
+    closeSheet();
+    profileCurtain(target, created ? 'กำลังสร้างโปรไฟล์…' : 'กำลังเปิดโปรไฟล์…');
     await api('POST', '/profiles/switch', { id });
-    toast(created ? 'สร้างโปรไฟล์แล้ว' : 'กำลังสลับโปรไฟล์…');
+    try { sessionStorage.setItem(PF_SWITCH_KEY, JSON.stringify({ name: target.name, nickname: target.nickname, avatar: target.avatar })); } catch (e) { /* ignore */ }
     await profileLoadAndReload();
   } catch (e) {
+    const c = document.getElementById('pfCurtain');
+    if (c) { c.classList.remove('show'); setTimeout(() => c.remove(), 400); }
     toast(profileErr(e));
   } finally {
     switchingProfile = false;
@@ -143,7 +183,7 @@ async function deleteProfile(id) {
     await api('DELETE', `/profiles/${encodeURIComponent(id)}`);
     cloud.profiles = profilesList().filter((x) => x.id !== id);
     toast('ลบโปรไฟล์แล้ว');
-    profilesSheet();
+    profilesSheet(profilesList().some((x) => !x.main && !x.current));
     render();
   } catch (e) {
     toast(profileErr(e));
