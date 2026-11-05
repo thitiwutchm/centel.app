@@ -55,7 +55,9 @@ export async function loadUser(req, _res, next) {
     const token = readCookie(req);
     if (token) {
       const r = await pool.query(
-        `select u.id, u.email, u.display_name from sessions s join users u on u.id = s.user_id
+        // A profile has no email of its own: it shows the email of the account it belongs to.
+        `select u.id, coalesce(u.email, p.email) as email, u.display_name, u.parent_id
+         from sessions s join users u on u.id = s.user_id left join users p on p.id = u.parent_id
          where s.token_hash = $1 and s.expires_at > now()`, [sha(token)]);
       req.user = r.rows[0] || null;
     }

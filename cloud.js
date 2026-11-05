@@ -18,6 +18,8 @@ const cloud = {
   line: null, // { groupId, active }: LINE group for reminders, set in the Account tab
   linePeople: [], // [{ userId, name, who: 'me' | 'partner' | '' }]: who is who in that group
   features: {},
+  profiles: [], // every profile of this sign-in (profiles.js); each one's data is separate
+  profilesMax: 5,
   ids: new Set(),
   queue: Promise.resolve(),
   fresh: false, // got the server copy at least once since signing in (not just the cached one)
@@ -122,6 +124,7 @@ function applyBootstrap(b) {
   cloud.coupleId = b.coupleId;
   cloud.invite = b.invite;
   cloud.features = b.features || {};
+  cloud.profiles = Array.isArray(b.profiles) ? b.profiles : [];
   cloud.settlements = b.settlements || [];
   cloud.notes = b.notes || [];
   cloud.line = b.line || null;
@@ -192,6 +195,7 @@ function cloudSignedOut() {
   cloud.notes = [];
   cloud.line = null;
   cloud.linePeople = [];
+  cloud.profiles = [];
   cloud.ids = new Set();
   chatBoot();
   try { localStorage.removeItem(CLOUD_KEY); } catch (e) { /* ignore */ }
@@ -453,7 +457,8 @@ function accountCard() {
     <div class="list" style="margin-bottom:14px">
       <button class="item" data-action="couple"><div class="ico round" style="background:#ff4d8d22">💞</div>
         <div class="main"><div class="name">${cloud.partner ? `เชื่อมกับ ${esc(partnerName())}` : 'เชื่อมบัญชีคู่'}</div>
-        <div class="sub">${cloud.partner ? esc(cloud.partner.email) : 'ส่งรหัสเชิญให้คู่ หรือใส่รหัสจากคู่'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
+        <div class="sub">${cloud.partner ? esc(cloud.partner.email || '') : 'ส่งรหัสเชิญให้คู่ หรือใส่รหัสจากคู่'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
+      ${profileRow()}
       <button class="item" data-action="logout"><div class="ico round" style="background:#8a8f9922">🚪</div><div class="main"><div class="name">ออกจากระบบ</div></div></button>
     </div>`;
   }
@@ -634,6 +639,12 @@ function plannerBase(userId) {
     return b && b.userId === userId ? b : null;
   } catch (e) { return null; }
 }
+function plannerOtherCopy(userId, local) {
+  try {
+    const b = JSON.parse(localStorage.getItem(PLANNER_BASE_KEY) || 'null');
+    return !!(b && b.userId && b.userId !== userId && sameJson(local.bills, (b.data || {}).bills) && sameJson(local.records, (b.data || {}).records));
+  } catch (e) { return false; }
+}
 function setPlannerBase(userId, rev, data) {
   try { localStorage.setItem(PLANNER_BASE_KEY, JSON.stringify({ userId, rev, data })); } catch (e) { /* full */ }
 }
@@ -717,7 +728,11 @@ function plannerMergeIn(userId, remote) {
   if (!remote) return;
   const base = plannerBase(userId);
   const rdoc = remote.data ? { ...emptyPlanner(), ...remote.data } : emptyPlanner();
-  const { doc, moved } = mergePlanner(base && base.data, plannerDoc(state), rdoc);
+  let local = plannerDoc(state);
+  // The bills on this device are only another account's or profile's synced copy (signed out
+  // of it, or switched profile): they and its settings belong there, not in this one.
+  if (!base && plannerOtherCopy(userId, local)) local = emptyPlanner();
+  const { doc, moved } = mergePlanner(base && base.data, local, rdoc);
   if (Object.keys(moved).length) plannerMovedBills(moved);
   setPlannerBase(userId, remote.rev, rdoc);
   if (!sameJson(doc, plannerDoc(state))) {
@@ -1055,6 +1070,7 @@ function cloudAction(action, el) {
     case 'logout': logout(); break;
     case 'couple': coupleSheet(); break;
     case 'profile': profileSheet(); break;
+    case 'profiles': profilesSheet(); break;
     case 'settlements': settlementsSheet(); break;
     case 'shared-list': sharedListSheet(); break;
     case 'add-shared': txnForm(null, { scope: 'shared' }); break;

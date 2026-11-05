@@ -8,6 +8,7 @@ import { verifyGoogleIdToken, googleClientId } from './google.js';
 import { lineEnabled, linePush } from './line.js';
 import { pushKeys, pushTo, saveSub, dropSub, subCount, saveAlerts, saveApns, dropApns } from './push.js';
 import { apnsEnabled } from './apns.js';
+import profileRoutes, { familyOf } from './profiles.js';
 
 const router = express.Router();
 // Compared against when an email is unknown, so login takes the same time either way.
@@ -149,6 +150,8 @@ router.use(requireUser);
 
 const uid = (req) => req.user.id;
 
+router.use('/profiles', profileRoutes);
+
 function expenseOut(e, shares, events, labels) {
   return {
     id: e.id, ownerId: e.owner_id, coupleId: e.couple_id, scope: e.scope, type: e.type, date: e.date,
@@ -177,6 +180,7 @@ async function writeLabels(db, id, ids) {
 router.get('/bootstrap', wrap(async (req, res) => {
   // Only the owner sees their own Google photo offer; app_user cannot read the column.
   const googlePic = (await pool.query('select google_picture from users where id = $1', [uid(req)])).rows[0]?.google_picture;
+  const profiles = await familyOf(uid(req));
   const out = await asUser(uid(req), async (db) => {
     const me = (await db.query('select id, email, display_name, nickname, avatar from users where id = app_uid()')).rows[0];
     const partner = (await db.query('select id, email, display_name, nickname, avatar from users where id = my_partner()')).rows[0] || null;
@@ -205,8 +209,9 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const byExp = (rows) => rows.reduce((m, r) => ((m[r.expense_id] = m[r.expense_id] || []).push(r), m), {});
     const sh = byExp(shares), ev = byExp(events), lb = byExp(links);
     return {
-      user: { id: me.id, email: me.email, name: me.display_name, nickname: me.nickname || undefined, avatar: me.avatar || undefined, googlePicture: googlePic || undefined },
+      user: { id: me.id, email: req.user.email, name: me.display_name, nickname: me.nickname || undefined, avatar: me.avatar || undefined, googlePicture: googlePic || undefined },
       partner: partner && { id: partner.id, email: partner.email, name: partner.display_name, nickname: partner.nickname || undefined, avatar: partner.avatar || undefined },
+      profiles,
       coupleId: couple,
       invite: invite && { code: invite.code, expiresAt: invite.expires_at },
       wallets: wallets.map((w) => ({ id: w.id, name: w.name, type: w.type, initial: w.initial, excluded: w.excluded, sort: w.sort, icon: w.icon || undefined, pkg: w.pkg || undefined })),
