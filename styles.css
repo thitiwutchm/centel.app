@@ -955,10 +955,38 @@ body::before {
   .tabbar button { color: #9cadc2; }
 }
 
+/* iOS crystal / Liquid Glass + button: see-through body, strong blur, bright refractive rim. */
 .fab {
-  background: var(--ink); color: var(--ink-text); border: 0.5px solid var(--glass-edge);
-  box-shadow: 0 10px 28px rgba(4, 22, 48, .35);
+  color: var(--accent); border: 0;
+  background:
+    radial-gradient(75% 45% at 50% 6%, rgba(255, 255, 255, .9), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(85% 60% at 50% 105%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%),
+    color-mix(in srgb, var(--accent) 6%, rgba(255, 255, 255, .34));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .9), inset 0 1.5px 1px rgba(255, 255, 255, .95),
+    inset 0 -4px 8px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 0 0 0.5px rgba(3, 14, 30, .1), 0 10px 26px rgba(3, 14, 30, .2);
+  -webkit-backdrop-filter: blur(14px) saturate(200%) brightness(1.08); backdrop-filter: blur(14px) saturate(200%) brightness(1.08);
 }
+.fab .fab-plus { font-size: 30px; font-weight: 500; }
+:root[data-backdrop="dark"] .fab {
+  color: #fff;
+  background:
+    radial-gradient(110% 80% at 30% 12%, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 55%),
+    radial-gradient(90% 70% at 75% 95%, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 60%),
+    rgba(255, 255, 255, .08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28), inset 0 1px 1px rgba(255, 255, 255, .5),
+    inset 0 -1px 2px rgba(255, 255, 255, .15), 0 10px 26px rgba(0, 0, 0, .4);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-backdrop]) .fab {
+    color: #fff;
+    background:
+      radial-gradient(110% 80% at 30% 12%, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 55%),
+      radial-gradient(90% 70% at 75% 95%, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 60%),
+      rgba(255, 255, 255, .08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28), inset 0 1px 1px rgba(255, 255, 255, .5),
+      inset 0 -1px 2px rgba(255, 255, 255, .15), 0 10px 26px rgba(0, 0, 0, .4);
+} }
 
 /* Sheets float inset with rounded corners, like Revolut's bottom sheets */
 .sheet-backdrop { background: rgba(3, 14, 30, .38); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
@@ -1167,6 +1195,10 @@ body::before {
 
 /* ---------- Colour themes (theme.js sets data-theme + data-backdrop on <html>) ---------- */
 /* Picker in the account tab: a mini backdrop with one card per theme. */
+.icon-pick { display: flex; gap: 14px; margin-bottom: 10px; }
+.icon-pick .ip { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 6px; border-radius: 18px; color: var(--muted); font: inherit; font-size: 13px; }
+.icon-pick .ip img { width: 60px; height: 60px; border-radius: 14px; display: block; }
+.icon-pick .ip.on { color: var(--text); box-shadow: inset 0 0 0 2px var(--accent); }
 .theme-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
 .tp { border: 0; background: none; padding: 0; color: var(--on-bg); font: inherit; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .tp-prev {
@@ -1190,6 +1222,12 @@ body::before {
 .tp-white .tp-prev { background: #fff; border-color: rgba(0, 0, 0, .1); }
 .tp-white i { background: #f1f2f5; }
 .tp-white i:first-child { background: #111; }
+.tp-orange .tp-prev { background: linear-gradient(165deg, #fff4ee, #ffd3c0 55%, #ffbfa6); }
+.tp-orange i { background: rgba(255, 255, 255, .9); }
+.tp-orange i:first-child { background: #f85a34; }
+.tp-green .tp-prev { background: linear-gradient(165deg, #f0fcfc, #c6eeef 55%, #addfe2); }
+.tp-green i { background: rgba(255, 255, 255, .9); }
+.tp-green i:first-child { background: #00a0ab; }
 
 /* Pastel pink: soft blush backdrop, rose accents, dark text everywhere. */
 :root[data-theme="pink"] {
@@ -1314,6 +1352,98 @@ body::before {
   color-scheme: light;
 }
 [data-theme="white"] body::before { background: #fff; }
+
+/* Orange (METANG icon): warm peach backdrop, the icon's orange for main buttons, a gold-coin glow. */
+:root[data-theme="orange"] {
+  --c-text: #3b1a10;
+  --c-muted: #946452;
+  --c-line: rgba(140, 60, 30, .1);
+  --c-accent: #e8481f;
+  --c-accent-soft: rgba(248, 90, 52, .13);
+  --c-ok: #1d9a62;
+  --c-warn: #b86e00;
+  --c-bad: #d42a1f;
+  --c-fill: rgba(170, 70, 30, .06);
+  --bg: #ffe2d4;
+  --card: rgba(255, 251, 248, .76);
+  --sheet: rgba(255, 248, 244, .95);
+  --sheet-card: rgba(255, 255, 255, .86);
+  --glass-edge: rgba(255, 255, 255, .75);
+  --ok-soft: rgba(20, 160, 90, .14);
+  --warn-soft: rgba(230, 150, 0, .16);
+  --bad-soft: rgba(230, 50, 40, .12);
+  --ink: #f85a34;
+  --ink-text: #fff;
+  --on-bg: #4a2214;
+  --on-bg-muted: rgba(74, 34, 20, .64);
+  --shadow: 0 10px 30px rgba(220, 90, 40, .13), inset 0 1px 0 rgba(255, 255, 255, .7);
+  --bd-glass: rgba(255, 255, 255, .55);
+  --bd-glass-on: rgba(255, 255, 255, .8);
+  --bd-edge: rgba(255, 255, 255, .8);
+  --bd-bar: rgba(255, 236, 227, .62);
+  --bd-accent: #f05128;
+  --bd-line: rgba(140, 60, 30, .14);
+  --tab-bg: rgba(255, 249, 246, .8);
+  --tab-fg: #a87a68;
+  --tab-on: #3b1a10;
+  --tab-on-bg: rgba(248, 90, 52, .15);
+  --scrim: rgba(90, 35, 15, .25);
+  color-scheme: light;
+}
+[data-theme="orange"] body::before {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(70% 38% at 18% 6%, rgba(255, 255, 255, .85), transparent 70%),
+    radial-gradient(50% 28% at 88% 18%, rgba(255, 214, 120, .6), transparent 70%),
+    radial-gradient(90% 40% at 40% 45%, rgba(255, 170, 135, .7), transparent 75%),
+    linear-gradient(165deg, #fff4ee 0%, #ffe0d1 40%, #ffcdb8 72%, #ffe6da 100%);
+}
+
+/* Green (METANG icon): cool mint backdrop, the icon's teal for main buttons, a gold-coin glow. */
+:root[data-theme="green"] {
+  --c-text: #0f2e31;
+  --c-muted: #5a7f82;
+  --c-line: rgba(0, 80, 90, .1);
+  --c-accent: #00838c;
+  --c-accent-soft: rgba(0, 160, 171, .13);
+  --c-ok: #178a4f;
+  --c-warn: #b86e00;
+  --c-bad: #d42a1f;
+  --c-fill: rgba(0, 90, 100, .06);
+  --bg: #d3f1f1;
+  --card: rgba(248, 255, 255, .76);
+  --sheet: rgba(244, 253, 253, .95);
+  --sheet-card: rgba(255, 255, 255, .86);
+  --glass-edge: rgba(255, 255, 255, .75);
+  --ok-soft: rgba(20, 160, 90, .14);
+  --warn-soft: rgba(230, 150, 0, .16);
+  --bad-soft: rgba(230, 50, 40, .12);
+  --ink: #00a0ab;
+  --ink-text: #fff;
+  --on-bg: #103a3e;
+  --on-bg-muted: rgba(16, 58, 62, .64);
+  --shadow: 0 10px 30px rgba(0, 120, 130, .13), inset 0 1px 0 rgba(255, 255, 255, .7);
+  --bd-glass: rgba(255, 255, 255, .55);
+  --bd-glass-on: rgba(255, 255, 255, .8);
+  --bd-edge: rgba(255, 255, 255, .8);
+  --bd-bar: rgba(226, 247, 247, .62);
+  --bd-accent: #00959f;
+  --bd-line: rgba(0, 80, 90, .14);
+  --tab-bg: rgba(246, 254, 254, .8);
+  --tab-fg: #6a9497;
+  --tab-on: #0f2e31;
+  --tab-on-bg: rgba(0, 160, 171, .15);
+  --scrim: rgba(0, 50, 55, .25);
+  color-scheme: light;
+}
+[data-theme="green"] body::before {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(70% 38% at 18% 6%, rgba(255, 255, 255, .85), transparent 70%),
+    radial-gradient(50% 28% at 88% 18%, rgba(255, 222, 130, .5), transparent 70%),
+    radial-gradient(90% 40% at 40% 45%, rgba(140, 220, 222, .7), transparent 75%),
+    linear-gradient(165deg, #f0fcfc 0%, #d2f2f2 40%, #b8e6e8 72%, #dcf4f4 100%);
+}
 
 /* Shared by every non-default theme: the frosted-white pieces on the backdrop take the theme's colours. */
 [data-backdrop] #view, [data-backdrop] .topbar {

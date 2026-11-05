@@ -233,6 +233,7 @@ function render() {
   $('.topbar').classList.toggle('hide-nav', !nav);
   $('#monthTitle').textContent = nav ? thMonthYear(ui.ym) : ui.billView === 'schedule' ? 'Schedule' : 'บิลทั้งหมด';
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === ui.tab));
+  if (window.widgetChanged) window.widgetChanged(); // iOS app: refresh the Home Screen widget (widget.js)
   const fab = $('#addBtn');
   // Schedule has its own floating "รายการประจำ" button (with add inside).
   fab.hidden = ui.tab === 'account' || (bills && ui.billView === 'schedule');
@@ -463,6 +464,7 @@ function renderSettings() {
     <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
       <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
     <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>
+    ${window.appIconSettings ? appIconSettings() : ''}
     <div class="section-title">ภาษา · Language</div>
     <div class="seg lang-seg">${[['th', 'ไทย'], ['en', 'English']]
       .map(([k, l]) => `<button type="button" data-lang="${k}" class="${LANG === k ? 'on' : ''}" aria-pressed="${LANG === k}">${l}</button>`).join('')}</div>
@@ -490,7 +492,7 @@ function renderSettings() {
 
     <div class="section-title">อื่นๆ</div>
     <button class="btn danger" data-action="reset">ลบข้อมูลทั้งหมด</button>
-    <p class="hint" style="text-align:center">Centel · เวอร์ชัน 2.0</p>
+    <p class="hint" style="text-align:center">${(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) || / CentelApp\//.test(navigator.userAgent) ? 'METANG' : 'Centel'} · เวอร์ชัน 2.0</p>
   `;
   $('#billWallet').addEventListener('change', (e) => {
     money.prefs.billWallet = e.target.value;

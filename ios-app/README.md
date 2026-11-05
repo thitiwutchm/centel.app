@@ -7,7 +7,20 @@ app picks it up on next launch, with no App Store update needed.
 - Bundle ID: `app.centel` · name: Centel · iPhone only, portrait · iOS 15+
 - `capacitor.config.json` points `server.url` at https://centel.app.
   `www/offline.html` shows when there is no network.
-- Native plugins: push notifications (APNs), haptics, app lifecycle.
+- Native plugins: push notifications (APNs), haptics, app lifecycle, plus the app's
+  own NativeTabs, GoogleAuth and WidgetData (registered in CentelViewController).
+- `CentelWidget/` is a WidgetKit extension (`app.centel.widget`, iOS 17+): Home Screen
+  widgets: Expenses (month spend, vs last month by today, spend line, + opens a new
+  transaction), Centel (spend + upcoming bills, also Lock Screen) and to-dos.
+  The page (`widget.js`) saves a snapshot into the App Group `group.app.centel`
+  through WidgetData; the widget reads it. Taps open `centel://bills|todos|home|add`.
+- `CentelShare/` is a Share Extension (`app.centel.share`, iOS 15+): Centel shows in the
+  share sheet for one picture. It shrinks the picture, saves it in the App Group's
+  `Inbox/` folder and opens `centel://share`. The page (`share.js`) takes it through the
+  ShareInbox plugin (`App/ShareInbox.swift`), opens a new expense and reads it with
+  AI Slips. If the app could not be opened, the picture is picked up the next time
+  Centel comes to the front. The App ID `app.centel.share` needs the App Group
+  `group.app.centel` on developer.apple.com, like the widget.
 - Swift Package Manager (no CocoaPods).
 
 ## Build on the Mac
@@ -42,9 +55,10 @@ A newly added iPhone needs a fresh build. Web changes do not.
 
 ## Before App Store review (still to do)
 
-1. **Native push**: Web Push does not run inside the app. Register the APNs
-   token from `@capacitor/push-notifications` with the api and send through
-   APNs with a `.p8` key from the Apple Developer account.
+1. **Native push** is done: the Account switch registers the APNs token
+   (`push.js` -> `/api/push/apns`) and the api sends through APNs
+   (`server/src/apns.js`). The api service needs `APNS_KEY` (the .p8 text) and
+   `APNS_KEY_ID` from developer.apple.com > Keys.
 2. **Google sign-in**: Google blocks its sign-in page inside an embedded web
    view. Use a native Google sign-in plugin and pass the ID token to the
    existing `/api` Google login. The same applies to Gmail AutoSync.

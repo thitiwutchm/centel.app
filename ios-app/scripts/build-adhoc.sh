@@ -26,6 +26,6 @@ cp build/export/*.ipa ../install/Centel.ipa
 # Xcode writes manifest.plist with the right bundle version next to the .ipa.
 # The Xcode target is named App, so put the real name back on the install sheet.
 if [ -f build/export/manifest.plist ]; then
-  sed 's#<string>App</string>#<string>Centel</string>#' build/export/manifest.plist > ../install/manifest.plist
+  sed 's#<string>App</string>#<string>METANG</string>#' build/export/manifest.plist > ../install/manifest.plist
 fi
 echo "Built ../install/Centel.ipa (build $BUILD)"

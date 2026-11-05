@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Centel</string>
+        <string>METANG</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -20,6 +20,17 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.centel</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>centel</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -65,13 +76,13 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>Centel ใช้กล้องเพื่อสแกนสลิปและใบเสร็จ</string>
+	<string>METANG ใช้กล้องเพื่อสแกนสลิปและใบเสร็จ</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Centel ใช้ตำแหน่งในโหมดนักเดินทาง เพื่อเลือกสกุลเงินของประเทศที่คุณอยู่</string>
+	<string>METANG ใช้ตำแหน่งในโหมดนักเดินทาง เพื่อเลือกสกุลเงินของประเทศที่คุณอยู่</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Centel เปิดคลังรูปเพื่อเลือกสลิปหรือรูปโปรไฟล์</string>
+	<string>METANG เปิดคลังรูปเพื่อเลือกสลิปหรือรูปโปรไฟล์</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Centel บันทึกรูปสลิปลงคลังรูปเมื่อคุณสั่ง</string>
+	<string>METANG บันทึกรูปสลิปลงคลังรูปเมื่อคุณสั่ง</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
