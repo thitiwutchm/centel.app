@@ -60,6 +60,10 @@
 		header @install Cache-Control "no-cache"
 		@ipa path *.ipa
 		header @ipa Content-Type application/octet-stream
+		# Scripts and styles revalidate too (cheap 304 by ETag): the iOS app's web view kept
+		# serving yesterday's app code from its HTTP cache after a deploy.
+		@code path *.js *.css
+		header @code Cache-Control "no-cache"
 		@static path /icons/* /themeb/fonts/*
 		header @static Cache-Control "public, max-age=604800"
 
