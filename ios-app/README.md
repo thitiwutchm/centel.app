@@ -14,6 +14,13 @@ app picks it up on next launch, with no App Store update needed.
   transaction), Centel (spend + upcoming bills, also Lock Screen) and to-dos.
   The page (`widget.js`) saves a snapshot into the App Group `group.app.centel`
   through WidgetData; the widget reads it. Taps open `centel://bills|todos|home|add`.
+- `CentelShare/` is a Share Extension (`app.centel.share`, iOS 15+): Centel shows in the
+  share sheet for one picture. It shrinks the picture, saves it in the App Group's
+  `Inbox/` folder and opens `centel://share`. The page (`share.js`) takes it through the
+  ShareInbox plugin (`App/ShareInbox.swift`), opens a new expense and reads it with
+  AI Slips. If the app could not be opened, the picture is picked up the next time
+  Centel comes to the front. The App ID `app.centel.share` needs the App Group
+  `group.app.centel` on developer.apple.com, like the widget.
 - Swift Package Manager (no CocoaPods).
 
 ## Build on the Mac

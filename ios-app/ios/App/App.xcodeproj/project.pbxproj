@@ -22,6 +22,9 @@
 		C3A7E2042F0B000100A1B2C3 /* CentelWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E2032F0B000100A1B2C3 /* CentelWidget.swift */; };
 		C3A7E2082F0B000100A1B2C3 /* CentelWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C3A7E2072F0B000100A1B2C3 /* CentelWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C3A7E3022F0B000100A1B2C3 /* AppIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */; };
+		C3A7E4022F0B000100A1B2C3 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */; };
+		C3A7E5042F0B000100A1B2C3 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E5032F0B000100A1B2C3 /* ShareViewController.swift */; };
+		C3A7E5082F0B000100A1B2C3 /* CentelShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C3A7E5072F0B000100A1B2C3 /* CentelShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +47,11 @@
 		C3A7E2062F0B000100A1B2C3 /* CentelWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CentelWidget.entitlements; sourceTree = "<group>"; };
 		C3A7E2072F0B000100A1B2C3 /* CentelWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CentelWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcon.swift; sourceTree = "<group>"; };
+		C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInbox.swift; sourceTree = "<group>"; };
+		C3A7E5032F0B000100A1B2C3 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		C3A7E5052F0B000100A1B2C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C3A7E5062F0B000100A1B2C3 /* CentelShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CentelShare.entitlements; sourceTree = "<group>"; };
+		C3A7E5072F0B000100A1B2C3 /* CentelShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CentelShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +61,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = C3A7E20A2F0B000100A1B2C3;
 			remoteInfo = CentelWidget;
+		};
+		C3A7E50F2F0B000100A1B2C3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C3A7E50A2F0B000100A1B2C3;
+			remoteInfo = CentelShare;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -64,6 +79,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				C3A7E2082F0B000100A1B2C3 /* CentelWidget.appex in Embed Foundation Extensions */,
+				C3A7E5082F0B000100A1B2C3 /* CentelShare.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -86,6 +102,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C3A7E50C2F0B000100A1B2C3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -95,6 +118,7 @@
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				C3A7E2092F0B000100A1B2C3 /* CentelWidget */,
+				C3A7E5092F0B000100A1B2C3 /* CentelShare */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -104,6 +128,7 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				C3A7E2072F0B000100A1B2C3 /* CentelWidget.appex */,
+				C3A7E5072F0B000100A1B2C3 /* CentelShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -118,6 +143,7 @@
 				C3A7E1032F0B000100A1B2C3 /* GoogleAuth.swift */,
 				C3A7E2012F0B000100A1B2C3 /* WidgetData.swift */,
 				C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */,
+				C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -138,6 +164,16 @@
 			path = CentelWidget;
 			sourceTree = "<group>";
 		};
+		C3A7E5092F0B000100A1B2C3 /* CentelShare */ = {
+			isa = PBXGroup;
+			children = (
+				C3A7E5032F0B000100A1B2C3 /* ShareViewController.swift */,
+				C3A7E5052F0B000100A1B2C3 /* Info.plist */,
+				C3A7E5062F0B000100A1B2C3 /* CentelShare.entitlements */,
+			);
+			path = CentelShare;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -154,6 +190,7 @@
 			);
 			dependencies = (
 				C3A7E2102F0B000100A1B2C3 /* PBXTargetDependency */,
+				C3A7E5102F0B000100A1B2C3 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -180,6 +217,23 @@
 			productReference = C3A7E2072F0B000100A1B2C3 /* CentelWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		C3A7E50A2F0B000100A1B2C3 /* CentelShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C3A7E5132F0B000100A1B2C3 /* Build configuration list for PBXNativeTarget "CentelShare" */;
+			buildPhases = (
+				C3A7E50B2F0B000100A1B2C3 /* Sources */,
+				C3A7E50C2F0B000100A1B2C3 /* Frameworks */,
+				C3A7E50D2F0B000100A1B2C3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CentelShare;
+			productName = CentelShare;
+			productReference = C3A7E5072F0B000100A1B2C3 /* CentelShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -195,6 +249,10 @@
 						ProvisioningStyle = Automatic;
 					};
 					C3A7E20A2F0B000100A1B2C3 = {
+						CreatedOnToolsVersion = 16.0;
+						ProvisioningStyle = Automatic;
+					};
+					C3A7E50A2F0B000100A1B2C3 = {
 						CreatedOnToolsVersion = 16.0;
 						ProvisioningStyle = Automatic;
 					};
@@ -218,6 +276,7 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				C3A7E20A2F0B000100A1B2C3 /* CentelWidget */,
+				C3A7E50A2F0B000100A1B2C3 /* CentelShare */,
 			);
 		};
 /* End PBXProject section */
@@ -243,6 +302,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C3A7E50D2F0B000100A1B2C3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -256,6 +322,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				C3A7E2022F0B000100A1B2C3 /* WidgetData.swift in Sources */,
 				C3A7E3022F0B000100A1B2C3 /* AppIcon.swift in Sources */,
+				C3A7E4022F0B000100A1B2C3 /* ShareInbox.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -267,6 +334,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C3A7E50B2F0B000100A1B2C3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C3A7E5042F0B000100A1B2C3 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -274,6 +349,11 @@
 			isa = PBXTargetDependency;
 			target = C3A7E20A2F0B000100A1B2C3 /* CentelWidget */;
 			targetProxy = C3A7E20F2F0B000100A1B2C3 /* PBXContainerItemProxy */;
+		};
+		C3A7E5102F0B000100A1B2C3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C3A7E50A2F0B000100A1B2C3 /* CentelShare */;
+			targetProxy = C3A7E50F2F0B000100A1B2C3 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -504,6 +584,54 @@
 			};
 			name = Release;
 		};
+		C3A7E5112F0B000100A1B2C3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = CentelShare/CentelShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = CentelShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.centel.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		C3A7E5122F0B000100A1B2C3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = CentelShare/CentelShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = CentelShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.centel.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -530,6 +658,15 @@
 			buildConfigurations = (
 				C3A7E2112F0B000100A1B2C3 /* Debug */,
 				C3A7E2122F0B000100A1B2C3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C3A7E5132F0B000100A1B2C3 /* Build configuration list for PBXNativeTarget "CentelShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C3A7E5112F0B000100A1B2C3 /* Debug */,
+				C3A7E5122F0B000100A1B2C3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

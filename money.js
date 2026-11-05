@@ -1532,7 +1532,9 @@ function catPicker(type, current, onPick, opts = {}) {
   });
 }
 
-function txnForm(t, preset = {}) {
+// opts.slip: a picture (File) to read with AI Slips as soon as the form opens, e.g. a
+// screenshot shared to Centel from the iOS share sheet (share.js).
+function txnForm(t, preset = {}, opts = {}) {
   const isNew = !t;
   const me = cloud.user ? cloud.user.id : null;
   const canShare = isCloud() && !!cloud.partner;
@@ -1828,6 +1830,7 @@ function txnForm(t, preset = {}) {
     $('#rcScan').addEventListener('click', () => { if (!$('#rcScan').classList.contains('scanning')) $('#rcIn').click(); });
     $('#rcIn').addEventListener('change', (e) => { onFile(e.target.files[0]); e.target.value = ''; });
     if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
+    if (opts.slip) onFile(opts.slip);
   }
 
   const submit = () => {
