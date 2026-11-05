@@ -1,5 +1,5 @@
 // Bump CACHE when shipping changes so installed apps pick up the new files.
-const CACHE = 'billplanner-v94';
+const CACHE = 'billplanner-v95';
 const ASSETS = [
   './',
   'index.html',
@@ -49,8 +49,10 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   // API answers are per-account and must never be served from the cache.
   if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  // Always ask the server (the browser's HTTP cache may hold an old copy); offline, use ours.
+  const fresh = req.mode === 'navigate' ? fetch(req) : fetch(req, { cache: 'no-cache' });
   e.respondWith(
-    fetch(req)
+    fresh
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
