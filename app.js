@@ -456,69 +456,158 @@ function installTip() {
     </div>`;
 }
 
+/* Account tab, laid out like iOS Settings: the profile and wallets on top, then short
+   grouped lists. Each row shows its current value and opens its own sheet, so the page
+   stays one screen of headings instead of every form at once. */
+
+function isNativeApp() {
+  return (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) || / CentelApp\//.test(navigator.userAgent);
+}
+
+// One settings row: a coloured icon tile, the name (and an optional line under it), the
+// current value on the right and a chevron. `set` opens a settings sheet, `action` runs a
+// data-action, `id` is for rows bound by their own module.
+function setRow({ set, action, id, ico, color, name, sub, value, danger, chev = true }) {
+  const attrs = set ? `data-set="${set}"` : action ? `data-action="${action}"` : '';
+  return `<button class="item set-row${danger ? ' danger' : ''}" ${attrs}${id ? ` id="${id}"` : ''}>
+    <span class="set-ico" style="--c:${color || '#8a8f99'}">${ico}</span>
+    <div class="main"><div class="name">${name}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>
+    ${value ? `<span class="set-val">${value}</span>` : ''}${chev ? svgIcon('chev', 'svg-i sm muted') : ''}</button>`;
+}
+
+function setGroup(title, rows) {
+  const body = rows.filter(Boolean).join('');
+  return body ? `${title ? `<div class="section-title">${title}</div>` : ''}<div class="list set-list">${body}</div>` : '';
+}
+
+function remindLabel(n) { return n === 0 ? 'วันครบกำหนด' : `${n} วัน`; }
+
 function renderSettings() {
   const s = state.settings;
+  const theme = THEMES.find((t) => t.id === themeId()) || THEMES[0];
+  const bw = billPayWallet();
+  const tr = travelPrefs();
+  const line = isCloud() ? cloud.line : null;
+  const lineReady = isCloud() && cloud.features && cloud.features.line;
+  const bridge = (chatReady() && chat.state && chat.state.bridge) || null;
+  if (isCloud()) { aiCheck(); calFeedCheck(); if (pushSupported()) setTimeout(pushCheck, 0); }
+  const aiApps = aic.info ? aic.info.apps.length : 0;
+  const cal = isCloud() ? calFeedLocal() : null;
+  const on = (v) => (v ? 'เปิดอยู่' : 'ปิดอยู่');
   view.innerHTML = `
     ${accountTop()}
-    <div class="section-title">ธีม</div>
-    <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
-      <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
-    <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>
-    ${window.appIconSettings ? appIconSettings() : ''}
-    <div class="section-title">ภาษา · Language</div>
-    <div class="seg lang-seg">${[['th', 'ไทย'], ['en', 'English']]
-      .map(([k, l]) => `<button type="button" data-lang="${k}" class="${LANG === k ? 'on' : ''}" aria-pressed="${LANG === k}">${l}</button>`).join('')}</div>
-    <div class="section-title">การแจ้งเตือน</div>
-    <div class="form">
-      <div class="field"><label for="remindDays">เตือนล่วงหน้า</label>
-        <select id="remindDays">${[0, 1, 2, 3, 5, 7].map((n) => `<option value="${n}" ${s.remindDays === n ? 'selected' : ''}>${n === 0 ? 'วันครบกำหนด' : n + ' วัน'}</option>`).join('')}</select>
-      </div>
-    </div>
-    <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม)</p>
-    ${travelSettings()}
-    ${pushSettings()}
-    ${calFeedSettings()}
-    ${lineSettings()}
-    ${chatSettings()}
-    ${aiSettings()}
 
-    <div class="section-title">สำรองข้อมูล</div>
-    <button class="btn ghost" data-action="export">⬇️ ส่งออกข้อมูล (JSON)</button>
-    <button class="btn ghost" data-action="import">⬆️ นำเข้าข้อมูล</button>
+    ${setGroup('เงินและบิล', [
+      `<button class="item set-row" data-action="categories"><span class="set-ico" style="--c:#2f6bff">🗂️</span><div class="main"><div class="name">หมวดหมู่</div></div>
+        <span class="set-val">${catList().filter((c) => c.type === 'expense' && !c.parent).length}</span>${svgIcon('chev', 'svg-i sm muted')}</button>`,
+      setRow({ action: 'labels', ico: '🏷️', color: '#7a5cff', name: 'ป้ายกำกับ', value: money.labels.length ? String(money.labels.length) : '' }),
+      setRow({ set: 'billpay', ico: '🧾', color: '#00a37a', name: 'บันทึกการจ่ายบิลจาก', value: esc(bw ? (walletById(bw) || {}).name || '' : 'ไม่บันทึก') }),
+      setRow({ set: 'travel', ico: '✈️', color: '#00a3e0', name: 'โหมดนักเดินทาง', value: tr.on ? `${curFlag(tr.currency)} ${esc(tr.currency)}` : on(false) }),
+    ])}
+
+    ${setGroup('การแสดงผล', [
+      setRow({ set: 'theme', ico: '🎨', color: '#ff7a45', name: 'ธีม', value: `<span class="set-sw tp-${theme.id}"><span class="tp-prev"></span></span>${theme.label}` }),
+      window.appIconSettings ? setRow({ set: 'appicon', ico: '📱', color: '#ff4d8d', name: 'ไอคอนแอป' }) : '',
+      setRow({ set: 'lang', ico: '🌐', color: '#2f6bff', name: 'ภาษา · Language', value: LANG === 'en' ? 'English' : '<span translate="no">ไทย</span>' }),
+    ])}
+
+    ${setGroup('การแจ้งเตือน', [
+      setRow({ set: 'remind', ico: '⏰', color: '#ff9f0a', name: 'เตือนบิลล่วงหน้า', value: remindLabel(s.remindDays) }),
+      setRow({ set: 'push', ico: '🔔', color: '#ff3b30', name: 'แจ้งเตือนบนเครื่องนี้', value: on(push.on) }),
+      setRow({ action: 'calfeed', ico: '📆', color: '#34c759', name: 'ปฏิทิน iPhone', value: cal ? 'ซิงก์อยู่' : on(false) }),
+      setRow({ set: 'line', ico: '💬', color: '#06c755', name: 'กลุ่ม LINE', value: !isCloud() ? '' : !line ? on(false) : !line.active ? on(false) : lineReady ? 'เปิดอยู่' : 'รอเชื่อม' }),
+    ])}
+
+    ${setGroup('ผู้ช่วย AI', [
+      bridge ? setRow({ set: 'chat', ico: '🤖', color: '#5856d6', name: 'ผู้ช่วยในแชท (Mac)', value: bridge.online ? '<span class="set-dot ok"></span>ออนไลน์' : bridge.set ? '<span class="set-dot"></span>ออฟไลน์' : 'ยังไม่ได้เชื่อม' }) : '',
+      bridge && bridge.set ? setRow({ id: 'setMac', ico: '🖥️', color: '#636366', name: 'สถานะ Mac' }) : '',
+      setRow({ id: 'aiOpen', ico: '✨', color: '#bf5af2', name: 'เชื่อมกับ Claude / ChatGPT', value: aiApps ? `${aiApps} แอป` : '' }),
+    ])}
+
     <input type="file" id="importFile" accept="application/json,.json" hidden>
+    ${setGroup('ข้อมูล', [
+      setRow({ action: 'export', ico: '⬇️', color: '#30b0c7', name: 'ส่งออกข้อมูล (JSON)', chev: false }),
+      setRow({ action: 'import', ico: '⬆️', color: '#30b0c7', name: 'นำเข้าข้อมูล', chev: false }),
+    ])}
     <p class="hint">${isCloud() ? 'บิล ประวัติการจ่าย ไฟล์ใบแจ้งหนี้ รายการรับจ่าย และงบประมาณ ซิงก์กับบัญชีออนไลน์ทุกเครื่องที่เข้าสู่ระบบ' : 'ข้อมูลทั้งหมดเก็บในเครื่องนี้ (localStorage) ไม่มีการส่งไปที่ใด ควรส่งออกเก็บไว้เป็นระยะ'}</p>
 
     ${installTip()}
 
-    <div class="section-title">อื่นๆ</div>
-    <button class="btn danger" data-action="reset">ลบข้อมูลทั้งหมด</button>
-    <p class="hint" style="text-align:center">${(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) || / CentelApp\//.test(navigator.userAgent) ? 'METANG' : 'Centel'} · เวอร์ชัน 2.0</p>
+    ${setGroup('', [
+      isCloud() ? setRow({ action: 'logout', ico: '🚪', color: '#8a8f99', name: 'ออกจากระบบ', chev: false }) : '',
+      setRow({ action: 'reset', ico: '🗑️', color: '#ff3b30', name: 'ลบข้อมูลทั้งหมด', danger: true, chev: false }),
+    ])}
+    <p class="hint set-foot">${isNativeApp() ? 'METANG' : 'Centel'} · เวอร์ชัน 2.0</p>
   `;
-  $('#billWallet').addEventListener('change', (e) => {
-    money.prefs.billWallet = e.target.value;
-    savePrefs();
-    toast('บันทึกแล้ว');
-  });
-  $('#remindDays').addEventListener('change', (e) => {
-    state.settings.remindDays = Number(e.target.value);
-    save();
-    toast('บันทึกแล้ว');
-  });
   $('#importFile').addEventListener('change', importData);
-  lineSettingsBind();
-  pushSettingsBind();
-  chatSettingsBind();
   aiSettingsBind();
-  view.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
+  const mac = $('#setMac');
+  if (mac) mac.addEventListener('click', macSheet);
+  view.querySelectorAll('[data-set]').forEach((b) => b.addEventListener('click', () => settingsSheet(b.dataset.set)));
+  // Something changed while a settings sheet is open (a switch, a status check): redraw it too.
+  if (ui.setSheet && !$('#sheet').hidden) settingsSheet(ui.setSheet, true);
+}
+
+const SET_SHEETS = {
+  billpay: ['การจ่ายบิล', () => {
+    const bw = billPayWallet();
+    return `<div class="form">
+      <div class="field"><label for="billWallet">บันทึกรายจ่ายจาก</label><select id="billWallet">
+        <option value="" ${bw === '' ? 'selected' : ''}>ไม่บันทึกเป็นรายการ</option>
+        ${money.wallets.map((w) => `<option value="${w.id}" ${bw === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+      </select></div>
+    </div>
+    <p class="hint">เมื่อกด "จ่ายแล้ว" ที่บิล แอปจะบันทึกเป็นรายจ่ายในกระเป๋าเงินนี้ให้อัตโนมัติ เพื่อให้ยอดเงินและงบประมาณตรงกัน</p>`;
+  }],
+  travel: ['โหมดนักเดินทาง', () => travelSettings().replace(/<div class="section-title">[^<]*<\/div>/, '')],
+  theme: ['ธีม', () => `
+    <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
+      <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
+    <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>`],
+  appicon: ['ไอคอนแอป', () => (window.appIconSettings ? appIconSettings().replace(/<div class="section-title">[^<]*<\/div>/, '') : '')],
+  lang: ['ภาษา · Language', () => `
+    <div class="seg lang-seg">${[['th', 'ไทย'], ['en', 'English']]
+      .map(([k, l]) => `<button type="button" data-lang="${k}" class="${LANG === k ? 'on' : ''}" aria-pressed="${LANG === k}">${l}</button>`).join('')}</div>`],
+  remind: ['เตือนบิลล่วงหน้า', () => `
+    <div class="form">
+      <div class="field"><label for="remindDays">เตือนล่วงหน้า</label>
+        <select id="remindDays">${[0, 1, 2, 3, 5, 7].map((n) => `<option value="${n}" ${state.settings.remindDays === n ? 'selected' : ''}>${remindLabel(n)}</option>`).join('')}</select>
+      </div>
+    </div>
+    <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม) · ใช้กับการแจ้งเตือนบนเครื่องและปฏิทิน iPhone ด้วย</p>`],
+  push: ['แจ้งเตือนบนเครื่องนี้', () => pushSettings()],
+  line: ['กลุ่ม LINE', () => lineSettings().replace(/<div class="section-title">[^<]*<\/div>/, '')],
+  chat: ['ผู้ช่วยในแชท', () => chatSettings().replace(/<div class="section-title">[^<]*<\/div>/, '')],
+};
+
+// Opens one settings group in a sheet. `again` redraws it in place (keeps the scroll).
+function settingsSheet(key, again = false) {
+  const def = SET_SHEETS[key];
+  if (!def) return;
+  const sheet = $('#sheet');
+  const y = sheet.scrollTop;
+  const f = document.activeElement;
+  // Don't wipe what they are typing (a switch or a select is fine to redraw).
+  if (again && f && sheet.contains(f) && (f.tagName === 'TEXTAREA' || (f.tagName === 'INPUT' && !/^(checkbox|radio|file)$/.test(f.type)))) return;
+  openSheet(`<div class="sheet-head">${CLOSE_X}<h2>${def[0]}</h2><span style="width:40px"></span></div>${def[1]()}`);
+  ui.setSheet = key;
+  ui.setBack = null;
+  if (again) sheet.scrollTop = y;
+  const bw = $('#billWallet');
+  if (bw) bw.addEventListener('change', (e) => { money.prefs.billWallet = e.target.value; savePrefs(); toast('บันทึกแล้ว'); render(); });
+  const rd = $('#remindDays');
+  if (rd) rd.addEventListener('change', (e) => { state.settings.remindDays = Number(e.target.value); save(); toast('บันทึกแล้ว'); render(); });
+  sheet.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.themePick === themeId()) return;
     setTheme(b.dataset.themePick);
-    const y = window.scrollY;
-    renderSettings();
-    window.scrollTo(0, y);
+    render();
   }));
-  view.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => {
+  sheet.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.lang !== LANG) setLang(b.dataset.lang);
   }));
+  if (key === 'line') lineSettingsBind();
+  if (key === 'push') pushSettingsBind();
+  if (key === 'chat') chatSettingsBind();
 }
 
 /* ---------- Sheets ---------- */
@@ -526,6 +615,9 @@ function renderSettings() {
 function openSheet(html) {
   const sheet = $('#sheet');
   delete sheet.dataset.locked;
+  // A sheet opened over an Account settings sheet goes back to it when closed.
+  ui.setBack = ui.setSheet || null;
+  ui.setSheet = null;
   sheet.innerHTML = `<div class="grabber"></div>${html}`;
   sheet.hidden = false;
   $('#backdrop').hidden = false;
@@ -538,6 +630,9 @@ function closeSheet() {
   if ($('#sheet').dataset.locked) return;
   const layer = $('#catLayer');
   if (layer) layer.remove();
+  const back = ui.tab === 'account' && ui.setBack;
+  ui.setSheet = ui.setBack = null;
+  if (back) { settingsSheet(back); return; }
   ui.notesOpen = false;
   $('#sheet').hidden = true;
   $('#backdrop').hidden = true;
@@ -1533,7 +1628,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // The iOS app's web view has no service worker, so it learns about a new version here: when the
 // app comes back to the screen, the deployed sw.js says which version is live (its CACHE name);
 // if that is not the one this page loaded with, the page reloads (only with no sheet open).
-const APP_BUILD = 'billplanner-v97'; // keep equal to CACHE in sw.js
+const APP_BUILD = 'billplanner-v98'; // keep equal to CACHE in sw.js
 let buildChecked = 0;
 function checkNewBuild() {
   if (location.protocol === 'file:' || Date.now() - buildChecked < 30000) return;

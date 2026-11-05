@@ -1912,3 +1912,25 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 @keyframes pf-breathe { to { transform: scale(1.06); } }
 .avatar.pf-big { width: 84px; height: 84px; flex: 0 0 84px; font-size: 44px; margin: 0 auto; }
 @media (prefers-reduced-motion: reduce) { .pf-tile, .pf-tile.del .avatar.pf-av, .pf-curtain .avatar.pf-big { animation: none; } }
+
+/* ---------- Account settings rows (grouped, iOS Settings style) ---------- */
+.set-list .set-row { gap: 12px; padding: 11px 14px; min-height: 50px; color: inherit; font: inherit; }
+.set-list .set-row .name { font-weight: 500; }
+.set-ico {
+  width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; display: grid; place-items: center;
+  font-size: 16px; line-height: 1; background: color-mix(in srgb, var(--c) 18%, transparent);
+}
+.set-val {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 46%;
+  color: var(--muted); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.set-row .svg-i.sm { flex: 0 0 auto; }
+.set-row.danger .name { color: var(--bad); }
+.set-sw { display: inline-flex; }
+.set-sw .tp-prev { width: 16px; height: 16px; aspect-ratio: auto; margin: 0; border-radius: 5px; padding: 0; box-shadow: none; }
+.sheet .tp { color: var(--text); }
+.sheet .tp.on .tp-prev { box-shadow: 0 0 0 2.5px var(--accent), 0 4px 14px rgba(0, 20, 50, .18); }
+.set-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.set-dot.ok { background: #34c759; }
+.set-list + .hint { margin-top: 8px; }
+.set-foot { text-align: center; margin-top: 18px; }
