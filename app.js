@@ -501,6 +501,7 @@ function renderSettings() {
       `<button class="item set-row" data-action="categories"><span class="set-ico" style="--c:#2f6bff">🗂️</span><div class="main"><div class="name">หมวดหมู่</div></div>
         <span class="set-val">${catList().filter((c) => c.type === 'expense' && !c.parent).length}</span>${svgIcon('chev', 'svg-i sm muted')}</button>`,
       setRow({ action: 'labels', ico: '🏷️', color: '#7a5cff', name: 'ป้ายกำกับ', value: money.labels.length ? String(money.labels.length) : '' }),
+      window.photoSlipsRow ? photoSlipsRow() : '',
       setRow({ set: 'billpay', ico: '🧾', color: '#00a37a', name: 'บันทึกการจ่ายบิลจาก', value: esc(bw ? (walletById(bw) || {}).name || '' : 'ไม่บันทึก') }),
       setRow({ set: 'travel', ico: '✈️', color: '#00a3e0', name: 'โหมดนักเดินทาง', value: tr.on ? `${curFlag(tr.currency)} ${esc(tr.currency)}` : on(false) }),
     ])}
@@ -564,6 +565,7 @@ const SET_SHEETS = {
     <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
       <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
     <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>`],
+  photoslips: ['ดึงสลิปจากรูปภาพ', () => (window.photoSlipsSettings ? photoSlipsSettings() : '')],
   appicon: ['ไอคอนแอป', () => (window.appIconSettings ? appIconSettings().replace(/<div class="section-title">[^<]*<\/div>/, '') : '')],
   lang: ['ภาษา · Language', () => `
     <div class="seg lang-seg">${[['th', 'ไทย'], ['en', 'English']]
@@ -608,6 +610,7 @@ function settingsSheet(key, again = false) {
   if (key === 'line') lineSettingsBind();
   if (key === 'push') pushSettingsBind();
   if (key === 'chat') chatSettingsBind();
+  if (key === 'photoslips' && window.photoSlipsBind) photoSlipsBind();
 }
 
 /* ---------- Sheets ---------- */
@@ -1628,7 +1631,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // The iOS app's web view has no service worker, so it learns about a new version here: when the
 // app comes back to the screen, the deployed sw.js says which version is live (its CACHE name);
 // if that is not the one this page loaded with, the page reloads (only with no sheet open).
-const APP_BUILD = 'billplanner-v98'; // keep equal to CACHE in sw.js
+const APP_BUILD = 'billplanner-v99'; // keep equal to CACHE in sw.js
 let buildChecked = 0;
 function checkNewBuild() {
   if (location.protocol === 'file:' || Date.now() - buildChecked < 30000) return;

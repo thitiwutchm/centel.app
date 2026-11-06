@@ -29,6 +29,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        PhotoSlipsBackground.schedule()
+    }
+
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
         SceneDelegateProxy.shared.scene(scene, continue: userActivity)
     }

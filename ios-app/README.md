@@ -21,6 +21,15 @@ app picks it up on next launch, with no App Store update needed.
   AI Slips. If the app could not be opened, the picture is picked up the next time
   Centel comes to the front. The App ID `app.centel.share` needs the App Group
   `group.app.centel` on developer.apple.com, like the widget.
+- Slips from Photos (`App/PhotoSlips.swift`, Account › ดึงสลิปจากรูปภาพ): with Photos access,
+  each time the app comes to the front it checks new pictures on the iPhone with Vision text
+  recognition. Only pictures with a money amount, many numbers and slip words (or a QR code)
+  are sent to AI Slips (`photoslips.js`); the results wait on Home for approval. It remembers
+  how far it has checked in UserDefaults (`photoSlips.since`).
+  Background Tasks (`app.centel.photoslips.refresh` / `.process`, UIBackgroundModes fetch +
+  processing) run the same check while the app is closed, keep the slips found in
+  UserDefaults (`photoSlips.found`) and post a "พบสลิปใหม่" notification; AI reading waits
+  for the app to open.
 - Swift Package Manager (no CocoaPods).
 
 ## Build on the Mac

@@ -80,12 +80,19 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>METANG ใช้ตำแหน่งในโหมดนักเดินทาง เพื่อเลือกสกุลเงินของประเทศที่คุณอยู่</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>METANG เปิดคลังรูปเพื่อเลือกสลิปหรือรูปโปรไฟล์</string>
+	<string>METANG เปิดคลังรูปเพื่อเลือกสลิปหรือรูปโปรไฟล์ และเมื่อคุณเปิด "ดึงสลิปจากรูปภาพ" จะตรวจรูปใหม่บนเครื่องเพื่อหาสลิปโอนเงินและใบเสร็จ</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>METANG บันทึกรูปสลิปลงคลังรูปเมื่อคุณสั่ง</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.centel.photoslips.refresh</string>
+		<string>app.centel.photoslips.process</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>fetch</string>
+		<string>processing</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>

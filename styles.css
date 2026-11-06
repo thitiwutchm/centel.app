@@ -1934,3 +1934,18 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .set-dot.ok { background: #34c759; }
 .set-list + .hint { margin-top: 8px; }
 .set-foot { text-align: center; margin-top: 18px; }
+
+/* Slips from Photos waiting for approval on Home (photoslips.js, iOS app). */
+.ps-item { cursor: pointer; }
+.ps-item .right { margin-right: 4px; }
+.ps-acts { display: flex; gap: 6px; flex: 0 0 auto; }
+.ps-btn {
+  width: 32px; height: 32px; border-radius: 50%; border: 0; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--muted, #8a8f99) 16%, transparent); color: var(--muted, #8a8f99); cursor: pointer;
+}
+.ps-btn.ok { background: var(--accent, #2f6bff); color: #fff; }
+.ps-nocat { color: var(--warn, #ff9f0a); }
+.ps-card .card-head { padding-bottom: 4px; }
+.ps-item .main { min-width: 0; }
+.ps-item .name, .ps-item .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-btn.gap { visibility: hidden; }
