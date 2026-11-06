@@ -867,6 +867,8 @@ function renderHome() {
     </div>
 
     <div class="home-grid"><div class="home-col">
+    ${window.photoSlipsCard ? photoSlipsCard() : ''}
+
     <div class="card list-card">
       <div class="card-head"><b>กระเป๋าเงินของฉัน</b><button class="link-btn" data-action="wallets">ดูทั้งหมด</button></div>
       ${wallets}
@@ -1534,6 +1536,8 @@ function catPicker(type, current, onPick, opts = {}) {
 
 // opts.slip: a picture (File) to read with AI Slips as soon as the form opens, e.g. a
 // screenshot shared to Centel from the iOS share sheet (share.js).
+// opts.hint: a line shown under AI Slips; opts.onSaved(txn): called once the entry is saved
+// (photoslips.js uses both for a slip found in Photos that waits for approval).
 function txnForm(t, preset = {}, opts = {}) {
   const isNew = !t;
   const me = cloud.user ? cloud.user.id : null;
@@ -1831,6 +1835,7 @@ function txnForm(t, preset = {}, opts = {}) {
     $('#rcIn').addEventListener('change', (e) => { onFile(e.target.files[0]); e.target.value = ''; });
     if ($('#rcView')) $('#rcView').addEventListener('click', () => openReceipt(d.receiptKey));
     if (opts.slip) onFile(opts.slip);
+    if (opts.hint) status(opts.hint);
   }
 
   const submit = () => {
@@ -1872,6 +1877,7 @@ function txnForm(t, preset = {}, opts = {}) {
       if (out.slipRef) tx.slipRef = out.slipRef;
       saveTxn(tx);
       if (money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
+      if (opts.onSaved) opts.onSaved(tx);
       closeSheet(); render(); popIn();
       toast(`สร้างแพ็กเกจ ${name} แล้ว ครั้งละ ${baht(pkgPer(pw))}`);
       return;
@@ -1898,6 +1904,7 @@ function txnForm(t, preset = {}, opts = {}) {
       save();
     }
     if (out.walletId && money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
+    if (opts.onSaved) opts.onSaved(out);
     closeSheet(); render(); if (isNew) popIn();
     toast(paidBill ? `จ่าย ${paidBill.bill.name} แล้ว` : out.scope === 'shared' ? `บันทึกแล้ว ${partnerName()} จะเห็นรายการนี้` : isNew ? 'เพิ่มรายการแล้ว' : 'บันทึกแล้ว');
   };
