@@ -522,6 +522,14 @@ const I18N_EN = {
   'แต่ละโปรไฟล์แยกข้อมูลกันทั้งหมด ทั้งกระเป๋าเงิน รายการ บิล งบประมาณ หมวดหมู่ ป้ายกำกับ โน้ต และการเชื่อมบัญชีคู่ ไม่รวมยอดหรือใช้ร่วมกัน':
     'Each profile keeps its own data: wallets, transactions, bills, budgets, categories, labels, notes and couple link. Nothing is shared or added up.',
   'กำลังเปิดโปรไฟล์…': 'Opening profile…', 'กำลังสร้างโปรไฟล์…': 'Creating profile…', 'พร้อมใช้งาน': 'Ready',
+  // Account settings groups (renderSettings in app.js)
+  'เงินและบิล': 'Money & bills', 'การแสดงผล': 'Appearance', 'ผู้ช่วย AI': 'AI assistant', 'ข้อมูล': 'Data',
+  'บันทึกการจ่ายบิลจาก': 'Record bill payments from', 'โหมดนักเดินทาง': 'Traveller mode', 'ไอคอนแอป': 'App icon',
+  'เตือนบิลล่วงหน้า': 'Bill reminders', 'กลุ่ม LINE': 'LINE group', 'ผู้ช่วยในแชท (Mac)': 'Chat assistant (Mac)',
+  'ผู้ช่วยในแชท': 'Chat assistant', 'เชื่อมกับ Claude / ChatGPT': 'Claude / ChatGPT',
+  'ส่งออกข้อมูล (JSON)': 'Export data (JSON)', 'นำเข้าข้อมูล': 'Import data', 'ไม่บันทึก': "Don't record",
+  'ซิงก์อยู่': 'Syncing', 'รอเชื่อม': 'Waiting', '{0} แอป': '{0} connected',
+  'ใช้กับการแจ้งเตือนบนเครื่องและปฏิทิน iPhone ด้วย': 'Also used for device notifications and the iPhone calendar',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

@@ -2415,7 +2415,6 @@ function catDelete(c) {
 function accountTop() {
   const ym = ymOf(new Date());
   const { income, expense } = totalsIn(txnsInMonth(ym), walletSet('total'));
-  const bw = billPayWallet();
   return `
     <div class="page-head"><div class="ph-row"><h1>บัญชี</h1></div></div>
     ${accountCard()}
@@ -2427,22 +2426,7 @@ function accountTop() {
     <div class="list">
       ${money.wallets.map((w) => `<button class="item" data-wallet-edit="${w.id}">${walletIco(w)}<div class="main"><div class="name">${esc(w.name)}</div><div class="sub">${isPkg(w) ? pkgSub(w) : wType(w).label}${w.excluded ? ' · ไม่รวมในยอดรวม' : ''}</div></div><div class="right"><div class="amt">${masked(sbaht(balanceOf(w.id)))}</div></div></button>`).join('')}
       <button class="item add-row" data-action="add-wallet"><span class="plus">＋</span><div class="main"><div class="name">เพิ่มกระเป๋าเงิน</div></div></button>
-    </div>
-    <div class="section-title">หมวดหมู่และป้ายกำกับ</div>
-    <div class="list">
-      <button class="item" data-action="categories">${circleIco({ icon: '🗂️', color: '#2f6bff' })}<div class="main"><div class="name">หมวดหมู่</div>
-        <div class="sub">แก้ไข เรียงลำดับ และหมวดย่อย</div></div><span class="muted">${catList().filter((c) => c.type === 'expense' && !c.parent).length}</span>${svgIcon('chev', 'svg-i sm muted')}</button>
-      <button class="item" data-action="labels"><div class="ico round lab-ico">${svgIcon('tag')}</div><div class="main"><div class="name">ป้ายกำกับ</div>
-        <div class="sub">${money.labels.length ? money.labels.slice(0, 4).map((l) => esc(l.name)).join(', ') + (money.labels.length > 4 ? ` และอีก ${money.labels.length - 4}` : '') : 'ติดป้ายให้รายการ เช่น Grabfood, Shopee'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
-    </div>
-    <div class="section-title">การจ่ายบิล</div>
-    <div class="form">
-      <div class="field"><label for="billWallet">บันทึกรายจ่ายจาก</label><select id="billWallet">
-        <option value="" ${bw === '' ? 'selected' : ''}>ไม่บันทึกเป็นรายการ</option>
-        ${money.wallets.map((w) => `<option value="${w.id}" ${bw === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
-      </select></div>
-    </div>
-    <p class="hint">เมื่อกด "จ่ายแล้ว" ที่บิล แอปจะบันทึกเป็นรายจ่ายในกระเป๋าเงินนี้ให้อัตโนมัติ เพื่อให้ยอดเงินและงบประมาณตรงกัน</p>`;
+    </div>`;
 }
 
 /* ---------- Sample data ---------- */

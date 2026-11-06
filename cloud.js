@@ -459,7 +459,6 @@ function accountCard() {
         <div class="main"><div class="name">${cloud.partner ? `เชื่อมกับ ${esc(partnerName())}` : 'เชื่อมบัญชีคู่'}</div>
         <div class="sub">${cloud.partner ? esc(cloud.partner.email || '') : 'ส่งรหัสเชิญให้คู่ หรือใส่รหัสจากคู่'}</div></div>${svgIcon('chev', 'svg-i sm muted')}</button>
       ${typeof profileRow === 'function' ? profileRow() : ''}
-      <button class="item" data-action="logout"><div class="ico round" style="background:#8a8f9922">🚪</div><div class="main"><div class="name">ออกจากระบบ</div></div></button>
     </div>`;
   }
   return `
