@@ -26,6 +26,10 @@ app picks it up on next launch, with no App Store update needed.
   recognition. Only pictures with a money amount, many numbers and slip words (or a QR code)
   are sent to AI Slips (`photoslips.js`); the results wait on Home for approval. It remembers
   how far it has checked in UserDefaults (`photoSlips.since`).
+  Background Tasks (`app.centel.photoslips.refresh` / `.process`, UIBackgroundModes fetch +
+  processing) run the same check while the app is closed, keep the slips found in
+  UserDefaults (`photoSlips.found`) and post a "พบสลิปใหม่" notification; AI reading waits
+  for the app to open.
 - Swift Package Manager (no CocoaPods).
 
 ## Build on the Mac

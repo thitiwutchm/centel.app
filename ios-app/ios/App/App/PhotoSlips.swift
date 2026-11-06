@@ -1,6 +1,8 @@
+import BackgroundTasks
 import Capacitor
 import Foundation
 import Photos
+import UserNotifications
 import UIKit
 import Vision
 
@@ -28,7 +30,6 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     static let sinceKey = "photoSlips.since"
     private let queue = DispatchQueue(label: "app.centel.photoslips", qos: .userInitiated)
-    private var scanning = false
 
     private var since: Date? {
         get { UserDefaults.standard.object(forKey: Self.sinceKey) as? Date }
@@ -56,6 +57,7 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // -> { access, on, since }
     @objc func status(_ call: CAPPluginCall) {
+        if let l = call.getString("lang") { UserDefaults.standard.set(l, forKey: PhotoSlipsBackground.langKey) }
         call.resolve(statusDict())
     }
 
@@ -68,6 +70,7 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
                     if self.since == nil {
                         self.since = Date().addingTimeInterval(-Double(days) * 86400)
                     }
+                    PhotoSlipsBackground.schedule()
                 }
                 call.resolve(self.statusDict())
             }
@@ -76,6 +79,7 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func disable(_ call: CAPPluginCall) {
         since = nil
+        UserDefaults.standard.removeObject(forKey: Self.foundKey)
         call.resolve(statusDict())
     }
 
@@ -88,50 +92,89 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     // { max } -> { slips: [{ id, created, score, amount }], checked, more }
-    // Checks up to `max` pictures newer than `since`, oldest first, and moves `since` past them.
+    // Slips found in the background since last time, then up to `max` more pictures newer
+    // than `since` checked now, oldest first. `since` moves past every picture checked.
     @objc func scan(_ call: CAPPluginCall) {
-        let access = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        guard let from = since, access == .authorized || access == .limited else {
-            return call.resolve(["slips": [[String: Any]](), "checked": 0, "more": false])
-        }
-        if scanning { return call.resolve(["slips": [[String: Any]](), "checked": 0, "more": true, "busy": true]) }
-        scanning = true
         let limit = max(1, min(60, call.getInt("max") ?? 30))
         queue.async {
-            defer { self.scanning = false }
-            let opts = PHFetchOptions()
-            opts.predicate = NSPredicate(format: "creationDate > %@", from as NSDate)
-            opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
-            opts.fetchLimit = limit + 1
-            let assets = PHAsset.fetchAssets(with: .image, options: opts)
-            var slips: [[String: Any]] = []
-            var last = from
-            var checked = 0
-            let started = Date()
-            for i in 0..<min(assets.count, limit) {
-                // Keep each pass short; the rest is checked on the next one.
-                if Date().timeIntervalSince(started) > 25 { break }
-                let a = assets.object(at: i)
-                checked += 1
-                if let made = a.creationDate { last = made }
-                guard let img = Self.load(a, side: 1400) else { continue }
-                let r = Self.looksLikeSlip(img)
-                if r.slip {
-                    slips.append([
-                        "id": a.localIdentifier,
-                        "created": Int((a.creationDate ?? Date()).timeIntervalSince1970 * 1000),
-                        "score": r.score,
-                        "amount": r.amount.map { $0 as Any } ?? NSNull(),
-                        "screenshot": a.mediaSubtypes.contains(.photoScreenshot),
-                    ])
+            let r = Self.check(limit: limit, seconds: 25)
+            let slips = Self.takeFound() + r.slips
+            call.resolve(["slips": slips, "checked": r.checked, "more": r.more, "busy": r.busy])
+        }
+    }
+
+    /* ---------- The check itself, shared with the background task ---------- */
+
+    private static let lock = NSLock()
+    private static var busy = false
+    static let foundKey = "photoSlips.found"
+
+    // Checks pictures newer than `since` (at most `limit`, for about `seconds`), moving `since`
+    // past each one. `stop` is asked between pictures (the background task's time running out).
+    static func check(limit: Int, seconds: TimeInterval, stop: () -> Bool = { false })
+        -> (slips: [[String: Any]], checked: Int, more: Bool, busy: Bool) {
+        let access = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard let from = UserDefaults.standard.object(forKey: sinceKey) as? Date,
+              access == .authorized || access == .limited else { return ([], 0, false, false) }
+        lock.lock()
+        if busy { lock.unlock(); return ([], 0, true, true) }
+        busy = true
+        lock.unlock()
+        defer { lock.lock(); busy = false; lock.unlock() }
+
+        let opts = PHFetchOptions()
+        opts.predicate = NSPredicate(format: "creationDate > %@", from as NSDate)
+        opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
+        opts.fetchLimit = limit + 1
+        let assets = PHAsset.fetchAssets(with: .image, options: opts)
+        var slips: [[String: Any]] = []
+        var checked = 0
+        let started = Date()
+        for i in 0..<min(assets.count, limit) {
+            // Keep each pass short; the rest is checked on the next one.
+            if Date().timeIntervalSince(started) > seconds || stop() { break }
+            let a = assets.object(at: i)
+            checked += 1
+            autoreleasepool {
+                if let img = load(a, side: 1400) {
+                    let r = looksLikeSlip(img)
+                    if r.slip {
+                        slips.append([
+                            "id": a.localIdentifier,
+                            "created": Int((a.creationDate ?? Date()).timeIntervalSince1970 * 1000),
+                            "score": r.score,
+                            "amount": r.amount.map { $0 as Any } ?? NSNull(),
+                        ])
+                    }
                 }
             }
-            let more = checked < assets.count
-            DispatchQueue.main.async {
-                if self.since != nil { self.since = last }
-                call.resolve(["slips": slips, "checked": checked, "more": more])
+            // Turned off meanwhile: leave it off.
+            if let made = a.creationDate, UserDefaults.standard.object(forKey: sinceKey) != nil {
+                UserDefaults.standard.set(made, forKey: sinceKey)
             }
         }
+        return (slips, checked, checked < assets.count, false)
+    }
+
+    // Slips the background task found, waiting for the page; taking them clears the list.
+    static func takeFound() -> [[String: Any]] {
+        lock.lock(); defer { lock.unlock() }
+        let list = UserDefaults.standard.array(forKey: foundKey) as? [[String: Any]] ?? []
+        UserDefaults.standard.removeObject(forKey: foundKey)
+        return list
+    }
+
+    static func addFound(_ slips: [[String: Any]]) {
+        guard !slips.isEmpty else { return }
+        lock.lock(); defer { lock.unlock() }
+        var list = UserDefaults.standard.array(forKey: foundKey) as? [[String: Any]] ?? []
+        // Only plist types are kept (no NSNull).
+        list += slips.map { s in s.filter { !($0.value is NSNull) } }
+        UserDefaults.standard.set(Array(list.suffix(100)), forKey: foundKey)
+    }
+
+    static var waitingCount: Int {
+        (UserDefaults.standard.array(forKey: foundKey) ?? []).count
     }
 
     // { id } -> { image: base64 JPEG (long side 1600) | null }
@@ -216,6 +259,74 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
         case .leftMirrored: return .leftMirrored
         case .rightMirrored: return .rightMirrored
         @unknown default: return .up
+        }
+    }
+}
+
+// Checking in the background (Background Tasks). iOS picks the moments itself: a short app
+// refresh now and then, and a longer run mostly at night while charging. Each run checks new
+// pictures on the phone the same way, keeps the slips it finds for the page (scan() hands them
+// over) and posts a notification "พบสลิปใหม่ N ใบ". Reading them with AI Slips waits until the
+// app is opened, because that goes through the signed-in page.
+enum PhotoSlipsBackground {
+    static let refreshId = "app.centel.photoslips.refresh"
+    static let processId = "app.centel.photoslips.process"
+    static let langKey = "photoSlips.lang"
+
+    private final class Flag { var stop = false }
+
+    // From application(_:didFinishLaunchingWithOptions:), before launch ends.
+    static func register() {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: refreshId, using: nil) { handle($0, seconds: 25) }
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: processId, using: nil) { handle($0, seconds: 240) }
+    }
+
+    // When the app goes to the background, and after each run: ask iOS for the next ones.
+    static func schedule() {
+        guard UserDefaults.standard.object(forKey: PhotoSlipsPlugin.sinceKey) != nil else { return }
+        let r = BGAppRefreshTaskRequest(identifier: refreshId)
+        r.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
+        try? BGTaskScheduler.shared.submit(r)
+        let p = BGProcessingTaskRequest(identifier: processId)
+        p.requiresNetworkConnectivity = false
+        p.requiresExternalPower = false
+        p.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60)
+        try? BGTaskScheduler.shared.submit(p)
+    }
+
+    private static func handle(_ task: BGTask, seconds: TimeInterval) {
+        schedule()
+        let flag = Flag()
+        task.expirationHandler = { flag.stop = true }
+        DispatchQueue.global(qos: .utility).async {
+            let before = PhotoSlipsPlugin.waitingCount
+            var found: [[String: Any]] = []
+            let started = Date()
+            while !flag.stop {
+                let left = seconds - Date().timeIntervalSince(started)
+                if left < 4 { break }
+                let r = PhotoSlipsPlugin.check(limit: 60, seconds: left - 3, stop: { flag.stop })
+                found += r.slips
+                if !r.more || r.busy || r.checked == 0 { break }
+            }
+            PhotoSlipsPlugin.addFound(found)
+            if !found.isEmpty { notify(before + found.count) }
+            task.setTaskCompleted(success: true)
+        }
+    }
+
+    private static func notify(_ n: Int) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { st in
+            guard st.authorizationStatus == .authorized || st.authorizationStatus == .provisional else { return }
+            let en = UserDefaults.standard.string(forKey: langKey) == "en"
+            let c = UNMutableNotificationContent()
+            c.title = en ? "New slips in Photos" : "พบสลิปใหม่ในรูปภาพ"
+            c.body = en ? "\(n) slip\(n == 1 ? "" : "s") waiting. Tap to read and approve" : "\(n) ใบรอยืนยัน แตะเพื่อให้ AI อ่านและยืนยันรายการ"
+            c.sound = .default
+            c.userInfo = ["url": "/"]
+            // One notification, replaced as more are found.
+            center.add(UNNotificationRequest(identifier: "photoslips", content: c, trigger: nil))
         }
     }
 }
