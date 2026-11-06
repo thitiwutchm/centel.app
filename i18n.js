@@ -110,6 +110,7 @@ const I18N_EN = {
   '✅ ซิงก์อัตโนมัติอยู่': '✅ Auto sync is on',
   'ส่งปฏิทินล่าสุด {0} · iPhone ดึงข้อมูลใหม่เองเป็นระยะ': 'Calendar last sent {0} · iPhone fetches updates by itself',
   '📲 สมัครในปฏิทินเครื่องนี้': '📲 Subscribe on this device',
+  'แตะ "สมัครในปฏิทินเครื่องนี้" เพื่อเพิ่มในปฏิทิน': 'Tap "Subscribe on this device" to add it to Calendar',
   '🔗 คัดลอกลิงก์ปฏิทิน': '🔗 Copy calendar link',
   'ถ้ากดสมัครแล้วไม่ขึ้น: เปิด': 'If nothing appears: open',
   'การตั้งค่า › ปฏิทิน › บัญชี › เพิ่มบัญชี › อื่นๆ › เพิ่มปฏิทินที่สมัครรับ': 'Settings › Calendar › Accounts › Add Account › Other › Add Subscribed Calendar',
