@@ -480,7 +480,7 @@ function setGroup(title, rows) {
   return body ? `${title ? `<div class="section-title">${title}</div>` : ''}<div class="list set-list">${body}</div>` : '';
 }
 
-function remindLabel(n) { return n === 0 ? 'วันครบกำหนด' : `${n} วัน`; }
+function billRemindLabel(n) { return n === 0 ? 'วันครบกำหนด' : `${n} วัน`; }
 
 function renderSettings() {
   const s = state.settings;
@@ -512,7 +512,7 @@ function renderSettings() {
     ])}
 
     ${setGroup('การแจ้งเตือน', [
-      setRow({ set: 'remind', ico: '⏰', color: '#ff9f0a', name: 'เตือนบิลล่วงหน้า', value: remindLabel(s.remindDays) }),
+      setRow({ set: 'remind', ico: '⏰', color: '#ff9f0a', name: 'เตือนบิลล่วงหน้า', value: billRemindLabel(s.remindDays) }),
       setRow({ set: 'push', ico: '🔔', color: '#ff3b30', name: 'แจ้งเตือนบนเครื่องนี้', value: on(push.on) }),
       setRow({ action: 'calfeed', ico: '📆', color: '#34c759', name: 'ปฏิทิน iPhone', value: cal ? 'ซิงก์อยู่' : on(false) }),
       setRow({ set: 'line', ico: '💬', color: '#06c755', name: 'กลุ่ม LINE', value: !isCloud() ? '' : !line ? on(false) : !line.active ? on(false) : lineReady ? 'เปิดอยู่' : 'รอเชื่อม' }),
@@ -571,7 +571,7 @@ const SET_SHEETS = {
   remind: ['เตือนบิลล่วงหน้า', () => `
     <div class="form">
       <div class="field"><label for="remindDays">เตือนล่วงหน้า</label>
-        <select id="remindDays">${[0, 1, 2, 3, 5, 7].map((n) => `<option value="${n}" ${state.settings.remindDays === n ? 'selected' : ''}>${remindLabel(n)}</option>`).join('')}</select>
+        <select id="remindDays">${[0, 1, 2, 3, 5, 7].map((n) => `<option value="${n}" ${state.settings.remindDays === n ? 'selected' : ''}>${billRemindLabel(n)}</option>`).join('')}</select>
       </div>
     </div>
     <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม) · ใช้กับการแจ้งเตือนบนเครื่องและปฏิทิน iPhone ด้วย</p>`],
@@ -1628,7 +1628,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // The iOS app's web view has no service worker, so it learns about a new version here: when the
 // app comes back to the screen, the deployed sw.js says which version is live (its CACHE name);
 // if that is not the one this page loaded with, the page reloads (only with no sheet open).
-const APP_BUILD = 'billplanner-v98'; // keep equal to CACHE in sw.js
+const APP_BUILD = 'billplanner-v99'; // keep equal to CACHE in sw.js
 let buildChecked = 0;
 function checkNewBuild() {
   if (location.protocol === 'file:' || Date.now() - buildChecked < 30000) return;
