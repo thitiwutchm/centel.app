@@ -28,6 +28,17 @@ function setCalFeedLocal(c) {
 
 function calFeedUrl(token, scheme = 'webcal') { return `${scheme}://${location.host}/api/calendar/${token}.ics`; }
 
+// Hand the webcal:// link to iOS so Calendar shows its Subscribe prompt. In the iOS app
+// (ios-app/, Capacitor) the shell lets any centel.app URL load inside the web view whatever the
+// scheme, so location.href = webcal://centel.app/... fails there and shows the offline page.
+// window.open goes through Capacitor's createWebViewWith, which passes the URL to iOS.
+// It needs the tap's user gesture, so call it straight from a click handler.
+function calFeedOpen(token) {
+  const url = calFeedUrl(token);
+  if (typeof isNativeApp === 'function' && isNativeApp()) window.open(url, '_blank');
+  else location.href = url;
+}
+
 // DTSTAMP changes on every build; compare the rest to tell whether anything changed.
 function calFeedHash(text) {
   const body = text.replace(/^DTSTAMP:.*$/gm, '');
@@ -131,7 +142,10 @@ function calFeedSheet() {
         await calFeedSend(true);
         render();
         calFeedSheet();
-        location.href = calFeedUrl(r.token);
+        // After the awaits the tap no longer counts as a user gesture, so the iOS app can't open
+        // Calendar here; the sheet that just opened has the Subscribe button to tap.
+        if (typeof isNativeApp === 'function' && isNativeApp()) toast('แตะ "สมัครในปฏิทินเครื่องนี้" เพื่อเพิ่มในปฏิทิน');
+        else calFeedOpen(r.token);
       } catch (err) {
         e.target.disabled = false;
         toast(cloudErr(err));
@@ -150,7 +164,7 @@ function calFeedSheet() {
     <button class="btn ghost" data-action="ics">📄 ดาวน์โหลดไฟล์ปฏิทิน (.ics) ครั้งเดียว</button>
     <button class="btn danger" id="cfOff">ปิดการซิงก์ปฏิทิน</button>
   `);
-  $('#cfSub').addEventListener('click', () => { location.href = calFeedUrl(calFeedLocal().token); });
+  $('#cfSub').addEventListener('click', () => calFeedOpen(calFeedLocal().token));
   $('#cfCopy').addEventListener('click', async () => {
     const url = calFeedUrl(calFeedLocal().token, 'https');
     try { await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว'); } catch (e) { prompt('คัดลอกลิงก์ปฏิทิน', url); }
