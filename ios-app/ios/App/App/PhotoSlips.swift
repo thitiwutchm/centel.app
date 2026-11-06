@@ -58,6 +58,9 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
     // -> { access, on, since }
     @objc func status(_ call: CAPPluginCall) {
         if let l = call.getString("lang") { UserDefaults.standard.set(l, forKey: PhotoSlipsBackground.langKey) }
+        if let w = call.getArray("words") as? [String] {
+            UserDefaults.standard.set(Array(w.prefix(100)), forKey: Self.extraWordsKey)
+        }
         call.resolve(statusDict())
     }
 
@@ -211,7 +214,15 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
         "พร้อมเพย์", "ยอดชำระ", "ยอดรวม", "รวมทั้งสิ้น", "ใบเสร็จ", "ชำระ", "ผู้รับ", "ธนาคาร", "สลิป",
         "thb", "baht", "transfer", "successful", "amount", "fee", "ref", "promptpay", "total",
         "receipt", "vat", "subtotal", "paid", "payment", "k plus", "scb", "krungthai", "grab", "line man",
+        // Delivery and shopping app order screenshots (Grab, LINE MAN, foodpanda, Shopee…).
+        "สรุปคำสั่งซื้อ", "คำสั่งซื้อ", "รหัสคำสั่งซื้อ", "รวมทั้งหมด", "ค่าอาหาร", "ค่าจัดส่ง", "ค่าส่ง",
+        "ส่วนลด", "ยอดสุทธิ", "order", "delivery", "lineman", "foodpanda", "shopee", "robinhood", "lazada",
     ]
+    // More words the page can send (status({ words })), so the list can grow without a new build.
+    static let extraWordsKey = "photoSlips.words"
+    static var allWords: [String] {
+        words + ((UserDefaults.standard.array(forKey: extraWordsKey) as? [String]) ?? []).map { $0.lowercased() }
+    }
 
     // Vision reads the picture's text; a slip has a money amount, plenty of numbers, and slip
     // words or a QR code. -> (slip, score, the biggest amount seen)
@@ -231,9 +242,14 @@ public class PhotoSlipsPlugin: CAPPlugin, CAPBridgedPlugin {
         let all = lines.joined(separator: "\n")
         let low = all.lowercased()
         let numbers = matches(#"\d[\d,]*(?:\.\d+)?"#, in: all)
-        let moneys = matches(#"(?<![\d.])\d{1,3}(?:,\d{3})*\.\d{2}(?![\d])|(?<![\d.,])\d+\.\d{2}(?![\d])"#, in: all)
-            .compactMap { Double($0.replacingOccurrences(of: ",", with: "")) }
-        let hits = words.filter { low.contains($0) }.count
+        // Money amounts: 1,250.00 / 68.50, or whole baht with a currency mark (฿68, 68 บาท, THB 68).
+        // Vision may read ฿ as B, so "B68" counts too (only with slip words, see below).
+        let decimals = matches(#"(?<![\d.])\d{1,3}(?:,\d{3})*\.\d{2}(?![\d])|(?<![\d.,])\d+\.\d{2}(?![\d])"#, in: all)
+        let marked = matches(#"(?:฿|(?<![A-Za-z])B|THB|thb)\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?![\d])"#, in: all)
+            .map { $0.replacingOccurrences(of: #"^[^\d]+"#, with: "", options: .regularExpression) }
+            + matches(#"\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?=\s?(?:บาท|THB|thb|Baht|baht))"#, in: all)
+        let moneys = (decimals + marked).compactMap { Double($0.replacingOccurrences(of: ",", with: "")) }
+        let hits = allWords.filter { low.contains($0) }.count
         let hasQR = !(qr.results ?? []).isEmpty
 
         var score = min(numbers.count, 20) + hits * 3 + (hasQR ? 5 : 0) + (moneys.isEmpty ? 0 : 5)
