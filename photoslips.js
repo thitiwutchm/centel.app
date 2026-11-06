@@ -17,6 +17,9 @@
   if (!plugin) return;
 
   const MAX_ITEMS = 60;
+  // Extra words that mark a slip, on top of the list built into the app (PhotoSlips.swift).
+  // Add here to catch new kinds of screenshots without a new app build.
+  const EXTRA_WORDS = ['grabfood', 'grabmart', 'grab food', 'line man wongnai', 'shopeefood'];
   const ps = { access: 'notDetermined', on: false, busy: false, found: 0 };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const ready = () => isCloud() && cloud.user && cloud.features && cloud.features.storage;
@@ -46,7 +49,7 @@
 
   async function refreshStatus() {
     try {
-      const r = await plugin.status({ lang: LANG });
+      const r = await plugin.status({ lang: LANG, words: EXTRA_WORDS });
       ps.access = r.access; ps.on = !!r.on;
     } catch (e) { /* plugin failed: leave as is */ }
   }
