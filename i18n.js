@@ -545,6 +545,18 @@ const I18N_EN = {
   'ส่งออกข้อมูล (JSON)': 'Export data (JSON)', 'นำเข้าข้อมูล': 'Import data', 'ไม่บันทึก': "Don't record",
   'ซิงก์อยู่': 'Syncing', 'รอเชื่อม': 'Waiting', '{0} แอป': '{0} connected',
   'ใช้กับการแจ้งเตือนบนเครื่องและปฏิทิน iPhone ด้วย': 'Also used for device notifications and the iPhone calendar',
+
+  // 0% installments in the add-transaction sheet
+  'ผ่อน 0%': '0% installments', 'ผ่อน {0}/{1}': 'Inst. {0}/{1}', 'ผ่อน 0% งวด {0}/{1}': '0% installment {0}/{1}',
+  'จำนวนเดือน เช่น 10': 'Months, e.g. 10', 'เดือน': 'months', '{0} เดือน': '{0} months',
+  'หักเดือนละ': 'Per month', 'งวดสุดท้าย': 'Last installment', '{0} (งวดสุดท้าย {1})': '{0} (last {1})',
+  'ราคาเต็ม': 'Full price', 'หักแล้ว': 'Paid so far', '{0}/{1} งวด': '{0}/{1} installments',
+  'ใส่ราคาเต็มในจำนวนเงิน แล้วระบบจะลงรายจ่ายเดือนละ 1 งวดในวันที่เดียวกันของทุกเดือนจนครบ งวดที่ยังไม่ถึงยังไม่หักจากยอดเงินคงเหลือ':
+    'Enter the full price as the amount. One installment is recorded as an expense on the same day each month until it is paid off; months still ahead are not taken from the balance yet.',
+  'ลบทุกงวด ({0} รายการ)': 'Delete all installments ({0})', 'ลบทุกงวดของการผ่อนนี้?': 'Delete every installment of this plan?',
+  '{0} รายการ รวม {1}': '{0} transactions, {1} in total', 'ลบทุกงวดแล้ว': 'All installments deleted',
+  'กรุณาใส่จำนวนงวด 2–120 เดือน': 'Enter 2–120 months', 'ยอดน้อยเกินไปสำหรับจำนวนงวดนี้': 'The amount is too small for that many months',
+  'ผ่อน 0% {0} เดือน เดือนละ {1} ถึง {2}': '0% over {0} months, {1} a month until {2}',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

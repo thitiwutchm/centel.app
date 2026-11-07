@@ -1949,3 +1949,9 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .ps-item .main { min-width: 0; }
 .ps-item .name, .ps-item .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ps-btn.gap { visibility: hidden; }
+
+/* 0% installments: tag on each month's transaction, quick month chips in the add sheet */
+.badge.inst { background: #ff8a0022; color: #c86a00; }
+[data-backdrop="dark"] .badge.inst { color: #ffb15c; background: #ff8a0033; }
+.inst-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.tr-inst .tr-lab { font-weight: 600; }
