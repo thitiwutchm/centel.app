@@ -407,7 +407,7 @@ async function newTxn(db, ctx, a) {
   let walletId = a.wallet != null ? walletOf(ctx, a.wallet) : null;
   if (!walletId) walletId = ctx.wallets.some((w) => w.id === ctx.prefs.lastWallet) ? ctx.prefs.lastWallet : ctx.wallets[0]?.id || null;
   const row = {
-    scope, type, date, amount, currency,
+    scope, type, date, amount, currency, fx: null,
     merchant: textOf(a.merchant, 120), note: textOf(a.note, 500), category: categoryOf(ctx, a.category, type),
     wallet_id: walletId, to_wallet_id: null, payer_id: null, bill_id: null, bill_ym: null, review_needed: false, receipt_key: null, slip_ref: null,
     labels: labelsOf(ctx, a.labels) || [], shares: [],
@@ -454,6 +454,8 @@ async function changedTxn(db, ctx, a) {
     next.currency = c;
   }
   if (a.labels !== undefined) next.labels = labelsOf(ctx, a.labels) || [];
+  // A converted entry's original amount no longer matches once its baht amount or currency changes.
+  if (next.amount !== cur.amount || next.currency !== cur.currency) next.fx = null;
   if (next.scope === 'shared' && next.amount !== cur.amount) {
     // Keep the split: the same share of the new amount.
     const mine = cur.shares.find((s) => s.user === ctx.me.id);

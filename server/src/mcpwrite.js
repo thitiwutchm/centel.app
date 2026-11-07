@@ -109,7 +109,7 @@ const NOTE_COLS = ['id', 'owner_id', 'couple_id', 'kind', 'text', 'body', 'tags'
   'date', 'time', 'end_date', 'end_time', 'remind', 'remind_at', 'done', 'done_at', 'done_by'];
 const BUDGET_COLS = ['id', 'owner_id', 'couple_id', 'scope', 'category', 'amount', 'wallet_id', 'name', 'period', 'start_date', 'end_date', 'merchant'];
 const TXN_COLS = ['id', 'owner_id', 'couple_id', 'scope', 'type', 'date', 'merchant', 'amount', 'category', 'note', 'wallet_id',
-  'to_wallet_id', 'payer_id', 'currency', 'bill_id', 'bill_ym', 'review_needed', 'receipt_key', 'slip_ref'];
+  'to_wallet_id', 'payer_id', 'currency', 'fx', 'bill_id', 'bill_ym', 'review_needed', 'receipt_key', 'slip_ref'];
 
 const pick = (row, cols) => (row ? Object.fromEntries(cols.map((k) => [k, row[k] instanceof Date ? row[k].toISOString() : row[k] ?? null])) : null);
 
@@ -154,7 +154,7 @@ async function restoreBudget(db, id, s) {
 export async function writeTxn(db, id, s) {
   const shared = s.scope === 'shared';
   const cols = ['scope', 'type', 'date', 'merchant', 'amount', 'category', 'note', 'wallet_id', 'to_wallet_id', 'payer_id',
-    'currency', 'bill_id', 'bill_ym', 'review_needed', 'receipt_key', 'slip_ref'];
+    'currency', 'fx', 'bill_id', 'bill_ym', 'review_needed', 'receipt_key', 'slip_ref'];
   const vals = cols.map((k) => (k === 'review_needed' ? !!s[k] : k === 'currency' ? s[k] || 'THB' : s[k] ?? null));
   const status = shared ? 'draft' : 'approved';
   const up = await db.query(

@@ -1631,7 +1631,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // The iOS app's web view has no service worker, so it learns about a new version here: when the
 // app comes back to the screen, the deployed sw.js says which version is live (its CACHE name);
 // if that is not the one this page loaded with, the page reloads (only with no sheet open).
-const APP_BUILD = 'billplanner-v103'; // keep equal to CACHE in sw.js
+const APP_BUILD = 'billplanner-v104'; // keep equal to CACHE in sw.js
 let buildChecked = 0;
 function checkNewBuild() {
   if (location.protocol === 'file:' || Date.now() - buildChecked < 30000) return;

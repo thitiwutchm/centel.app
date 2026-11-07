@@ -75,7 +75,7 @@ async function context(db) {
 // Transactions between two dates (inclusive), with my share of shared ones.
 async function txns(db, ctx, from, to) {
   const rows = (await db.query(
-    `select e.id, e.owner_id, e.scope, e.type, e.date, e.merchant, e.amount, e.currency, e.category, e.note,
+    `select e.id, e.owner_id, e.scope, e.type, e.date, e.merchant, e.amount, e.currency, e.fx, e.category, e.note,
             e.wallet_id, e.to_wallet_id, e.payer_id, e.payer_wallet_id, e.status, e.bill_id, e.bill_ym, e.created_at,
             s.amount as my_share,
             coalesce((select array_agg(l.label_id) from expense_labels l where l.expense_id = e.id), '{}') as labels
@@ -93,6 +93,7 @@ async function txns(db, ctx, from, to) {
       amount: r2(shared ? e.my_share || 0 : e.amount), // my money: my share of a shared row
       total: shared ? r2(e.amount) : undefined,
       currency: e.currency || 'THB',
+      original: e.fx ? { currency: e.fx.cur, amount: e.fx.amt, rateToThb: e.fx.rate, rateDate: e.fx.date } : undefined,
       category: e.type === 'transfer' ? undefined : e.category,
       categoryName: e.type === 'transfer' ? 'โอนเงิน' : ctx.cats.name(e.category),
       merchant: e.merchant || undefined,

@@ -35,11 +35,12 @@ const nullable = (schema) => ({ anyOf: [schema, { type: 'null' }] });
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['kind', 'date', 'amount', 'merchant', 'reference', 'category', 'purpose_known', 'confidence', 'note'],
+  required: ['kind', 'date', 'amount', 'currency', 'merchant', 'reference', 'category', 'purpose_known', 'confidence', 'note'],
   properties: {
     kind: { type: 'string', enum: ['bank_transfer_slip', 'store_receipt', 'restaurant_receipt', 'invoice', 'delivery_app_order', 'other', 'not_a_receipt'] },
     date: nullable({ type: 'string', description: 'Transaction date as YYYY-MM-DD in the Gregorian calendar' }),
-    amount: nullable({ type: 'number', description: 'Total paid in THB' }),
+    amount: nullable({ type: 'number', description: 'Total paid, in the currency printed on the document' }),
+    currency: nullable({ type: 'string', description: 'ISO 4217 code of amount, e.g. THB, JPY, USD' }),
     merchant: nullable({ type: 'string' }),
     reference: nullable({ type: 'string', description: 'Transaction / reference number printed on a bank slip' }),
     category: nullable({ type: 'string', enum: EXPENSE_CATEGORIES }),
@@ -49,10 +50,11 @@ const SCHEMA = {
   },
 };
 
-const SYSTEM = `You read photos of Thai payment documents: bank transfer slips (K PLUS, SCB Easy, Krungthai NEXT, PromptPay and others), store receipts (7-Eleven, Lotus's, Big C and others), restaurant bills, invoices, and order screenshots from Thai delivery and online shopping apps (Grab, LINE MAN, Shopee, Lazada, TikTok Shop and others).
+const SYSTEM = `You read photos of Thai payment documents: bank transfer slips (K PLUS, SCB Easy, Krungthai NEXT, PromptPay and others), store receipts (7-Eleven, Lotus's, Big C and others), restaurant bills, invoices, and order screenshots from Thai delivery and online shopping apps (Grab, LINE MAN, Shopee, Lazada, TikTok Shop and others), plus receipts from trips abroad.
 Extract the fields in the schema from the image only; do not invent values.
 - Thai dates often use the Buddhist Era (e.g. 2569 = 2026) and short Thai month names; convert to a Gregorian YYYY-MM-DD.
 - amount is the final total actually paid (after discounts, including VAT and service charge).
+- currency is the ISO 4217 code of that amount: THB for baht (฿, บาท, Thai documents); for a receipt from abroad use its own currency from the symbol, the country or the language (¥/円 in Japan → JPY, ₩ → KRW, S$ → SGD, € → EUR, $ in the US → USD, ₫ → VND). Never convert the amount yourself.
 - merchant is the shop name, or for a transfer slip the receiving person or company.
 - category: pick the key of the closest category from the person's list in the message. When a sub-category clearly fits, use it rather than its parent.
 - Infer the category from every clue on the image: the memo/note, the items, and the shop, merchant or payee name. Thai sellers who take PromptPay often show their shop name inside the account name, usually in brackets after the owner's name, e.g. "นายนเรศ พุ่มพวงผล(เจ๊ดาลูกชิ้นปลาไร้สาร)" is a fish-ball stall, so it is food; "ร้านกาแฟ…", "…คาเฟ่", "ชานม…" are coffee/drinks; "ร้านข้าวมันไก่…", "ก๋วยเตี๋ยว…", "หมูกระทะ…", "ส้มตำ…" are food; "คลินิก…", "ร้านยา…" are health; "ร้านตัดผม…", "ซาลอน…" are beauty; "ปั๊ม…", "วินมอเตอร์ไซค์" are transport. When such a word names what the shop sells, set purpose_known to true and pick that category with confidence "medium" or "high".
@@ -126,6 +128,7 @@ export async function analyzeReceipt(base64, mediaType, labels = [], categories 
   // A transfer slip with no stated purpose is left without a category so the person picks one.
   if (r.kind === 'bank_transfer_slip' && !r.purpose_known) r.category = null;
   if (r.category != null && !cats.some((c) => c.id === r.category)) r.category = null;
+  r.currency = typeof r.currency === 'string' && /^[A-Z]{3}$/.test(r.currency.toUpperCase()) ? r.currency.toUpperCase() : 'THB';
   r.labels = Array.isArray(r.labels) ? r.labels.filter((x) => labels.includes(x)) : [];
   const needsReview = r.confidence === 'low' || r.category == null || r.amount == null || r.date == null
     || r.kind === 'not_a_receipt';

@@ -793,7 +793,7 @@ function txItem(t, S) {
     <button class="item tx" data-tx="${t.id}">
       <div class="ico-wrap">${circleIco(c)}${w ? `<span class="mini${wImg(w) ? ' has-img' : ''}" style="background:${wType(w).color}">${wFace(w)}</span>` : ''}</div>
       <div class="main"><div class="name">${title}</div><div class="sub">${sub}</div>${badges.trim() ? `<div class="badges">${badges}</div>` : ''}</div>
-      <div class="right"><div class="amt ${cls}">${curAmt(amt, t.currency)}</div></div>
+      <div class="right"><div class="amt ${cls}">${curAmt(amt, t.currency)}</div>${t.fx ? `<div class="amt-fx">${curAmt(t.fx.amt, t.fx.cur)}</div>` : ''}</div>
     </button>`;
 }
 
@@ -1567,6 +1567,8 @@ function txnForm(t, preset = {}, opts = {}) {
   };
   // The form edits the whole bill; a shared row stores my share in `amount` and the bill in `total`.
   if (t && t.scope === 'shared') { d.amount = t.total; d.split = splitOf(t); }
+  // A converted entry is edited in the currency on the slip; saving converts it again.
+  if (t && t.fx) { d.amount = t.fx.amt; d.currency = t.fx.cur; }
   if (!d.payerId) d.payerId = me;
   if (!d.split) d.split = 'half';
   // Who bears the cost under รับผิดชอบทั้งหมด: the payer, which is me for everything new.
@@ -1608,7 +1610,7 @@ function txnForm(t, preset = {}, opts = {}) {
     <div class="form tx-rows">
       <div class="tr tr-amt" id="tAmtWrap">
         <div class="tr-ico"><button type="button" class="cur-chip" id="tCur" aria-label="สกุลเงิน">${esc(d.currency || 'THB')}</button></div>
-        <div class="tr-body"><label class="tr-lab" for="tAmount">จำนวนเงิน</label><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"></div>
+        <div class="tr-body"><label class="tr-lab" for="tAmount">จำนวนเงิน</label><input id="tAmount" inputmode="decimal" placeholder="0" value="${d.amount}"><div class="fx-line" id="tFx" hidden></div></div>
       </div>
       <button type="button" class="tr tr-cat" id="tCatOpen"></button>
       <div class="tr" id="tMerchRow"><div class="tr-ico">${svgIcon('store')}</div>
@@ -1762,7 +1764,31 @@ function txnForm(t, preset = {}, opts = {}) {
     paintDate();
     paintInst();
   }));
-  $('#tCur').addEventListener('click', () => currencyPicker(d.currency || 'THB', (code) => { d.currency = code; $('#tCur').textContent = code; }));
+  $('#tCur').addEventListener('click', () => currencyPicker(d.currency || 'THB', (code) => { d.currency = code; $('#tCur').textContent = code; paintFx(); }));
+  // Foreign currency: the baht it becomes at that day's rate (plus the fee from Traveller
+  // settings), shown under the amount. An edited entry keeps the fee it was saved with.
+  const feeNow = () => (t && t.fx && t.fx.cur === d.currency ? t.fx.fee || 0 : fxFee());
+  let fxSeq = 0;
+  const paintFx = async () => {
+    const el = $('#tFx');
+    if (!el) return;
+    const cur = d.currency || 'THB';
+    const amt = num($('#tAmount').value);
+    if (cur === 'THB') { el.hidden = true; return; }
+    el.hidden = false;
+    const seq = ++fxSeq;
+    el.textContent = 'กำลังดึงอัตราแลกเปลี่ยน…';
+    try {
+      const r = await fxRate(cur, fxDay($('#tDate').value));
+      if (seq !== fxSeq) return;
+      el.innerHTML = fxLine(cur, amt, r, feeNow());
+    } catch (e) {
+      if (seq === fxSeq) el.textContent = 'ดึงอัตราแลกเปลี่ยนไม่ได้ จะบันทึกเป็น ' + cur + ' โดยไม่แปลง';
+    }
+  };
+  paintFx();
+  $('#tDate').addEventListener('change', paintFx);
+  document.querySelectorAll('.day-step').forEach((b) => b.addEventListener('click', paintFx));
   renderType();
   const pickedLabels = new Set(d.labels || []);
   const repaintLabels = labelPicker($('#tLabels'), pickedLabels);
@@ -1780,7 +1806,7 @@ function txnForm(t, preset = {}, opts = {}) {
     renderType();
   });
   $('#tCatOpen').addEventListener('click', () => catPicker(d.type, d.category, (id) => { d.category = id; paintCats(); }));
-  $('#tAmount').addEventListener('input', () => { updateShares(); paintPkg(); paintInst(); });
+  $('#tAmount').addEventListener('input', () => { updateShares(); paintPkg(); paintInst(); paintFx(); });
   $('#tDate').addEventListener('change', paintInst);
   if ($('#tPkg')) {
     // Package and installments are two ways of paying one purchase: one at a time.
@@ -1854,8 +1880,11 @@ function txnForm(t, preset = {}, opts = {}) {
         const x = r.result;
         if (x) {
           if (x.amount) $('#tAmount').value = x.amount;
+          // A receipt from abroad comes in its own currency; it's converted when saved.
+          if (x.currency && x.currency !== (d.currency || 'THB')) { d.currency = x.currency; $('#tCur').textContent = x.currency; }
           // The transaction goes on the slip's own day; a date after today is a misread, so today stays.
           if (x.date && x.date <= dateStr(new Date())) { $('#tDate').value = x.date; paintDate(); }
+          paintFx();
           if (x.merchant) $('#tMerchant').value = x.merchant;
           if (x.note && !$('#tNote').value) $('#tNote').value = x.note;
           if (x.reference) d.slipRef = x.reference;
@@ -1900,16 +1929,38 @@ function txnForm(t, preset = {}, opts = {}) {
     if (opts.hint) status(opts.hint);
   }
 
-  const submit = () => {
-    const total = num($('#tAmount').value);
+  let saving = false;
+  const submit = async () => {
+    if (saving) return;
+    let total = num($('#tAmount').value);
     if (!(total > 0)) { toast('กรุณาใส่จำนวนเงิน'); $('#tAmount').focus(); return; }
     const date = $('#tDate').value;
     if (!date) { toast('กรุณาเลือกวันที่'); return; }
+    // Foreign currency → baht at the day's rate plus the fee, so totals, budgets and reports
+    // all add up in baht; fx keeps what the slip said. No rate (offline): kept unconverted.
+    let fx = null;
+    const cur = d.currency || 'THB';
+    if (cur !== 'THB') {
+      saving = true;
+      $('#saveTx').disabled = true;
+      try {
+        const keep = t && t.fx && t.fx.cur === cur && t.fx.amt === total && t.date === date;
+        const r = keep ? { rate: t.fx.rate, rateDate: t.fx.date, src: t.fx.src } : await fxRate(cur, fxDay(date));
+        fx = fxOf(cur, total, r, feeNow());
+        total = fxThb(total, r.rate, fx.fee);
+      } catch (e) {
+        toast(`ดึงอัตราแลกเปลี่ยนไม่ได้ บันทึกเป็น ${cur} ไว้ก่อน`);
+      } finally {
+        saving = false;
+        if ($('#saveTx')) $('#saveTx').disabled = false;
+      }
+    }
     const out = {
       id: d.id || newId(), type: d.type, amount: total, walletId: $('#tWallet').value, date, note: $('#tNote').value.trim(),
       scope: 'personal', labels: money.labels.filter((l) => pickedLabels.has(l.id)).map((l) => l.id),
     };
-    if (d.currency && d.currency !== 'THB') out.currency = d.currency;
+    if (fx) out.fx = fx;
+    else if (cur !== 'THB') out.currency = cur;
     if (d.type === 'transfer') {
       out.toWalletId = $('#tTo').value;
       if (!out.toWalletId || out.toWalletId === out.walletId) { toast('เพิ่มกระเป๋าเงินอีกใบเพื่อโอนเงิน'); return; }
@@ -1932,6 +1983,8 @@ function txnForm(t, preset = {}, opts = {}) {
       for (let k = 0; k < of; k++) {
         const tx = { ...out, id: k ? newId() : out.id, amount: k === of - 1 ? last : base, date: instDate(date, k),
           inst: { id: plan, n: k + 1, of, total } };
+        // Each month is a slice in baht; the slip's foreign total belongs to the whole plan.
+        delete tx.fx;
         // The slip belongs to the purchase: only the first month carries it.
         if (k) { delete tx.receiptKey; delete tx.slipRef; }
         saveTxn(tx);
@@ -1947,7 +2000,7 @@ function txnForm(t, preset = {}, opts = {}) {
       // spending); each use later is an expense of one share out of it.
       const uses = Math.floor(num($('#tPkgUses').value));
       if (!(uses > 1)) { toast('กรุณาใส่จำนวนครั้ง (อย่างน้อย 2)'); $('#tPkgUses').focus(); return; }
-      if ((d.currency || 'THB') !== 'THB') { toast('แพ็กเกจรองรับเฉพาะเงินบาท'); return; }
+      if (out.currency) { toast('แพ็กเกจรองรับเฉพาะเงินบาท'); return; }
       const c = out.category ? catById(out.category) : null;
       const name = (out.merchant || out.note || (c && c.label) || 'แพ็กเกจ').slice(0, 60);
       const pw = { id: uid(), name, type: 'package', initial: 0, excluded: false,
