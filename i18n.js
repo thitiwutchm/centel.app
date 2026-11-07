@@ -61,6 +61,8 @@ const I18N_EN = {
   // Account / settings
   '✈️ โหมดนักเดินทาง': '✈️ Traveller mode', 'เลือกจากตำแหน่งอัตโนมัติ': 'Pick from my location', 'สกุลเงินที่ใช้': 'Currency',
   '📍 ตรวจตำแหน่งตอนนี้': '📍 Check location now',
+  'ค่าธรรมเนียมแลกเงิน': 'Exchange fee', 'กำลังดึงอัตราแลกเปลี่ยน…': 'Getting the exchange rate…',
+  'รายการเงินต่างประเทศแปลงเป็นบาทตอนบันทึก ด้วยอัตราแลกเปลี่ยนเฉลี่ยของธนาคารพาณิชย์ที่แบงก์ชาติประกาศวันนั้น (วันหยุดใช้วันทำการก่อนหน้า) บวกค่าธรรมเนียมนี้ แนะนำ 2.5% ตามที่บัตรส่วนใหญ่คิด ใส่ 0 ถ้าใช้เรทตรงๆ': 'Foreign-currency entries are converted to baht when saved, at that day\'s Bank of Thailand average commercial-bank rate (holidays use the business day before), plus this fee. 2.5% is what most cards charge; 0 uses the rate as it is.',
   'เปิดตอนไปต่างประเทศ แอปจะใช้ตำแหน่งเพื่อเลือกสกุลเงินของประเทศที่อยู่ให้รายการใหม่เอง': 'Turn on when abroad: the app uses your location to start new entries in the local currency',
   'เข้าสู่ระบบด้วย Google': 'Sign in with Google', 'สมัครด้วย Google': 'Sign up with Google', 'ใช้รูปจาก Google': 'Use my Google photo',
   '📲 ติดตั้งเป็นแอปบน iPhone': '📲 Install as an iPhone app', 'เปิดหน้านี้ใน Safari': 'Open this page in Safari',

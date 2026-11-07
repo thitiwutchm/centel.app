@@ -129,18 +129,27 @@
       note: x.note || '', date: dateOf(it), receiptKey: it.key, labels: labelIds(x),
     };
     if (x.reference) p.slipRef = x.reference;
+    if (x.currency && x.currency !== 'THB') p.currency = x.currency;
     return p;
   }
 
   // ✓: saved as AI Slips read it, into the wallet used last.
-  function approve(it) {
+  async function approve(it) {
     const p = preset(it);
+    drop(it.id); // first, so a second tap while the rate loads can't add it twice
     const t = { id: newId(), type: 'expense', amount: p.amount, walletId: defaultWalletId(), date: p.date, note: p.note,
       scope: 'personal', labels: p.labels, category: p.category || null, merchant: p.merchant, reviewNeeded: false, receiptKey: p.receiptKey };
     if (p.slipRef) t.slipRef = p.slipRef;
+    if (p.currency) {
+      // From abroad: baht at that day's rate plus the fee, like the form does.
+      try {
+        const r = await fxRate(p.currency, fxDay(p.date));
+        t.fx = fxOf(p.currency, p.amount, r, fxFee());
+        t.amount = fxThb(p.amount, r.rate, t.fx.fee);
+      } catch (e) { t.currency = p.currency; }
+    }
     saveTxn(t);
     if (money.prefs.lastWallet !== t.walletId && t.walletId) { money.prefs.lastWallet = t.walletId; savePrefs(); }
-    drop(it.id);
     toast('เพิ่มรายการแล้ว');
   }
 
@@ -162,7 +171,7 @@
       <div class="item ps-item" data-ps-open="${esc(it.id)}" role="button" tabindex="0">
         ${circleIco(c || { color: '#8a8f99', icon: '🧾' })}
         <div class="main"><div class="name" translate="no">${title}</div><div class="sub">${sub}</div></div>
-        <div class="right"><div class="amt exp">${baht(Number(x.amount))}</div></div>
+        <div class="right"><div class="amt exp">${curAmt(Number(x.amount), x.currency)}</div></div>
         <div class="ps-acts">
           <button type="button" class="ps-btn no" data-ps-drop="${esc(it.id)}" aria-label="ไม่ใช่สลิป"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
           ${c ? `<button type="button" class="ps-btn ok" data-ps-ok="${esc(it.id)}" aria-label="ยืนยัน"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '<span class="ps-btn gap"></span>'}
@@ -197,14 +206,16 @@
     const find = (id) => items().find((x) => x.id === id);
     const after = () => { render(); if (ps.sheet && !$('#sheet').hidden) allSheet(); };
     const ok = t.closest('[data-ps-ok]');
-    if (ok) { e.stopPropagation(); const it = find(ok.dataset.psOk); if (it) { approve(it); after(); } return; }
+    if (ok) { e.stopPropagation(); const it = find(ok.dataset.psOk); if (it) approve(it).then(after); return; }
     const no = t.closest('[data-ps-drop]');
     if (no) { e.stopPropagation(); drop(no.dataset.psDrop); after(); return; }
     if (t.closest('[data-ps-okall]')) {
       const list = items().filter((x) => x.r.category);
-      list.forEach(approve);
-      toast(`เพิ่ม ${list.length} รายการแล้ว`);
-      after();
+      (async () => {
+        for (const it of list) await approve(it);
+        toast(`เพิ่ม ${list.length} รายการแล้ว`);
+        after();
+      })();
       return;
     }
     if (t.closest('[data-ps-all]')) { allSheet(); return; }

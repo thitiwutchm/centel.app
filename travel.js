@@ -33,6 +33,57 @@ const COUNTRY_CUR = (() => {
 })();
 
 const travel = { busy: false };
+
+/* ---------- Converting foreign amounts to baht ---------- */
+
+// The exchange / card fee added on top of the day's rate, in percent. Set in Traveller
+// settings; 2.5 is about what Thai cards charge abroad, 0 uses the rate as it is.
+const FX_FEE_DEFAULT = 2.5;
+function fxFee() {
+  const t = money.prefs.travel;
+  const f = t && t.fee != null ? Number(t.fee) : FX_FEE_DEFAULT;
+  return f >= 0 && f <= 20 ? f : FX_FEE_DEFAULT;
+}
+// Rates exist up to today only.
+function fxDay(date) {
+  const today = dateStr(new Date());
+  return !date || date > today ? today : date;
+}
+// Baht for one unit of cur on a day: { rate, rateDate, src }. Signed in, the API looks it up and
+// keeps it (Bank of Thailand first); signed out, the app asks Frankfurter itself.
+const fxCache = new Map();
+function fxRate(cur, date) {
+  const key = `${cur}|${date}`;
+  if (fxCache.has(key)) return fxCache.get(key);
+  const p = (async () => {
+    if (isCloud()) return api('GET', `/fx?cur=${encodeURIComponent(cur)}&date=${encodeURIComponent(date)}`);
+    for (const bot of [true, false]) {
+      const r = await fetch(`https://api.frankfurter.dev/v2/rates?date=${date}&base=${encodeURIComponent(cur)}&quotes=THB${bot ? '&providers=bot' : ''}`);
+      const j = r.ok ? await r.json() : [];
+      const row = Array.isArray(j) && j.find((x) => x && x.quote === 'THB');
+      if (row && row.rate > 0) return { rate: row.rate, rateDate: row.date, src: bot ? 'bot' : 'frankfurter' };
+    }
+    throw new Error('fx_unavailable');
+  })();
+  fxCache.set(key, p);
+  p.catch(() => fxCache.delete(key));
+  return p;
+}
+const fxThb = (amt, rate, fee) => Math.round(amt * rate * (1 + (fee || 0) / 100) * 100) / 100;
+// What a converted transaction keeps: the slip's amount and currency, the rate and its date, the fee.
+function fxOf(cur, amt, r, fee) {
+  const o = { cur, amt, rate: r.rate, date: r.rateDate, src: r.src };
+  if (fee > 0) o.fee = fee;
+  return o;
+}
+const FX_SRC = { bot: 'ธปท.', frankfurter: 'ธนาคารกลาง', fawaz: 'ตลาด', manual: 'กำหนดเอง' };
+// "≈ ฿2,179.20 · 1 JPY = ฿0.2126 (ธปท. 15 ต.ค.) + 2.5%"
+function fxLine(cur, amt, r, fee) {
+  const rate = r.rate >= 1 ? r.rate.toFixed(2) : r.rate < 0.01 ? r.rate.toPrecision(3) : r.rate.toFixed(4);
+  const parts = [`1 ${esc(cur)} = ฿${rate}`, `${FX_SRC[r.src] || ''} ${r.rateDate ? thDate(r.rateDate) : ''}`.trim()];
+  if (fee > 0) parts.push(`ค่าธรรมเนียม ${fee}%`);
+  return `${amt > 0 ? `<b>≈ ${baht(fxThb(amt, r.rate, fee))}</b> · ` : ''}${parts.join(' · ')}`;
+}
 function travelPrefs() { return money.prefs.travel || (money.prefs.travel = { on: false, auto: true, currency: 'THB' }); }
 
 // The currency new transactions start in, or '' when Traveller mode is off.
@@ -97,11 +148,14 @@ function travelSettings() {
         <label class="switch"><input type="checkbox" id="trAuto" data-travel="auto" ${t.auto ? 'checked' : ''}><span></span></label></div>
       <div class="field"><label>สกุลเงินที่ใช้</label><span style="flex:1"></span>
         <button type="button" class="cur-chip" data-travel="pick">${curFlag(t.currency)} ${esc(t.currency)}</button></div>` : ''}
+      <div class="field"><label for="trFee">ค่าธรรมเนียมแลกเงิน</label><span style="flex:1"></span>
+        <input id="trFee" class="fee-in" data-travel="fee" type="number" inputmode="decimal" min="0" max="20" step="0.1" value="${fxFee()}"><span class="fee-pct">%</span></div>
     </div>
     ${t.on ? `<button class="btn ghost" data-travel="locate">📍 ตรวจตำแหน่งตอนนี้</button>` : ''}
     <p class="hint">${t.on
-      ? `รายการใหม่จะเริ่มที่สกุล ${esc(t.currency)}${where ? ` · ตำแหน่งล่าสุด ${where}` : ''} · ยอดรวมยังไม่แปลงค่าเงิน`
-      : 'เปิดตอนไปต่างประเทศ แอปจะใช้ตำแหน่งเพื่อเลือกสกุลเงินของประเทศที่อยู่ให้รายการใหม่เอง'}</p>`;
+      ? `รายการใหม่จะเริ่มที่สกุล ${esc(t.currency)}${where ? ` · ตำแหน่งล่าสุด ${where}` : ''}`
+      : 'เปิดตอนไปต่างประเทศ แอปจะใช้ตำแหน่งเพื่อเลือกสกุลเงินของประเทศที่อยู่ให้รายการใหม่เอง'}</p>
+    <p class="hint">รายการเงินต่างประเทศแปลงเป็นบาทตอนบันทึก ด้วยอัตราแลกเปลี่ยนเฉลี่ยของธนาคารพาณิชย์ที่แบงก์ชาติประกาศวันนั้น (วันหยุดใช้วันทำการก่อนหน้า) บวกค่าธรรมเนียมนี้ แนะนำ 2.5% ตามที่บัตรส่วนใหญ่คิด ใส่ 0 ถ้าใช้เรทตรงๆ</p>`;
 }
 
 document.addEventListener('change', (e) => {
@@ -113,6 +167,12 @@ document.addEventListener('change', (e) => {
     savePrefs();
     render();
     if (t.on && t.auto) travelLocate(false);
+  } else if (el.dataset.travel === 'fee') {
+    const f = Math.round(Number(el.value) * 100) / 100;
+    t.fee = f >= 0 && f <= 20 ? f : FX_FEE_DEFAULT;
+    el.value = t.fee;
+    savePrefs();
+    toast(`ค่าธรรมเนียมแลกเงิน ${t.fee}%`);
   } else if (el.dataset.travel === 'auto') {
     t.auto = el.checked;
     savePrefs();
