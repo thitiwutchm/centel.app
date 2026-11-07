@@ -254,7 +254,7 @@ const I18N_EN = {
   'ไม่ทราบร้าน': 'Unknown shop', 'ไม่ใช่สลิป': 'Not a slip',
   '📷 จากรูปภาพในเครื่อง · แตะเพื่อแก้หมวดหมู่ก่อนบันทึก': '📷 From your Photos · tap to change the category before saving',
   'พบสลิปใหม่ในรูปภาพ {0} รายการ รอยืนยันที่หน้าหลัก': 'Found {0} new slips in Photos. Approve them on Home',
-  'ไม่พบสลิปใหม่': 'No new slips found', 'กำลังตรวจรูป…': 'Checking photos…', '🔍 ตรวจรูปตอนนี้': '🔍 Check photos now',
+  'ไม่พบสลิปใหม่': 'No new slips found', '🔄 ตรวจย้อนหลัง 7 วันอีกครั้ง': '🔄 Check the last 7 days again', 'ตรวจย้อนหลังไม่สำเร็จ': 'Could not check back', 'พบสลิป {0} รายการ รอยืนยันที่หน้าหลัก': 'Found {0} slips. Approve them on Home', 'ไม่พบสลิปใหม่ใน 7 วันที่ผ่านมา': 'No new slips in the last 7 days', 'กำลังตรวจรูป…': 'Checking photos…', '🔍 ตรวจรูปตอนนี้': '🔍 Check photos now',
   'เปิดการตั้งค่า': 'Open Settings', 'ต้องอนุญาตให้เข้าถึงรูปภาพก่อน': 'Allow access to Photos first',
   'เปิดไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not turn it on. Try again', 'เพิ่ม {0} รายการแล้ว': 'Added {0} transactions',
   '✓ ยืนยันทุกรายการที่มีหมวดหมู่': '✓ Approve all with a category',

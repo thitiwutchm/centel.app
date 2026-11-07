@@ -27,16 +27,17 @@
   /* ---------- Waiting list (per account, on this device) ---------- */
 
   const storeKey = () => `centel.photoSlips.v1.${cloud.user ? cloud.user.id : 'local'}`;
-  // { items: [{ id, key, created, status, r }], queue: [{ id, created }] }
-  // items: read slips waiting for approval; queue: slips Vision found that are not read yet.
+  // { items: [{ id, key, created, status, r }], queue: [{ id, created }], seen: [id] }
+  // items: read slips waiting for approval; queue: slips Vision found that are not read yet;
+  // seen: pictures already sent to AI Slips, so checking back again never reads one twice.
   function load() {
     try {
       const v = JSON.parse(localStorage.getItem(storeKey()) || '{}');
-      return { items: Array.isArray(v.items) ? v.items : [], queue: Array.isArray(v.queue) ? v.queue : [] };
-    } catch (e) { return { items: [], queue: [] }; }
+      return { items: Array.isArray(v.items) ? v.items : [], queue: Array.isArray(v.queue) ? v.queue : [], seen: Array.isArray(v.seen) ? v.seen : [] };
+    } catch (e) { return { items: [], queue: [], seen: [] }; }
   }
   function store(v) {
-    try { localStorage.setItem(storeKey(), JSON.stringify({ items: v.items.slice(-MAX_ITEMS), queue: v.queue.slice(-MAX_ITEMS) })); } catch (e) { /* full or private */ }
+    try { localStorage.setItem(storeKey(), JSON.stringify({ items: v.items.slice(-MAX_ITEMS), queue: v.queue.slice(-MAX_ITEMS), seen: (v.seen || []).slice(-500) })); } catch (e) { /* full or private */ }
   }
   const items = () => load().items.sort((a, b) => (b.created || 0) - (a.created || 0));
   function drop(id) { const v = load(); v.items = v.items.filter((x) => x.id !== id); store(v); }
@@ -89,7 +90,7 @@
         const r = await plugin.scan({ max: 30 });
         if (r && Array.isArray(r.slips) && r.slips.length) {
           const v = load();
-          r.slips.forEach((s) => { if (!v.queue.some((q) => q.id === s.id) && !v.items.some((x) => x.id === s.id)) v.queue.push({ id: s.id, created: s.created }); });
+          r.slips.forEach((s) => { if (!v.queue.some((q) => q.id === s.id) && !v.items.some((x) => x.id === s.id) && !v.seen.includes(s.id)) v.queue.push({ id: s.id, created: s.created }); });
           store(v);
         }
         if (!r || !r.more) break;
@@ -98,7 +99,7 @@
       for (const q of load().queue.slice()) {
         const done = await read(q);
         if (!done) break;
-        const v = load(); v.queue = v.queue.filter((x) => x.id !== q.id); store(v);
+        const v = load(); v.queue = v.queue.filter((x) => x.id !== q.id); if (!v.seen.includes(q.id)) v.seen.push(q.id); store(v);
       }
       if (ps.found) {
         toast(`พบสลิปใหม่ในรูปภาพ ${ps.found} รายการ รอยืนยันที่หน้าหลัก`);
@@ -229,7 +230,8 @@
           <label class="switch"><input type="checkbox" id="psOn" ${ps.on ? 'checked' : ''} ${ready() ? '' : 'disabled'}><span></span></label></div>
       </div>
       ${denied ? '<button class="btn ghost" id="psSettings">เปิดการตั้งค่า</button>' : ''}
-      ${ps.on && !denied ? `<button class="btn ghost" id="psNow" ${ps.busy ? 'disabled' : ''}>${ps.busy ? 'กำลังตรวจรูป…' : '🔍 ตรวจรูปตอนนี้'}</button>` : ''}
+      ${ps.on && !denied ? `<button class="btn ghost" id="psNow" ${ps.busy ? 'disabled' : ''}>${ps.busy ? 'กำลังตรวจรูป…' : '🔍 ตรวจรูปตอนนี้'}</button>
+        <button class="btn ghost" id="psBack" ${ps.busy ? 'disabled' : ''}>🔄 ตรวจย้อนหลัง 7 วันอีกครั้ง</button>` : ''}
       <p class="hint">${hint}</p>`;
   };
 
@@ -253,6 +255,22 @@
       await p;
       if (ui.setSheet === 'photoslips') settingsSheet('photoslips', true);
       if (!ps.found) toast('ไม่พบสลิปใหม่');
+    });
+    // Goes back 7 days, e.g. for screenshots skipped before the check learned a new kind.
+    // Pictures already read by AI Slips are skipped (seen), so nothing is read or added twice.
+    const back = $('#psBack');
+    if (back) back.addEventListener('click', async () => {
+      if (ps.busy) return;
+      try {
+        await plugin.disable();
+        const r = await plugin.enable({ days: 7 });
+        ps.access = r.access; ps.on = !!r.on;
+      } catch (e) { toast('ตรวจย้อนหลังไม่สำเร็จ'); return; }
+      const p = run();
+      settingsSheet('photoslips', true);
+      await p;
+      if (ui.setSheet === 'photoslips') settingsSheet('photoslips', true);
+      toast(ps.found ? `พบสลิป ${ps.found} รายการ รอยืนยันที่หน้าหลัก` : 'ไม่พบสลิปใหม่ใน 7 วันที่ผ่านมา');
     });
   };
 
