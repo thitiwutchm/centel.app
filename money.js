@@ -148,6 +148,22 @@ function pkgUseForm(w) {
   });
 }
 
+// 0% installments (ผ่อน 0%): one purchase paid over `of` months. Each month is its own expense of one
+// installment on the purchase's day of the month, so balances, reports and budgets take one
+// installment a month; months still ahead are not taken from the balance yet.
+// t.inst = { id, n, of, total }: plan id, this month's number, months, full price.
+function instAmounts(total, of) {
+  const base = Math.floor((total / of) * 100) / 100;
+  return { base, last: Math.round((total - base * (of - 1)) * 100) / 100 };
+}
+function instDate(ds, k) {
+  const d = parseDs(ds);
+  const ym = addMonths(ymOf(d), k);
+  return `${ym}-${pad(Math.min(d.getDate(), daysInMonth(ym)))}`;
+}
+function instPlan(id) { return money.txns.filter((t) => t.inst && t.inst.id === id).sort((a, b) => a.inst.n - b.inst.n); }
+function instTag(t) { return `ผ่อน 0% งวด ${t.inst.n}/${t.inst.of}`; }
+
 function labelById(id) { return money.labels.find((l) => l.id === id); }
 // The labels on a transaction that still exist (a deleted label just disappears).
 function txLabels(t) { return (t.labels || []).map(labelById).filter(Boolean); }
@@ -767,6 +783,7 @@ function txItem(t, S) {
   const badges = [
     shared ? '<span class="badge share">ร่วม</span>' : '',
     t.billId ? '<span class="badge muted">บิล</span>' : '',
+    t.inst ? `<span class="badge inst">ผ่อน ${t.inst.n}/${t.inst.of}</span>` : '',
     t.receiptKey ? '<span class="badge muted">🧾</span>' : '',
     ...txLabels(t).map((l) => `<span class="badge label">${svgIcon('tag', 'svg-i xs')}${esc(l.name)}</span>`),
   ].join(' ');
@@ -1614,7 +1631,19 @@ function txnForm(t, preset = {}, opts = {}) {
       <div class="tr" id="tPkgBody" hidden><div class="tr-ico"></div>
         <div class="tr-body col"><span class="tr-lab">แพ็กเกจ</span>
           <div class="pkg-uses"><input id="tPkgUses" inputmode="numeric" placeholder="จำนวนครั้ง เช่น 20" aria-label="จำนวนครั้ง" autocomplete="off"><span>ครั้ง</span></div>
-          <div class="kv"><span>นับเป็นรายจ่ายครั้งละ</span><b id="tPkgPer">-</b></div></div></div>` : ''}
+          <div class="kv"><span>นับเป็นรายจ่ายครั้งละ</span><b id="tPkgPer">-</b></div></div></div>
+      <div class="tr" id="tInstRow"><div class="tr-ico">${svgIcon('card')}</div>
+        <div class="tr-body"><label for="tInst">ผ่อน 0%</label><span style="flex:1"></span><label class="switch"><input type="checkbox" id="tInst"><span></span></label></div></div>
+      <div class="tr" id="tInstBody" hidden><div class="tr-ico"></div>
+        <div class="tr-body col"><span class="tr-lab">จำนวนงวด</span>
+          <div class="pkg-uses"><input id="tInstN" inputmode="numeric" placeholder="จำนวนเดือน เช่น 10" aria-label="จำนวนงวด" autocomplete="off"><span>เดือน</span></div>
+          <div class="chips inst-quick" id="tInstQuick">${[3, 4, 6, 10, 12].map((n) => `<button type="button" class="chip" data-inst="${n}">${n} เดือน</button>`).join('')}</div>
+          <div class="kv"><span>หักเดือนละ</span><b id="tInstPer">-</b></div>
+          <div class="kv"><span>งวดสุดท้าย</span><b id="tInstEnd">-</b></div></div></div>` : ''}
+      ${!isNew && d.inst ? `<div class="tr tr-inst"><div class="tr-ico">${svgIcon('card')}</div>
+        <div class="tr-body col"><span class="tr-lab">${esc(instTag(d))}</span>
+          <div class="kv"><span>ราคาเต็ม</span><b>${baht(d.inst.total)}</b></div>
+          <div class="kv"><span>หักแล้ว</span><b>${instPlan(d.inst.id).filter((x) => x.date <= dateStr(new Date())).length}/${d.inst.of} งวด</b></div></div></div>` : ''}
       <div class="tr" id="tToRow"><div class="tr-ico">${svgIcon('swap')}</div>
         <div class="tr-body"><label for="tTo">ไปยัง</label><select id="tTo"></select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
       <div class="tr" id="tNoteRow"><div class="tr-ico">${svgIcon('note')}</div>
@@ -1628,10 +1657,12 @@ function txnForm(t, preset = {}, opts = {}) {
       <div class="tr tr-labels"><div class="tr-ico">${svgIcon('tag')}</div>
         <div class="tr-body col"><span class="tr-lab">ป้ายกำกับ</span><div class="chips lab-pick" id="tLabels"></div></div></div>
     </div>
+    <p class="hint" id="tInstHint" hidden>ใส่ราคาเต็มในจำนวนเงิน แล้วระบบจะลงรายจ่ายเดือนละ 1 งวดในวันที่เดียวกันของทุกเดือนจนครบ งวดที่ยังไม่ถึงยังไม่หักจากยอดเงินคงเหลือ</p>
     <p class="hint" id="tPkgHint" hidden>ยอดก้อนนี้ไม่นับเป็นรายจ่ายทั้งก้อน เงินจะย้ายจากกระเป๋าเงินไปเก็บเป็นแพ็กเกจ และนับเป็นรายจ่ายทีละครั้งเมื่อกด "ใช้ 1 ครั้ง" ที่หน้าหลัก</p>
     <p class="hint" id="tShareHint">บันทึกให้ ${esc(partnerName())} เห็นเท่านั้น ไม่ใช่การเรียกเก็บเงิน ต้นทุนใช้คำนวณส่วนของฉันในยอดรวมและรายงาน</p>
     ${d.billId && !linkedBill && !isNew ? '<p class="hint">รายการนี้สร้างจากการจ่ายบิล</p>' : ''}
     ${isNew ? '' : '<button class="btn danger" id="delTx">ลบรายการ</button>'}
+    ${!isNew && d.inst ? `<button class="btn danger" id="delInst">ลบทุกงวด (${instPlan(d.inst.id).length} รายการ)</button>` : ''}
     <div class="save-bar"><button type="button" class="save-pill" id="saveTx">${isNew ? 'เพิ่มรายการ' : 'บันทึก'}</button></div>
   `);
 
@@ -1651,6 +1682,20 @@ function txnForm(t, preset = {}, opts = {}) {
     const total = num($('#tAmount').value), uses = Math.floor(num($('#tPkgUses').value));
     $('#tPkgPer').textContent = total > 0 && uses > 0 ? baht(Math.round((total / uses) * 100) / 100) : '-';
   };
+  const instOn = () => !!$('#tInst') && $('#tInst').checked;
+  const paintInst = () => {
+    if (!$('#tInstRow')) return;
+    const on = instOn();
+    $('#tInstBody').hidden = !on || $('#tInstRow').hidden;
+    $('#tInstHint').hidden = !on || $('#tInstRow').hidden;
+    const total = num($('#tAmount').value), of = Math.floor(num($('#tInstN').value));
+    document.querySelectorAll('#tInstQuick [data-inst]').forEach((b) => b.classList.toggle('on', Number(b.dataset.inst) === of));
+    const ok = total > 0 && of > 1 && of <= 120;
+    const a = ok ? instAmounts(total, of) : null;
+    $('#tInstPer').textContent = a ? (a.last !== a.base ? `${baht(a.base)} (งวดสุดท้าย ${baht(a.last)})` : baht(a.base)) : '-';
+    const day = $('#tDate').value;
+    $('#tInstEnd').textContent = ok && day ? thDate(instDate(day, of - 1)) : '-';
+  };
   const renderType = () => {
     document.querySelectorAll('#txType button').forEach((x) => x.classList.toggle('on', x.dataset.ttype === d.type));
     document.querySelectorAll('#txScope button').forEach((x) => x.classList.toggle('on', x.dataset.scope === d.scope));
@@ -1669,6 +1714,12 @@ function txnForm(t, preset = {}, opts = {}) {
       $('#tPkgRow').hidden = !canPkg;
       if (!canPkg) $('#tPkg').checked = false;
       paintPkg();
+    }
+    // 0% installments: a personal purchase (not a bill payment, not out of a package).
+    if ($('#tInstRow')) {
+      $('#tInstRow').hidden = !canPkg;
+      if (!canPkg) $('#tInst').checked = false;
+      paintInst();
     }
     $('#tShareHint').hidden = !sh;
     // The wallet only matters when I am the one paying.
@@ -1709,6 +1760,7 @@ function txnForm(t, preset = {}, opts = {}) {
     x.setDate(x.getDate() + Number(b.dataset.step));
     $('#tDate').value = dateStr(x);
     paintDate();
+    paintInst();
   }));
   $('#tCur').addEventListener('click', () => currencyPicker(d.currency || 'THB', (code) => { d.currency = code; $('#tCur').textContent = code; }));
   renderType();
@@ -1728,10 +1780,20 @@ function txnForm(t, preset = {}, opts = {}) {
     renderType();
   });
   $('#tCatOpen').addEventListener('click', () => catPicker(d.type, d.category, (id) => { d.category = id; paintCats(); }));
-  $('#tAmount').addEventListener('input', () => { updateShares(); paintPkg(); });
+  $('#tAmount').addEventListener('input', () => { updateShares(); paintPkg(); paintInst(); });
+  $('#tDate').addEventListener('change', paintInst);
   if ($('#tPkg')) {
-    $('#tPkg').addEventListener('change', () => { paintPkg(); if (pkgOn()) $('#tPkgUses').focus(); });
+    // Package and installments are two ways of paying one purchase: one at a time.
+    $('#tPkg').addEventListener('change', () => { if (pkgOn()) $('#tInst').checked = false; paintPkg(); paintInst(); if (pkgOn()) $('#tPkgUses').focus(); });
     $('#tPkgUses').addEventListener('input', paintPkg);
+    $('#tInst').addEventListener('change', () => { if (instOn()) $('#tPkg').checked = false; paintPkg(); paintInst(); if (instOn() && !$('#tInstN').value) $('#tInstN').focus(); });
+    $('#tInstN').addEventListener('input', paintInst);
+    $('#tInstQuick').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-inst]');
+      if (!b) return;
+      $('#tInstN').value = b.dataset.inst;
+      paintInst();
+    });
   }
   $('#tSplit').addEventListener('click', (e) => {
     const b = e.target.closest('[data-split]');
@@ -1859,6 +1921,27 @@ function txnForm(t, preset = {}, opts = {}) {
       if (d.slipRef) out.slipRef = d.slipRef;
     }
     if (d.billId) { out.billId = d.billId; out.billYm = d.billYm; }
+    if (d.inst) out.inst = d.inst;
+    if (instOn() && d.type === 'expense' && !shared()) {
+      // 0%: the full price becomes one expense a month, same day each month, for `of` months.
+      const of = Math.floor(num($('#tInstN').value));
+      if (!(of > 1 && of <= 120)) { toast('กรุณาใส่จำนวนงวด 2–120 เดือน'); $('#tInstN').focus(); return; }
+      const { base, last } = instAmounts(total, of);
+      if (!(base > 0)) { toast('ยอดน้อยเกินไปสำหรับจำนวนงวดนี้'); return; }
+      const plan = newId();
+      for (let k = 0; k < of; k++) {
+        const tx = { ...out, id: k ? newId() : out.id, amount: k === of - 1 ? last : base, date: instDate(date, k),
+          inst: { id: plan, n: k + 1, of, total } };
+        // The slip belongs to the purchase: only the first month carries it.
+        if (k) { delete tx.receiptKey; delete tx.slipRef; }
+        saveTxn(tx);
+      }
+      if (out.walletId && money.prefs.lastWallet !== out.walletId) { money.prefs.lastWallet = out.walletId; savePrefs(); }
+      if (opts.onSaved) opts.onSaved(out);
+      closeSheet(); render(); popIn();
+      toast(`ผ่อน 0% ${of} เดือน เดือนละ ${baht(base)} ถึง ${thDate(instDate(date, of - 1))}`);
+      return;
+    }
     if (pkgOn() && d.type === 'expense' && !shared()) {
       // Paid in one go for many uses: the money moves into a new package wallet (a transfer, not
       // spending); each use later is an expense of one share out of it.
@@ -1914,6 +1997,14 @@ function txnForm(t, preset = {}, opts = {}) {
     confirmDelete('ลบรายการนี้?', '', () => {
       deleteTxn(d);
       closeSheet(); render(); toast('ลบแล้ว');
+    });
+  });
+  const delInst = $('#delInst');
+  if (delInst) delInst.addEventListener('click', () => {
+    const plan = instPlan(d.inst.id);
+    confirmDelete(`ลบทุกงวดของการผ่อนนี้?`, `${plan.length} รายการ รวม ${baht(d.inst.total)}`, () => {
+      plan.forEach(deleteTxn);
+      closeSheet(); render(); toast('ลบทุกงวดแล้ว');
     });
   });
   if (isNew && !preset.amount) setTimeout(() => $('#tAmount') && $('#tAmount').focus(), 300);

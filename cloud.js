@@ -95,6 +95,7 @@ function mapExpense(e, me) {
     scope: e.scope, status: e.status, labels: e.labels || [],
   };
   if (e.currency && e.currency !== 'THB') base.currency = e.currency;
+  if (e.inst) base.inst = e.inst;
   if (!base.billId) { delete base.billId; delete base.billYm; }
   if (e.scope !== 'shared') return base;
   const payerMe = e.payerId === me;
@@ -235,7 +236,7 @@ function cloudSaveTxn(t) {
     merchant: t.merchant, category: t.category, note: t.note, walletId: t.walletId, toWalletId: t.toWalletId,
     reviewNeeded: !!t.reviewNeeded, receiptKey: t.receiptKey, slipRef: t.slipRef, billId: t.billId, billYm: t.billYm,
     payerId: t.payerId, shares: shared ? { [cloud.user.id]: t.amount } : undefined,
-    labels: t.labels || [], currency: t.currency || 'THB',
+    labels: t.labels || [], currency: t.currency || 'THB', inst: t.inst,
   };
   const known = cloud.ids.has(t.id);
   cloud.ids.add(t.id);
