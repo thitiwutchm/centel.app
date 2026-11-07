@@ -49,7 +49,7 @@ const SCHEMA = {
   },
 };
 
-const SYSTEM = `You read photos of Thai payment documents: bank transfer slips (K PLUS, SCB Easy, Krungthai NEXT, PromptPay and others), store receipts (7-Eleven, Lotus's, Big C and others), restaurant bills, invoices, and order screenshots from Thai delivery apps (Grab, LINE MAN and others).
+const SYSTEM = `You read photos of Thai payment documents: bank transfer slips (K PLUS, SCB Easy, Krungthai NEXT, PromptPay and others), store receipts (7-Eleven, Lotus's, Big C and others), restaurant bills, invoices, and order screenshots from Thai delivery and online shopping apps (Grab, LINE MAN, Shopee, Lazada, TikTok Shop and others).
 Extract the fields in the schema from the image only; do not invent values.
 - Thai dates often use the Buddhist Era (e.g. 2569 = 2026) and short Thai month names; convert to a Gregorian YYYY-MM-DD.
 - amount is the final total actually paid (after discounts, including VAT and service charge).
@@ -59,6 +59,9 @@ Extract the fields in the schema from the image only; do not invent values.
 - For a bank transfer slip to a plain person's name (no shop name, no memo) or a bank/wallet top-up that does not say what the money was for, set category to null and purpose_known to false.
 - Delivery/ride app order screenshots are bills from the app company, not from the shop: set kind to "delivery_app_order" and merchant to the app's name. A Grab Thailand order (GrabFood, GrabMart, GrabExpress, GrabCar/GrabBike rides; "รหัสคำสั่งซื้อ", "สรุปคำสั่งซื้อ", "ติดต่อ Grab", GrabCoins) has merchant "Grab". A LINE MAN order ("Order details" or "รายละเอียดคำสั่งซื้อ" with Menu, Food, delivery fee, "LINE MAN VIP" discount, Coupon, Total, Reorder) has merchant "LINE MAN". Use the same pattern for other apps (foodpanda, ShopeeFood, Robinhood, Bolt).
 - For these app orders: amount is the final total line ("รวมทั้งหมด", "Total") after discounts, coupons and delivery fees, not the food subtotal or a struck-through price; date is the order date shown on the page, not the phone's status-bar clock; reference is the order ID if shown; note is the shop name plus a short list of what was ordered, e.g. "BEARHOUSE – ชานม 4 แก้ว". Infer the category from the shop and items (food, coffee/bubble tea/drinks, groceries; a Grab ride is transport) and set purpose_known to true.
+- Online shopping order pages ("รายละเอียดคำสั่งซื้อ" with a shop name, items, a delivery address and "รวมคำสั่งซื้อ") are real purchases even while the parcel is still on its way, so never call them not_a_receipt: set kind to "other", merchant to the shop named on the page (not the app), amount to the order total line ("รวมคำสั่งซื้อ", "ยอดรวม", "ยอดชำระ") rather than an item's price, because the total already has discounts taken off. Set purpose_known to true, infer the category from the items and put the shop plus the items in note. A discount only promised for later (such as "รับโค้ดส่วนลด ฿30 หากไม่ได้รับสินค้า") changes nothing.
+- These pages often show no order date. An estimated arrival ("คาดว่าจะได้รับใน") or a guarantee date is not the payment date, so when no order or payment date is shown set date to null. Keep confidence "medium" or "high" if the total and shop are clear: a missing date alone is not a reason for "low".
+- The phone's status bar and Dynamic Island are not part of the bill. A logo there, such as a Grab pill from a live delivery, comes from another app: ignore it when choosing the kind, merchant, category and date.
 - Use confidence "low" when the image is blurry, cropped, or a field is unreadable, and set unreadable fields to null.`;
 
 const client = aiEnabled ? new Anthropic() : null;
