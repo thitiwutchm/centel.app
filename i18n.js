@@ -180,7 +180,7 @@ const I18N_EN = {
   'ย้อนหลัง': 'History', 'ปิด': 'Close', '{0} · ครบกำหนด {1} {2}': '{0} · due {1} {2}', 'ยอดเดือนนี้ (฿)': 'This month (฿)',
   'ใบแจ้งหนี้': 'Bill document', 'จ่าย {0} แล้ว': 'Paid {0}', 'บันทึกยอดแล้ว': 'Amount saved', 'ลบไฟล์ใบแจ้งหนี้ของเดือนนี้?': 'Remove this month’s bill file?',
   'จ่ายด้วยสลิป': 'Pay with slip', 'อัปโหลดสลิปโอนเงิน AI อ่านยอดและวันที่ แล้วตัดบิลนี้ให้': 'Upload the transfer slip: AI reads the amount and date, then marks this bill paid',
-  'สลิปการจ่าย': 'Payment slip', 'ดูสลิป': 'View slip', 'แนบสลิปการจ่าย': 'Attach payment slip', 'แนบสลิปแล้ว': 'Slip attached',
+  'สลิปการจ่าย': 'Payment slip', 'ดูสลิป': 'View slip', 'เปิดสลิปไม่ได้': 'Couldn\'t open the slip', 'แนบสลิปการจ่าย': 'Attach payment slip', 'แนบสลิปแล้ว': 'Slip attached',
   'จ่าย {0} แล้ว {1}': 'Paid {0} {1}', 'จ่าย {0} แล้ว อ่านยอดจากสลิปไม่ได้ กรอกยอดเอง': 'Paid {0}. Could not read the amount from the slip, enter it yourself',
   'อัปโหลดสลิปไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not upload the slip, try again', 'ตัดบิล': 'Pays bill', 'บิล · {0}': 'Bill · {0}', 'รายการที่จ่าย': 'Paid with', 'เปิดบิล': 'Open bill', 'ไม่ใช่การจ่ายบิล': 'Not a bill payment',
   '🧾 ยอดตรงกับบิล {0} ({1}) จะตัดบิลนี้ให้เมื่อบันทึก': '🧾 Amount matches the bill {0} ({1}). It will be marked paid when you save',
