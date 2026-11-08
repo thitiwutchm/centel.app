@@ -286,13 +286,73 @@ async function uploadReceipt(file, labels = [], categories = []) {
   return api('POST', '/receipts', { image, mediaType: 'image/jpeg', labels, categories });
 }
 
+// Shows a slip in an in-app viewer (no new browser tab, which in the iOS app jumped out to Safari).
+// Close with ✕, a tap on the dark backdrop, a swipe down, or Escape. Double-tap zooms.
 async function openReceipt(key) {
-  const win = window.open('', '_blank');
+  document.querySelector('.slipview')?.remove();
+  const v = document.createElement('div');
+  v.className = 'slipview';
+  v.setAttribute('role', 'dialog');
+  v.setAttribute('aria-label', tr('ดูสลิป'));
+  v.innerHTML = `<div class="sv-scroll"><div class="sv-spin"></div></div>
+    <button type="button" class="sv-close" aria-label="${esc(tr('ปิด'))}">✕</button>`;
+  document.body.appendChild(v);
+  requestAnimationFrame(() => v.classList.add('on'));
+  const scroll = v.querySelector('.sv-scroll');
+  const onKey = (e) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
+  function close() {
+    window.removeEventListener('keydown', onKey, true);
+    v.classList.remove('on');
+    setTimeout(() => v.remove(), 200);
+  }
+  window.addEventListener('keydown', onKey, true);
+  v.querySelector('.sv-close').addEventListener('click', close);
+  scroll.addEventListener('click', (e) => { if (e.target === scroll) close(); });
+
+  // swipe down to close (only when not zoomed in)
+  let y0 = null, dy = 0;
+  scroll.addEventListener('touchstart', (e) => {
+    y0 = (e.touches.length === 1 && !v.classList.contains('zoom')) ? e.touches[0].clientY : null; dy = 0;
+  }, { passive: true });
+  scroll.addEventListener('touchmove', (e) => {
+    if (y0 == null) return;
+    dy = Math.max(0, e.touches[0].clientY - y0);
+    scroll.style.transform = `translateY(${dy}px)`;
+    v.style.setProperty('--sv-fade', String(Math.max(0.3, 1 - dy / 400)));
+  }, { passive: true });
+  scroll.addEventListener('touchend', () => {
+    if (y0 == null) return;
+    y0 = null;
+    if (dy > 110) { close(); return; }
+    scroll.style.transform = '';
+    v.style.removeProperty('--sv-fade');
+  });
+
   try {
     const { url } = await api('GET', `/receipts/url?key=${encodeURIComponent(key)}`);
-    if (win) win.location = url; else location.href = url;
+    if (!v.isConnected) return;
+    const img = new Image();
+    img.alt = tr('ดูสลิป');
+    img.onload = () => { scroll.innerHTML = ''; scroll.appendChild(img); };
+    img.onerror = () => { close(); toast(tr('เปิดสลิปไม่ได้')); };
+    let lastTap = 0;
+    img.addEventListener('click', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 320) {
+        const zoomIn = !v.classList.contains('zoom');
+        const r = img.getBoundingClientRect();
+        const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+        v.classList.toggle('zoom', zoomIn);
+        if (zoomIn) {
+          scroll.scrollLeft = fx * img.offsetWidth - scroll.clientWidth / 2;
+          scroll.scrollTop = fy * img.offsetHeight - scroll.clientHeight / 2;
+        }
+        lastTap = 0;
+      } else lastTap = now;
+    });
+    img.src = url;
   } catch (e) {
-    if (win) win.close();
+    close();
     toast(cloudErr(e));
   }
 }
