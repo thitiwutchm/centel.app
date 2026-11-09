@@ -247,7 +247,12 @@
           ${pp ? `<div class="pp-bank"><b>${t.promptpay}</b><br><span class="pp-mono">${esc(promptPayFmt(pp.id))}</span>${pp.name ? ` · ${esc(pp.name)}` : ''}</div>` : ''}
           ${payInfo ? `<div>${esc(payInfo).replace(/\n/g, '<br>')}</div>` : ''}
         </div>
-        ${qr ? `<div class="pp-qr"><div class="pp-qr-head">PromptPay</div>${qr}<div class="pp-qr-amt">${money(net)} ${t.baht}</div><div class="pp-small">${t.scan}</div></div>` : ''}
+        ${qr ? `<div class="pp-qr"><div class="pp-qr-card">
+            <div class="pp-qr-head"><img src="img/thai-qr-payment.png" alt="Thai QR Payment"></div>
+            <div class="pp-qr-body"><img class="pp-qr-pp" src="img/promptpay.png" alt="PromptPay">${qr}
+              <div class="pp-qr-name">${qrNameLines(`${lang === 'en' ? 'Name' : 'ชื่อ'} : ${pp.name || (lang === 'en' && business.name_en ? business.name_en : business.name)}`)}</div>
+              <div class="pp-qr-amt">${money(net)} ${t.baht}</div></div></div>
+          <div class="pp-small">${t.scan}</div></div>` : ''}
       </section>` : '';
     const method = doc.pay && (lang === 'en' ? PAY_METHOD_EN : PAY_METHOD)[doc.pay.method];
     const paid = doc.type === 'RE' && doc.pay ? t.paidBy(method || '', fmtDate(doc.pay.date)) : '';
@@ -311,6 +316,17 @@
       ${payBlock}
       <footer class="pp-sign${doc.type === 'EX' ? ' three' : ''}">${footer}</footer>
     </article>`;
+  }
+
+  // The account name under the QR as explicit lines: html2canvas misplaces Thai text that the browser wraps itself.
+  function qrNameLines(text) {
+    const t = String(text || '').trim();
+    if (t.length <= 24) return `<div>${esc(t)}</div>`;
+    const mid = t.length / 2;
+    let cut = -1;
+    for (let i = 0; i < t.length; i++) if (t[i] === ' ' && (cut < 0 || Math.abs(i - mid) < Math.abs(cut - mid))) cut = i;
+    if (cut < 0) return `<div>${esc(t)}</div>`;
+    return `<div>${esc(t.slice(0, cut))}</div><div>${esc(t.slice(cut + 1))}</div>`;
   }
 
   // The pages to print or download: the original and/or `copies` copies, numbered in the corner.
