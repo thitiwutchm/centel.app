@@ -1,7 +1,7 @@
 // Accounting reports, read from the journal (acc_lines) and the documents (acc_docs).
 // `db` is an asUser client, so every query is already limited to the person's businesses.
 
-export const REPORTS = ['dashboard', 'trial', 'pnl', 'balance', 'ledger', 'vat_sales', 'vat_purchase', 'vat_summary', 'wht_pay', 'wht_recv', 'ar', 'ap'];
+export const REPORTS = ['dashboard', 'trial', 'pnl', 'balance', 'ledger', 'vat_sales', 'vat_purchase', 'vat_summary', 'wht_pay', 'wht_recv', 'ar', 'ap', 'sales'];
 
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const r2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
@@ -167,6 +167,54 @@ async function whtRecv(db, biz, q) {
   return { from, to, rows, totals: { base: r2(rows.reduce((s, x) => s + x.base, 0)), tax: r2(rows.reduce((s, x) => s + x.tax, 0)) } };
 }
 
+// สรุปยอดขาย: invoices plus cash sales (receipts not made from an invoice), by document,
+// customer or item. status: '' (all but void), open, paid, void.
+async function sales(db, biz, q) {
+  const { from, to } = period(q);
+  const docs = (await db.query(
+    `select d.id, d.type, d.number, d.date, d.status, d.contact_id, d.contact->>'name' as name, d.contact->>'tax_id' as tax_id,
+            d.vat, d.total, d.wht, d.lines, d.tax_invoice
+     from acc_docs d
+     where d.business_id = $1 and d.date between $2 and $3
+       and (d.type = 'IV' or (d.type = 'RE' and (d.ref_id is null or not exists (select 1 from acc_docs r where r.id = d.ref_id and r.type = 'IV'))))
+     order by d.date, d.number`, [biz.id, from, to])).rows
+    .map((d) => ({ ...d, status: d.type === 'RE' && d.status !== 'void' ? 'paid' : d.status }))
+    .filter((d) => (q.status ? d.status === q.status : d.status !== 'void'));
+  const live = docs.filter((d) => d.status !== 'void');
+  const totals = {
+    count: docs.length,
+    value: r2(live.reduce((a, d) => a + d.total - d.vat, 0)),
+    vat: r2(live.reduce((a, d) => a + d.vat, 0)),
+    total: r2(live.reduce((a, d) => a + d.total, 0)),
+  };
+  const by = ['customer', 'item'].includes(q.by) ? q.by : 'doc';
+  let rows;
+  if (by === 'doc') {
+    rows = docs.map((d) => ({ id: d.id, type: d.type, number: d.number, date: d.date, name: d.name || '', status: d.status, value: r2(d.total - d.vat), vat: d.vat, total: d.total }));
+  } else if (by === 'customer') {
+    const m = new Map();
+    for (const d of live) {
+      const k = d.contact_id || d.name || '-';
+      const r = m.get(k) || { name: d.name || 'ลูกค้าทั่วไป', tax_id: d.tax_id || '', count: 0, value: 0, vat: 0, total: 0 };
+      r.count += 1; r.value = r2(r.value + d.total - d.vat); r.vat = r2(r.vat + d.vat); r.total = r2(r.total + d.total);
+      m.set(k, r);
+    }
+    rows = [...m.values()].sort((a, b) => b.total - a.total);
+  } else {
+    const m = new Map();
+    for (const d of live) for (const l of d.lines || []) {
+      const k = l.itemId || l.name;
+      const r = m.get(k) || { name: l.name, unit: l.unit || '', qty: 0, value: 0, docs: 0 };
+      r.qty = Math.round((r.qty + Number(l.qty || 0)) * 10000) / 10000;
+      r.value = r2(r.value + Number(l.base ?? l.amount ?? 0));
+      r.docs += 1;
+      m.set(k, r);
+    }
+    rows = [...m.values()].sort((a, b) => b.value - a.value);
+  }
+  return { from, to, by, status: q.status || '', rows, totals };
+}
+
 async function openDocs(db, biz, type) {
   const t = today();
   const rows = (await db.query(
@@ -234,6 +282,7 @@ export async function report(db, biz, name, q = {}) {
     case 'wht_recv': return whtRecv(db, biz, q);
     case 'ar': return openDocs(db, biz, 'IV');
     case 'ap': return openDocs(db, biz, 'EX');
+    case 'sales': return sales(db, biz, q);
     default: return null;
   }
 }

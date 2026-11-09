@@ -293,7 +293,7 @@
       else if (r === 'edit') await viewEditor(main, null, parts[1], q);
       else if (r === 'doc') await viewDoc(main, parts[1]);
       else if (r === 'contacts') viewContacts(main, q);
-      else if (r === 'items') viewItems(main);
+      else if (r === 'items') await viewItems(main, q);
       else if (r === 'accounts') await viewAccounts(main);
       else if (r === 'journal') await viewJournal(main, q);
       else if (r === 'reports') viewReports(main);
@@ -338,6 +338,119 @@
       window.print();
     });
   }
+
+  // Real .xlsx through SheetJS (cdnjs, loaded on first use); falls back to CSV if it cannot load.
+  let xlsxLib;
+  async function excel(name, rows, sheet = 'Sheet1') {
+    try {
+      if (!xlsxLib) {
+        xlsxLib = await new Promise((ok, no) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+          s.onload = () => (window.XLSX ? ok(window.XLSX) : no(new Error('xlsx')));
+          s.onerror = no;
+          document.head.appendChild(s);
+        });
+      }
+      const ws = xlsxLib.utils.aoa_to_sheet(rows);
+      ws['!cols'] = (rows[0] || []).map((_, i) => ({ wch: Math.min(48, Math.max(8, ...rows.map((r) => String(r[i] ?? '').length + 2))) }));
+      const wb = xlsxLib.utils.book_new();
+      xlsxLib.utils.book_append_sheet(wb, ws, String(sheet).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31));
+      xlsxLib.writeFile(wb, `${name}.xlsx`);
+    } catch {
+      xlsxLib = null;
+      csv(name, rows);
+    }
+  }
+
+  // A small menu next to a button. items: [label, fn, { danger }] or null for a divider.
+  function popMenu(anchor, items) {
+    $$('.pop').forEach((p) => p.remove());
+    const m = document.createElement('div');
+    m.className = 'pop';
+    m.innerHTML = items.map((it, i) => (it ? `<button type="button" data-i="${i}" class="${it[2]?.danger ? 'danger' : ''}">${esc(it[0])}</button>` : '<hr>')).join('');
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.left = `${Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth))}px`;
+    m.style.top = `${r.bottom + 4 + m.offsetHeight > innerHeight ? Math.max(8, r.top - m.offsetHeight - 4) : r.bottom + 4}px`;
+    const close = (e) => {
+      if (e && e.type === 'pointerdown' && m.contains(e.target)) return;
+      m.remove();
+      document.removeEventListener('pointerdown', close, true);
+      removeEventListener('scroll', close, true);
+      removeEventListener('hashchange', close);
+    };
+    setTimeout(() => { document.addEventListener('pointerdown', close, true); addEventListener('scroll', close, true); addEventListener('hashchange', close); });
+    m.onclick = (e) => { const b = e.target.closest('[data-i]'); if (!b) return; close(); items[Number(b.dataset.i)][1](); };
+  }
+  const DOTS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+  const CHEV = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+
+  // How documents print and download: original / copies, payment details, signature + stamp, language.
+  function printPrefs() {
+    const b = biz();
+    const s = b.settings || {};
+    let p = {};
+    try { p = JSON.parse(store.get(`acc.print.${S.bizId}`) || '{}') || {}; } catch { /* ignore */ }
+    const canSign = !!(b.signature || b.stamp);
+    return {
+      original: p.original !== false, copy: p.copy !== false, copies: Math.max(1, Math.min(5, Number(p.copies) || 1)), pay: p.pay !== false,
+      lang: p.lang === 'en' || p.lang === 'th' ? p.lang : (s.lang || 'th'), sign: canSign && (p.sign !== undefined ? !!p.sign : !!s.signAuto),
+    };
+  }
+  const savePrintPrefs = (p) => store.set(`acc.print.${S.bizId}`, JSON.stringify(p));
+
+  async function downloadDocs(ids, opts) {
+    const docs = [];
+    for (const id of ids) {
+      const { doc, ref } = await get(`/docs/${id}`);
+      docs.push({ ...doc, ref });
+    }
+    const html = docs.map((d) => T.renderSet(d, biz(), opts)).join('');
+    await T.downloadPdf(html, docs.length === 1 ? `${docs[0].number}.pdf` : `เอกสาร-${T.today()}.pdf`);
+  }
+
+  async function payExpense(doc) {
+    return dialog({
+      title: `จ่ายเงิน ${doc.number}`,
+      body: `<div class="grid g2"><label class="field"><span>วันที่จ่าย</span><input type="date" name="date" value="${T.today()}"></label>
+        <label class="field"><span>จ่ายจาก</span><select name="account">${moneyAccounts().map((m) => `<option value="${m.code}" ${m.sys === 'bank' ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>วิธีชำระ</span><select name="method">${Object.entries(T.PAY_METHOD).map(([k, v]) => `<option value="${k}" ${k === 'transfer' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+        <label class="field"><span>ค่าธรรมเนียม</span><input type="number" step="0.01" name="fee" class="num" placeholder="0"></label></div>
+        <p class="muted">ยอดจ่าย ${money(doc.total - doc.wht)} บาท${doc.wht ? ` (หัก ณ ที่จ่าย ${money(doc.wht)} บาท ระบบออกเลขที่ 50 ทวิ ให้)` : ''}</p>`,
+      onOk: async (el) => post(`/docs/${doc.id}/pay`, { pay: formData(el) }),
+    });
+  }
+  async function voidDoc(doc) {
+    return dialog({
+      title: `ยกเลิก ${doc.number}`, ok: 'ยกเลิกเอกสาร', danger: true,
+      body: `<p style="margin-top:0">เอกสารจะถูกขีดว่ายกเลิก เลขที่เดิมจะไม่ถูกนำมาใช้ซ้ำ และรายการบัญชีของเอกสารนี้จะถูกลบ</p><label class="field"><span>เหตุผล</span><input type="text" name="reason"></label>`,
+      onOk: async (el) => post(`/docs/${doc.id}/void`, formData(el)),
+    });
+  }
+  async function shareDoc(doc) {
+    const { token } = await post(`/docs/${doc.id}/share`);
+    const url = `${location.origin}${location.pathname.replace(/[^/]*$/, '')}doc.html?t=${token}`;
+    await dialog({
+      title: 'ลิงก์สำหรับลูกค้า', ok: 'คัดลอกลิงก์', cancel: 'ปิด', extra: '<button class="btn danger" data-off>ปิดลิงก์</button>',
+      body: `<p class="muted" style="margin-top:0">ลูกค้าเปิดดู พิมพ์ และดาวน์โหลด PDF ได้โดยไม่ต้องเข้าสู่ระบบ</p><input type="text" readonly value="${esc(url)}">
+        <p class="muted" style="margin-bottom:0;font-size:12px">ลิงก์ดาวน์โหลด PDF ทันที: <span class="mono">${esc(url)}&amp;pdf=1</span></p>`,
+      onOpen: (el, close) => { $('[data-off]', el).onclick = async () => { await post(`/docs/${doc.id}/share`, { off: true }); toast('ปิดลิงก์แล้ว'); close(); render(); }; },
+      onOk: async () => { await navigator.clipboard.writeText(url).catch(() => {}); toast('คัดลอกลิงก์แล้ว'); return true; },
+    });
+  }
+
+  // The status choices a list row offers; picking "paid" on an invoice goes to the receipt form.
+  function statusChoices(type, d) {
+    if (d.status === 'void') return [];
+    if (type === 'QT') return ['open', 'accepted', 'rejected'];
+    if (type === 'IV') return d.status === 'open' ? ['open', 'paid'] : [];
+    if (type === 'EX') return ['open', 'paid'];
+    return [];
+  }
+  const statusTone = (s, type) => (s === 'void' || s === 'rejected' ? 'bad' : s === 'paid' || s === 'done' || s === 'accepted' ? 'good' : type === 'QT' ? 'info' : 'warn');
+  const CAT_TONES = ['#2F9E44', '#1C7ED6', '#AE3EC9', '#E8590C', '#0C8599', '#C2255C', '#5C7CFA', '#B7791F'];
+  const catTone = (code) => CAT_TONES[[...String(code || '')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % CAT_TONES.length];
 
   /* ---------- Dashboard ---------- */
 
@@ -406,41 +519,139 @@
     if (period === 'year') range = `&from=${now.slice(0, 4)}-01-01&to=${now.slice(0, 4)}-12-31`;
     const { docs } = await get(`/docs?type=${type}${range}`);
     const statuses = Object.keys(T.STATUS[type]);
+    const isEx = type === 'EX';
+    const who = isEx ? 'ผู้จำหน่าย / ผู้รับเงิน' : 'ลูกค้า';
+    let status = q.get('s') || '';
+    let per = Number(store.get('acc.per')) || 20;
+    let page = 0;
+    let showTotal = false;
+    const sel = new Set();
     main.innerHTML = `<div class="page-h"><div><h1>${LIST_TITLE[type]}</h1><div class="sub">${docs.length} เอกสาร</div></div>
-      <div class="actions"><a class="btn primary" href="#/new/${type}">${ICON.plus}${NEW_LABEL[type]}</a></div></div>
+      <div class="actions"><button class="btn" data-xls title="ดาวน์โหลด Excel">ดาวน์โหลด Excel</button><a class="btn primary" href="#/new/${type}">${ICON.plus}${NEW_LABEL[type]}</a></div></div>
       <div class="card">
         <div class="filters">
-          <input type="search" placeholder="ค้นหาเลขที่ หรือชื่อ" data-q>
+          <div class="seg" data-s><button data-v="" class="${status ? '' : 'on'}">ทั้งหมด</button>${statuses.map((s) => `<button data-v="${s}" class="${s === status ? 'on' : ''}">${T.statusName(type, s)}</button>`).join('')}</div>
           <select data-p>${[['all', 'ทุกช่วงเวลา'], ['month', 'เดือนนี้'], ['last', 'เดือนก่อน'], ['year', 'ปีนี้']].map(([v, l]) => `<option value="${v}" ${v === period ? 'selected' : ''}>${l}</option>`).join('')}</select>
-          <div class="seg" data-s><button class="on" data-v="">ทั้งหมด</button>${statuses.map((s) => `<button data-v="${s}">${T.statusName(type, s)}</button>`).join('')}</div>
+          <input type="search" placeholder="ค้นหาเลขที่ ชื่อ" data-q style="margin-left:auto">
         </div>
-        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>วันที่</th><th>เลขที่</th><th>${type === 'EX' ? 'ผู้ขาย' : 'ลูกค้า'}</th><th>สถานะ</th>${type === 'IV' || type === 'EX' ? '<th>ครบกำหนด</th>' : ''}<th class="num">ภาษี</th><th class="num">ยอดรวม</th></tr></thead>
-        <tbody data-body></tbody><tfoot data-foot></tfoot></table></div>
+        <div class="bulk" data-bulk hidden><b data-bn></b><button class="btn sm" data-bx>ดาวน์โหลด Excel</button><button class="btn sm" data-bp>ดาวน์โหลด PDF</button><button class="btn sm ghost" data-bc>ล้างที่เลือก</button></div>
+        <div class="tbl-wrap"><table class="tbl doc-tbl${isEx ? ' ex' : ''}"><thead><tr>
+          <th class="ck"><input type="checkbox" data-all aria-label="เลือกทั้งหมด"></th>${isEx ? '<th></th>' : ''}<th>วันที่</th><th>เลขที่เอกสาร</th><th>${who}</th>${isEx ? '<th>หมวดหมู่</th>' : ''}
+          <th class="num">ยอดรวมสุทธิ</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody data-body></tbody></table></div>
+        <div class="pager" data-pager></div>
       </div>`;
-    let status = '';
-    const draw = () => {
+    const filtered = () => {
       const s = $('[data-q]', main).value.trim().toLowerCase();
-      const rows = docs.filter((d) => (!status || d.status === status) && (!s || d.number.toLowerCase().includes(s) || (d.contact_name || '').toLowerCase().includes(s)));
+      return docs.filter((d) => (!status || d.status === status) && (!s || d.number.toLowerCase().includes(s) || (d.contact_name || '').toLowerCase().includes(s)));
+    };
+    const statusCell = (d) => {
+      const opts = statusChoices(type, d);
+      const tone = statusTone(d.status, type);
+      if (opts.length < 2) return `<span class="st ${tone}"><span>${esc(T.statusName(type, d.status))}</span></span>`;
+      return `<label class="st ${tone} pick"><select data-st="${d.id}" aria-label="สถานะ">${opts.map((o) => `<option value="${o}" ${o === d.status ? 'selected' : ''}>${esc(T.statusName(type, o))}</option>`).join('')}</select>${CHEV}</label>`;
+    };
+    const catCell = (d) => {
+      if (!d.account) return '<td></td>';
+      const a = S.boot.acc.get(d.account);
+      const c = catTone(d.account);
+      return `<td><span class="cat" style="--c:${c}">${esc(a ? a.name : d.account)}</span>${d.line_count > 1 ? ` <span class="muted" style="font-size:12px">+${d.line_count - 1}</span>` : ''}</td>`;
+    };
+    const draw = () => {
+      const rows = filtered();
+      const pages = Math.max(1, Math.ceil(rows.length / per));
+      page = Math.min(page, pages - 1);
+      const view = rows.slice(page * per, page * per + per);
       const today = T.today();
-      $('[data-body]', main).innerHTML = rows.length ? rows.map((d) => `<tr class="click" data-id="${d.id}">
-        <td>${T.thDate(d.date)}</td><td><span class="doc-no">${esc(d.number)}</span>${d.tax_invoice ? ' <span class="chip accent">ใบกำกับภาษี</span>' : ''}</td>
-        <td>${esc(d.contact_name || '')}</td><td>${statusChip(type, d.status)}</td>
-        ${type === 'IV' || type === 'EX' ? `<td${d.status === 'open' && d.due_date && d.due_date < today ? ' style="color:var(--bad)"' : ''}>${T.thDate(d.due_date)}</td>` : ''}
-        <td class="num">${d.vat ? money(d.vat) : '–'}</td><td class="num">${money(d.total)}</td></tr>`).join('')
-        : `<tr><td colspan="7"><div class="empty"><b>ยังไม่มี${LIST_TITLE[type]}</b><a class="btn primary" style="margin-top:12px" href="#/new/${type}">${NEW_LABEL[type]}</a></div></td></tr>`;
+      $('[data-body]', main).innerHTML = view.length ? view.map((d) => `<tr class="click${sel.has(d.id) ? ' sel' : ''}" data-id="${d.id}">
+        <td class="ck"><input type="checkbox" data-ck ${sel.has(d.id) ? 'checked' : ''} aria-label="เลือก"></td>
+        ${isEx ? `<td class="th-cell"><div class="thumb">${d.thumb ? `<img src="${esc(d.thumb)}" alt="" loading="lazy">` : d.attachment ? '<span>PDF</span>' : ICON.ex}</div></td>` : ''}
+        <td class="nowrap">${T.thDate(d.date)}${(type === 'IV' || isEx) && d.status === 'open' && d.due_date ? `<div class="muted" style="font-size:12px${d.due_date < today ? ';color:var(--bad)' : ''}">ครบกำหนด ${T.thDate(d.due_date)}</div>` : ''}</td>
+        <td><span class="dot ${statusTone(d.status, type)}"></span><span class="doc-no">${esc(d.number)}</span>${d.tax_invoice ? '<div><span class="chip accent">ใบกำกับภาษี</span></div>' : ''}</td>
+        <td>${esc(d.contact_name || '')}</td>${isEx ? catCell(d) : ''}
+        <td class="num"><b>${money(d.total)}</b>${d.wht ? `<div class="muted" style="font-size:12px">หัก ณ ที่จ่าย ${money(d.wht)}</div>` : ''}</td>
+        <td>${statusCell(d)}</td>
+        <td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`).join('')
+        : `<tr><td colspan="9"><div class="empty"><b>ยังไม่มี${LIST_TITLE[type]}</b><a class="btn primary" style="margin-top:12px" href="#/new/${type}">${NEW_LABEL[type]}</a></div></td></tr>`;
       const live = rows.filter((d) => d.status !== 'void');
-      $('[data-foot]', main).innerHTML = live.length ? `<tr><td colspan="${type === 'IV' || type === 'EX' ? 5 : 4}">รวม ${live.length} รายการ (ไม่รวมที่ยกเลิก)</td><td class="num">${money(live.reduce((a, d) => a + d.vat, 0))}</td><td class="num">${money(live.reduce((a, d) => a + d.total, 0))}</td></tr>` : '';
+      const btn = (p, label, off) => `<button class="pg${!off && off !== false && p === page ? ' on' : ''}" data-pg="${p}" ${off ? 'disabled' : ''}>${label}</button>`;
+      const from = Math.max(0, Math.min(page - 2, pages - 5));
+      $('[data-pager]', main).innerHTML = `<div class="pg-btns">${btn(0, '«', page === 0)}${btn(Math.max(0, page - 1), '‹', page === 0)}${Array.from({ length: Math.min(5, pages) }, (_, i) => btn(from + i, from + i + 1)).join('')}${btn(Math.min(pages - 1, page + 1), '›', page >= pages - 1)}${btn(pages - 1, '»', page >= pages - 1)}</div>
+        <label class="pg-per">รายการต่อหน้า <select data-per>${[20, 50, 100].map((n) => `<option ${n === per ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <span class="pg-total">${showTotal ? `รวม ${live.length} รายการ · ภาษี ${money(live.reduce((a, d) => a + d.vat, 0))} · <b>${money(live.reduce((a, d) => a + d.total, 0))}</b> บาท` : '<button class="link" data-tot>แสดงยอดรวมทั้งหมด</button>'}</span>`;
+      const vis = view.map((d) => d.id);
+      $('[data-all]', main).checked = vis.length > 0 && vis.every((id) => sel.has(id));
+      $('[data-bulk]', main).hidden = !sel.size;
+      $('[data-bn]', main).textContent = `เลือก ${sel.size} รายการ`;
     };
     draw();
-    $('[data-q]', main).oninput = draw;
-    $('[data-p]', main).onchange = (e) => { location.hash = `#/docs/${type}?p=${e.target.value}`; };
+    const exportRows = (list) => [
+      ['วันที่', 'เลขที่เอกสาร', who, ...(isEx ? ['หมวดหมู่'] : []), 'ภาษีมูลค่าเพิ่ม', 'ยอดรวมสุทธิ', 'หัก ณ ที่จ่าย', 'สถานะ'],
+      ...list.map((d) => [d.date, d.number, d.contact_name || '', ...(isEx ? [S.boot.acc.get(d.account)?.name || ''] : []), Number(d.vat), Number(d.total), Number(d.wht), T.statusName(type, d.status)]),
+    ];
+    $('[data-xls]', main).onclick = () => excel(`${LIST_TITLE[type].split(' /')[0]}-${T.today()}`, exportRows(filtered()), LIST_TITLE[type].split(' /')[0]);
+    $('[data-bx]', main).onclick = () => excel(`${LIST_TITLE[type].split(' /')[0]}-${T.today()}`, exportRows(docs.filter((d) => sel.has(d.id))));
+    $('[data-bp]', main).onclick = async (e) => {
+      const ids = docs.filter((d) => sel.has(d.id)).slice(0, 30).map((d) => d.id);
+      e.target.disabled = true; e.target.textContent = 'กำลังสร้าง PDF…';
+      try { await downloadDocs(ids, { ...printPrefs(), copy: false }); } catch (err) { fail(err); }
+      e.target.disabled = false; e.target.textContent = 'ดาวน์โหลด PDF';
+    };
+    $('[data-bc]', main).onclick = () => { sel.clear(); draw(); };
+    $('[data-q]', main).oninput = () => { page = 0; draw(); };
+    $('[data-p]', main).onchange = (e) => { location.hash = `#/docs/${type}?p=${e.target.value}${status ? `&s=${status}` : ''}`; };
     $('[data-s]', main).onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      status = b.dataset.v;
+      status = b.dataset.v; page = 0;
       $$('[data-s] button', main).forEach((x) => x.classList.toggle('on', x === b));
       draw();
     };
-    $('[data-body]', main).onclick = (e) => { const tr = e.target.closest('[data-id]'); if (tr) location.hash = `#/doc/${tr.dataset.id}`; };
+    $('[data-all]', main).onchange = (e) => {
+      const rows = filtered().slice(page * per, page * per + per);
+      rows.forEach((d) => (e.target.checked ? sel.add(d.id) : sel.delete(d.id)));
+      draw();
+    };
+    $('[data-pager]', main).onclick = (e) => {
+      const p = e.target.closest('[data-pg]'); if (p) { page = Number(p.dataset.pg); draw(); window.scrollTo(0, 0); }
+      if (e.target.closest('[data-tot]')) { showTotal = true; draw(); }
+    };
+    $('[data-pager]', main).onchange = (e) => { if (e.target.matches('[data-per]')) { per = Number(e.target.value); store.set('acc.per', String(per)); page = 0; draw(); } };
+    const body = $('[data-body]', main);
+    body.addEventListener('change', async (e) => {
+      const ck = e.target.closest('[data-ck]');
+      if (ck) { const id = ck.closest('[data-id]').dataset.id; if (ck.checked) sel.add(id); else sel.delete(id); draw(); return; }
+      const st = e.target.closest('[data-st]'); if (!st) return;
+      const d = docs.find((x) => x.id === st.dataset.st);
+      const v = st.value;
+      try {
+        if (type === 'QT') { await post(`/docs/${d.id}/status`, { status: v }); d.status = v; toast('เปลี่ยนสถานะแล้ว'); }
+        if (type === 'IV' && v === 'paid') { location.hash = `#/new/RE?from=${d.id}`; return; }
+        if (type === 'EX' && v === 'paid') { if (await payExpense(d)) { d.status = 'paid'; toast('บันทึกจ่ายเงินแล้ว'); } }
+        if (type === 'EX' && v === 'open') {
+          if (await confirmBox('ยกเลิกการจ่ายเงิน', `${esc(d.number)} จะกลับเป็นรอจ่าย และรายการบัญชีการจ่ายจะถูกลบ`)) { await post(`/docs/${d.id}/pay`, { pay: null }); d.status = 'open'; }
+        }
+      } catch (err) { fail(err); }
+      draw();
+    });
+    body.addEventListener('click', (e) => {
+      if (e.target.closest('.ck, .st')) return;
+      const tr = e.target.closest('[data-id]'); if (!tr) return;
+      const d = docs.find((x) => x.id === tr.dataset.id);
+      const more = e.target.closest('[data-more]');
+      if (!more) { location.hash = `#/doc/${d.id}`; return; }
+      const live = d.status !== 'void';
+      const items = [['ดูเอกสาร', () => { location.hash = `#/doc/${d.id}`; }]];
+      if (live && !(type === 'IV' && d.status === 'paid')) items.push(['แก้ไข', () => { location.hash = `#/edit/${d.id}`; }]);
+      items.push(['ทำซ้ำ', () => { location.hash = `#/new/${type}?from=${d.id}&copy=1`; }]);
+      if (live && type === 'QT') items.push(['แปลงเป็นใบแจ้งหนี้', () => { location.hash = `#/new/IV?from=${d.id}`; }]);
+      if (live && type === 'IV' && d.status === 'open') items.push(['รับชำระเงิน', () => { location.hash = `#/new/RE?from=${d.id}`; }]);
+      if (live && isEx && d.status === 'open') items.push(['บันทึกจ่ายเงิน', async () => { try { if (await payExpense(d)) { d.status = 'paid'; draw(); } } catch (err) { fail(err); } }]);
+      items.push(null, ['ดาวน์โหลด PDF', async () => { try { toast('กำลังสร้าง PDF…'); await downloadDocs([d.id], printPrefs()); } catch (err) { fail(err); } }]);
+      if (!isEx) items.push(['ลิงก์ให้ลูกค้า', () => shareDoc(d).catch(fail)]);
+      if (isEx && d.attachment) items.push(['ดูไฟล์บิล', async () => { try { const { url } = await get(`/attachment?key=${encodeURIComponent(d.attachment)}`); window.open(url, '_blank', 'noopener'); } catch (err) { fail(err); } }]);
+      if (live) items.push(null, ['ยกเลิกเอกสาร', async () => { try { if (await voidDoc(d)) { toast('ยกเลิกแล้ว'); render(); } } catch (err) { fail(err); } }, { danger: true }]);
+      popMenu(more, items);
+    });
   }
 
   /* ---------- Contacts ---------- */
@@ -515,43 +726,160 @@
 
   /* ---------- Items ---------- */
 
+  const ITEM_KIND = { service: 'บริการ', product: 'สินค้าไม่นับสต็อก', stock: 'สินค้านับสต็อก' };
+  const KIND_ICON = {
+    service: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17h16M6 17a6 6 0 0 1 12 0M12 8V6M10 6h4"/></svg>',
+    product: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8h16v12H4zM3 4h18v4H3zM10 12h4"/></svg>',
+    stock: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 13h8v8H3zM13 13h8v8h-8zM8 3h8v8H8z"/></svg>',
+  };
+
+  // Shrinks a picked picture to a small square-ish data URL (item pictures, at most `max` px).
+  async function smallImage(file, max = 360) {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); });
+    const k = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.82);
+  }
+
+  // A photo of a signature or stamp on white paper → transparent PNG cropped to the ink.
+  async function cleanMark(file) {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); });
+    const k = Math.min(1, 640 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0, c.width, c.height);
+    const px = g.getImageData(0, 0, c.width, c.height);
+    const d = px.data;
+    let x0 = c.width; let y0 = c.height; let x1 = -1; let y1 = -1;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const sat = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+      let a = d[i + 3];
+      // Paper is light and grey; ink is dark, stamp ink is coloured. Fade the paper out.
+      if (sat < 40) { if (lum > 222) a = 0; else if (lum > 165) a = Math.round((a * (222 - lum)) / 57); } else if (lum > 238) a = 0;
+      d[i + 3] = a;
+      if (a > 24) { const p = i / 4; const x = p % c.width; const y = (p - x) / c.width; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    g.putImageData(px, 0, 0);
+    if (x1 < 0) return c.toDataURL('image/png');
+    x0 = Math.max(0, x0 - 4); y0 = Math.max(0, y0 - 4); x1 = Math.min(c.width - 1, x1 + 4); y1 = Math.min(c.height - 1, y1 + 4);
+    const o = document.createElement('canvas');
+    o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
+    o.getContext('2d').drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
+    return o.toDataURL('image/png');
+  }
+
   async function editItem(it = {}) {
+    let image = it.image || null;
+    const cats = [...new Set(S.boot.items.map((i) => i.category).filter(Boolean))];
+    const kind = it.kind || 'service';
     const saved = await dialog({
-      title: it.id ? 'แก้ไขสินค้า / บริการ' : 'เพิ่มสินค้า / บริการ',
-      body: `<div class="grid g2">
-        <div class="field span2"><span>ประเภท</span><div class="seg" data-seg="kind"><button type="button" data-v="service" class="${it.kind !== 'product' ? 'on' : ''}">บริการ</button><button type="button" data-v="product" class="${it.kind === 'product' ? 'on' : ''}">สินค้า</button></div><input type="hidden" name="kind" value="${it.kind || 'service'}"></div>
-        <label class="field span2"><span>ชื่อ</span><input type="text" name="name" value="${esc(it.name || '')}"></label>
-        <label class="field"><span>รหัส</span><input type="text" name="sku" value="${esc(it.sku || '')}"></label>
-        <label class="field"><span>หน่วย</span><input type="text" name="unit" value="${esc(it.unit || '')}" placeholder="ชิ้น, ชั่วโมง, เดือน"></label>
-        <label class="field"><span>ราคาขายต่อหน่วย</span><input type="number" step="0.01" name="price" class="num" value="${esc(it.price ?? '')}"></label>
-        <label class="field"><span>บัญชีรายได้</span><select name="account">${accOptions(['income'], it.account || (it.kind === 'product' ? sysAcc('sales') : sysAcc('service')))}</select></label>
-        <label class="field span2"><span>รายละเอียด (พิมพ์ใต้ชื่อในเอกสาร)</span><textarea name="description" rows="2">${esc(it.description || '')}</textarea></label>
-        ${it.id ? `<label class="check span2"><input type="checkbox" name="archived" ${it.archived ? 'checked' : ''}> ซ่อนรายการนี้</label>` : ''}
-      </div>`,
-      onOpen: bindSegs,
-      onOk: async (el) => (it.id ? await put(`/items/${it.id}`, formData(el)) : await post('/items', formData(el))).item,
+      title: it.id ? 'แก้ไขสินค้า / บริการ' : 'เพิ่มสินค้า / บริการ', wide: true,
+      body: `<div class="item-form">
+        <div class="item-pic"><div class="ip" data-ip>${image ? `<img src="${esc(image)}" alt="">` : 'รูปสินค้า'}</div>
+          <button type="button" class="btn sm" data-pick>เลือกรูป</button><button type="button" class="btn sm ghost" data-nopic ${image ? '' : 'hidden'}>เอาออก</button><input type="file" accept="image/*" hidden data-file></div>
+        <div class="grid g2">
+          <div class="field span2"><span>ประเภท</span><div class="seg" data-seg="kind">${Object.entries(ITEM_KIND).map(([v, l]) => `<button type="button" data-v="${v}" class="${kind === v ? 'on' : ''}">${l}</button>`).join('')}</div><input type="hidden" name="kind" value="${kind}"></div>
+          <label class="field span2"><span>ชื่อ</span><input type="text" name="name" value="${esc(it.name || '')}"></label>
+          <label class="field"><span>รหัสสินค้า</span><input type="text" name="sku" value="${esc(it.sku || '')}"></label>
+          <label class="field"><span>บาร์โค้ด</span><input type="text" name="barcode" inputmode="numeric" value="${esc(it.barcode || '')}"></label>
+          <label class="field"><span>หน่วย</span><input type="text" name="unit" value="${esc(it.unit || '')}" placeholder="ชิ้น, ชั่วโมง, เดือน"></label>
+          <label class="field"><span>หมวดสินค้า</span><input type="text" name="category" list="cat-dl" value="${esc(it.category || '')}"><datalist id="cat-dl">${cats.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
+          <label class="field"><span>ราคาขายต่อหน่วย</span><input type="number" step="0.01" name="price" class="num" value="${esc(it.price ?? '')}"></label>
+          <label class="field"><span>ราคาทุน / ราคาซื้อ</span><input type="number" step="0.01" name="cost" class="num" value="${esc(Number(it.cost) ? it.cost : '')}"></label>
+          <label class="field" data-stock-only><span>ยอดยกมา (จำนวนตั้งต้น)</span><input type="number" step="any" name="stock_open" class="num" value="${esc(Number(it.stock_open) ? it.stock_open : '')}"><small>ขายแล้วลด ซื้อ (บันทึกค่าใช้จ่าย) แล้วเพิ่ม</small></label>
+          <label class="field"><span>บัญชีรายได้</span><select name="account">${accOptions(['income'], it.account || (kind === 'service' ? sysAcc('service') : sysAcc('sales')))}</select></label>
+          <label class="field span2"><span>รายละเอียด (พิมพ์ใต้ชื่อในเอกสาร)</span><textarea name="description" rows="2">${esc(it.description || '')}</textarea></label>
+          ${it.id ? `<label class="check span2"><input type="checkbox" name="archived" ${it.archived ? 'checked' : ''}> ซ่อนรายการนี้</label>` : ''}
+        </div></div>`,
+      onOpen: (el) => {
+        bindSegs(el);
+        const sync = () => { $('[data-stock-only]', el).hidden = $('input[name=kind]', el).value !== 'stock'; };
+        sync();
+        $('[data-seg=kind]', el).addEventListener('click', () => setTimeout(sync));
+        const f = $('[data-file]', el);
+        $('[data-pick]', el).onclick = () => f.click();
+        $('[data-nopic]', el).onclick = (e) => { image = null; $('[data-ip]', el).textContent = 'รูปสินค้า'; e.target.hidden = true; };
+        f.onchange = async () => { if (!f.files[0]) return; image = await smallImage(f.files[0]); $('[data-ip]', el).innerHTML = `<img src="${image}" alt="">`; $('[data-nopic]', el).hidden = false; };
+      },
+      onOk: async (el) => {
+        const d = { ...formData(el), image };
+        return (it.id ? await put(`/items/${it.id}`, d) : await post('/items', d)).item;
+      },
     });
     if (saved) {
       const i = S.boot.items.findIndex((x) => x.id === saved.id);
       if (i >= 0) S.boot.items[i] = saved; else S.boot.items.push(saved);
+      S.boot.items.sort((a, b) => a.name.localeCompare(b.name, 'th'));
     }
     return saved;
   }
 
-  function viewItems(main) {
-    main.innerHTML = `<div class="page-h"><div><h1>สินค้า / บริการ</h1><div class="sub">เลือกใช้ในเอกสารขายได้ทันที</div></div><div class="actions"><button class="btn primary" data-new>${ICON.plus}เพิ่มรายการ</button></div></div>
-      <div class="card"><div class="filters"><input type="search" placeholder="ค้นหา" data-q></div>
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>บัญชีรายได้</th><th class="num">ราคา</th></tr></thead><tbody data-body></tbody></table></div></div>`;
-    const draw = () => {
+  async function viewItems(main, q) {
+    let kind = ['service', 'product', 'stock'].includes(q.get('k')) ? q.get('k') : '';
+    let sort = 'name';
+    let dir = 1;
+    const [{ stock }] = await Promise.all([get('/stock'), loadBoot()]);
+    const onHand = (i) => Math.round((Number(i.stock_open) + (stock[i.id]?.bought || 0) - (stock[i.id]?.sold || 0)) * 10000) / 10000;
+    main.innerHTML = `<div class="page-h"><div><h1>สินค้า / บริการ</h1><div class="sub">เลือกใช้ในเอกสารขายและค่าใช้จ่ายได้ทันที</div></div>
+      <div class="actions"><button class="btn" data-xls>ดาวน์โหลด Excel</button><button class="btn primary" data-new>${ICON.plus}เพิ่มรายการ</button></div></div>
+      <div class="card"><div class="filters">
+        <div class="seg" data-k><button data-v="" class="${kind ? '' : 'on'}">แสดงทั้งหมด</button>${Object.entries(ITEM_KIND).map(([v, l]) => `<button data-v="${v}" class="${v === kind ? 'on' : ''}">${KIND_ICON[v]} ${l}</button>`).join('')}</div>
+        <label class="check"><input type="checkbox" data-arch> แสดงที่ซ่อน</label>
+        <input type="search" placeholder="ค้นหาจาก ชื่อ, รหัสสินค้า หรือบาร์โค้ด" data-q style="margin-left:auto;max-width:320px"></div>
+      <div class="tbl-wrap"><table class="tbl item-tbl"><thead><tr><th></th><th></th><th class="sort" data-sort="sku">รหัสสินค้า</th><th class="sort" data-sort="name">ชื่อสินค้า</th><th class="num sort" data-sort="price">ราคาต่อหน่วย</th><th class="num sort" data-sort="stock">จำนวนคงคลัง</th><th>หมวดสินค้า</th><th></th></tr></thead><tbody data-body></tbody></table></div></div>`;
+    const rowsOf = () => {
       const s = $('[data-q]', main).value.trim().toLowerCase();
-      const rows = S.boot.items.filter((i) => !s || i.name.toLowerCase().includes(s) || (i.sku || '').toLowerCase().includes(s));
-      $('[data-body]', main).innerHTML = rows.length ? rows.map((i) => `<tr class="click" data-id="${i.id}"><td><b>${esc(i.name)}</b>${i.archived ? ' <span class="chip">ซ่อน</span>' : ''}${i.sku ? `<div class="muted mono" style="font-size:12px">${esc(i.sku)}</div>` : ''}</td><td>${i.kind === 'product' ? 'สินค้า' : 'บริการ'}</td><td>${esc(accName(i.account) || '')}</td><td class="num">${money(i.price)}${i.unit ? ` <span class="muted">/ ${esc(i.unit)}</span>` : ''}</td></tr>`).join('')
-        : '<tr><td colspan="4"><div class="empty"><b>ยังไม่มีสินค้าหรือบริการ</b>บันทึกไว้เพื่อกรอกเอกสารได้เร็วขึ้น</div></td></tr>';
+      const arch = $('[data-arch]', main).checked;
+      const key = (i) => (sort === 'price' ? Number(i.price) : sort === 'stock' ? (i.kind === 'stock' ? onHand(i) : -Infinity) : String(i[sort] || ''));
+      return S.boot.items.filter((i) => (arch || !i.archived) && (!kind || i.kind === kind)
+        && (!s || i.name.toLowerCase().includes(s) || (i.sku || '').toLowerCase().includes(s) || (i.barcode || '').includes(s)))
+        .sort((a, b) => { const x = key(a); const y = key(b); return (typeof x === 'number' ? x - y : x.localeCompare(y, 'th')) * dir; });
+    };
+    const draw = () => {
+      const rows = rowsOf();
+      $$('[data-sort]', main).forEach((th) => { th.classList.toggle('on', th.dataset.sort === sort); th.dataset.dir = dir > 0 ? '▲' : '▼'; });
+      $('[data-body]', main).innerHTML = rows.length ? rows.map((i) => {
+        const n = i.kind === 'stock' ? onHand(i) : null;
+        return `<tr class="click" data-id="${i.id}">
+        <td class="th-cell"><div class="thumb">${i.image ? `<img src="${esc(i.image)}" alt="">` : ICON.items}</div></td>
+        <td class="kind-ic" title="${ITEM_KIND[i.kind] || ''}">${KIND_ICON[i.kind] || KIND_ICON.service}</td>
+        <td class="mono">${esc(i.sku || '')}</td>
+        <td><b>${esc(i.name)}</b>${i.archived ? ' <span class="chip">ซ่อน</span>' : ''}${i.barcode ? `<div class="muted mono" style="font-size:12px">${esc(i.barcode)}</div>` : ''}</td>
+        <td class="num">${money(i.price)}${i.unit ? ` <span class="muted">/ ${esc(i.unit)}</span>` : ''}</td>
+        <td class="num">${n === null ? '<span class="muted">-</span>' : `<span style="${n <= 0 ? 'color:var(--bad);font-weight:600' : ''}">${T.qtyFmt(n)}</span>`}</td>
+        <td>${i.category ? `<span class="cat" style="--c:${catTone(i.category)}">${esc(i.category)}</span>` : ''}</td>
+        <td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`;
+      }).join('')
+        : '<tr><td colspan="8"><div class="empty"><b>ไม่มีสินค้าหรือบริการ</b>บันทึกไว้เพื่อกรอกเอกสารได้เร็วขึ้น</div></td></tr>';
     };
     draw();
     $('[data-q]', main).oninput = draw;
-    $('[data-new]', main).onclick = async () => { if (await editItem()) draw(); };
-    $('[data-body]', main).onclick = async (e) => { const tr = e.target.closest('[data-id]'); if (tr && await editItem(S.boot.items.find((i) => i.id === tr.dataset.id))) draw(); };
+    $('[data-arch]', main).onchange = draw;
+    $('[data-k]', main).onclick = (e) => { const b = e.target.closest('button'); if (!b) return; kind = b.dataset.v; $$('[data-k] button', main).forEach((x) => x.classList.toggle('on', x === b)); draw(); };
+    main.querySelector('thead').onclick = (e) => { const th = e.target.closest('[data-sort]'); if (!th) return; dir = sort === th.dataset.sort ? -dir : 1; sort = th.dataset.sort; draw(); };
+    $('[data-new]', main).onclick = async () => { if (await editItem({ kind: kind || 'service' })) draw(); };
+    $('[data-xls]', main).onclick = () => excel(`สินค้าและบริการ-${T.today()}`, [
+      ['ประเภท', 'รหัสสินค้า', 'บาร์โค้ด', 'ชื่อสินค้า', 'หน่วย', 'ราคาขาย', 'ราคาทุน', 'จำนวนคงคลัง', 'หมวดสินค้า'],
+      ...rowsOf().map((i) => [ITEM_KIND[i.kind] || '', i.sku || '', i.barcode || '', i.name, i.unit || '', Number(i.price), Number(i.cost), i.kind === 'stock' ? onHand(i) : '', i.category || '']),
+    ], 'สินค้า');
+    $('[data-body]', main).onclick = async (e) => {
+      const tr = e.target.closest('[data-id]'); if (!tr) return;
+      const it = S.boot.items.find((i) => i.id === tr.dataset.id);
+      const more = e.target.closest('[data-more]');
+      if (!more) { if (await editItem(it)) draw(); return; }
+      popMenu(more, [
+        ['แก้ไข', async () => { if (await editItem(it)) draw(); }],
+        ['ทำซ้ำ', async () => { const { id: _, ...copy } = it; if (await editItem({ ...copy, name: `${it.name} (สำเนา)` })) draw(); }],
+        ['สร้างใบแจ้งหนี้', () => { location.hash = `#/new/IV?item=${it.id}`; }],
+        null,
+        [it.archived ? 'แสดงรายการนี้' : 'ซ่อนรายการนี้', async () => {
+          try { const { item } = await put(`/items/${it.id}`, { ...it, archived: !it.archived }); Object.assign(it, item); draw(); } catch (err) { fail(err); }
+        }, { danger: !it.archived }],
+      ]);
+    };
   }
 
   /* ---------- Document editor ---------- */
@@ -581,6 +909,10 @@
           lines: src.lines.map((l) => ({ ...l })), discount: src.discount, tax_invoice: type === 'IV' ? src.tax_invoice : false,
         });
         if (q.get('copy') !== '1') doc.ref_id = src.id; else src = null;
+      }
+      const pick = q.get('item') && S.boot.items.find((i) => i.id === q.get('item'));
+      if (pick && !from) {
+        doc.lines = [{ ...blankLine(type), name: pick.name, desc: pick.description || '', unit: pick.unit || '', price: Number(type === 'EX' && Number(pick.cost) ? pick.cost : pick.price), itemId: pick.id, ...(type !== 'EX' && pick.account ? { account: pick.account } : {}) }];
       }
       if (type === 'RE') doc.pay = { date: T.today(), account: sysAcc('bank') || sysAcc('cash'), method: 'transfer', fee: 0 };
     }
@@ -710,7 +1042,7 @@
       if (f === 'name') {
         const it = S.boot.items.find((x) => x.name === e.target.value);
         if (it) {
-          Object.assign(l, { price: Number(it.price), unit: it.unit || '', desc: it.description || l.desc, account: !isEx && it.account ? it.account : l.account, itemId: it.id });
+          Object.assign(l, { price: Number(isEx && Number(it.cost) ? it.cost : it.price), unit: it.unit || '', desc: it.description || l.desc, account: !isEx && it.account ? it.account : l.account, itemId: it.id });
           drawLines(); return;
         }
       }
@@ -893,11 +1225,22 @@
     if (live && t === 'EX' && doc.status === 'paid') more.push('<button class="btn" data-act="unpay">ยกเลิกการจ่าย</button>');
     if (live) more.push('<button class="btn danger" data-act="void">ยกเลิกเอกสาร</button>');
 
+    const canSign = !!(b.signature || b.stamp);
+    const billing = t === 'QT' || t === 'IV';
+    const P = printPrefs();
     main.innerHTML = `<div class="page-h"><div><h1><span class="mono">${esc(doc.number)}</span></h1><div class="sub">${esc(T.docTitle(doc)[0])} · ${statusChip(t, doc.status)}</div></div>
-      <div class="actions">${acts.join('')}<button class="btn dark" data-act="print">${ICON.print}พิมพ์ / PDF</button></div></div>
+      <div class="actions">${acts.join('')}<button class="btn" data-act="pdf">ดาวน์โหลด PDF</button><button class="btn dark" data-act="print">${ICON.print}พิมพ์</button></div></div>
       <div class="view">
-        <div class="paper-wrap" data-paper>${T.renderDoc(printable, b)}</div>
+        <div class="paper-wrap" data-paper></div>
         <div class="side">
+          <div class="card card-pad po"><h2>${esc(T.TYPE_NAME[t])}</h2>
+            <div class="po-row"><label class="check"><input type="checkbox" data-po="original" ${P.original ? 'checked' : ''}> ต้นฉบับ</label>
+              ${t !== 'EX' ? `<label class="check"><input type="checkbox" data-po="copy" ${P.copy ? 'checked' : ''}> สำเนา</label><input type="number" min="1" max="5" data-po="copies" value="${P.copies}" class="po-n" aria-label="จำนวนสำเนา">` : ''}</div>
+            ${billing ? `<label class="sw-row"><span>ข้อมูลการรับชำระ</span><input type="checkbox" class="sw" data-po="pay" ${P.pay ? 'checked' : ''}></label>` : ''}
+            <label class="sw-row${canSign ? '' : ' off'}"><span>ลายเซ็นและตราประทับ${canSign ? '' : '<small>อัปโหลดได้ที่ <a href="#/settings">ตั้งค่า</a></small>'}</span><input type="checkbox" class="sw" data-po="sign" ${P.sign ? 'checked' : ''} ${canSign ? '' : 'disabled'}></label>
+            <label class="sw-row"><span>ภาษาเอกสาร</span><select data-po="lang" style="width:auto"><option value="th" ${P.lang === 'th' ? 'selected' : ''}>ไทย</option><option value="en" ${P.lang === 'en' ? 'selected' : ''}>English</option></select></label>
+            <div class="muted" style="font-size:12px" data-pages></div>
+          </div>
           <div class="card card-pad"><dl class="kv">
             <dt>${t === 'EX' ? 'ผู้ขาย' : 'ลูกค้า'}</dt><dd>${esc(doc.contact?.name || '')}</dd>
             <dt>ยอดรวม</dt><dd class="num">${money(doc.total)}</dd>
@@ -916,47 +1259,44 @@
     : `<div class="muted" style="font-size:13px">${t === 'QT' ? 'ใบเสนอราคาไม่ลงบัญชี' : doc.status === 'void' ? 'เอกสารถูกยกเลิก ไม่มีรายการบัญชี' : '—'}</div>`}</div>
         </div>
       </div>`;
-    fitPaper(main);
+
+    // Options → preview of the first page, and what print / download produce.
+    const opts = () => {
+      const o = { ...P };
+      $$('[data-po]', main).forEach((i) => { o[i.dataset.po] = i.type === 'checkbox' ? i.checked : i.type === 'number' ? Number(i.value) || 1 : i.value; });
+      if (!canSign) o.sign = false;
+      return o;
+    };
+    const preview = () => {
+      const o = opts();
+      savePrintPrefs(o);
+      const html = T.renderSet(printable, b, o);
+      const n = (html.match(/<article class="paper/g) || []).length;
+      const first = !o.original && o.copy !== false && t !== 'EX' ? 'copy' : 'original';
+      $('[data-paper]', main).innerHTML = T.renderDoc(printable, b, { ...o, copy: first, page: n > 1 ? '1' : '' });
+      $('[data-pages]', main).textContent = `ดาวน์โหลดหรือพิมพ์ได้ ${n} หน้า`;
+      fitPaper(main);
+    };
+    preview();
+    main.addEventListener('change', (e) => { if (e.target.closest('[data-po]')) preview(); });
 
     main.onclick = async (e) => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
       try {
-        if (act === 'print') printHtml(T.renderDoc(printable, b, { copy: 'ต้นฉบับ' }) + (t === 'EX' ? '' : T.renderDoc(printable, b, { copy: 'สำเนา' })));
+        if (act === 'pdf') {
+          a.disabled = true;
+          const label = a.textContent;
+          a.textContent = 'กำลังสร้าง PDF…';
+          try { await T.downloadPdf(T.renderSet(printable, b, opts()), `${doc.number}.pdf`); } finally { a.disabled = false; a.textContent = label; }
+        }
+        if (act === 'print') printHtml(T.renderSet(printable, b, opts()));
         if (act === 'wht') printHtml(T.renderWht(doc, b));
-        if (act === 'share') {
-          const { token } = await post(`/docs/${doc.id}/share`);
-          const url = `${location.origin}${location.pathname.replace(/[^/]*$/, '')}doc.html?t=${token}`;
-          await dialog({
-            title: 'ลิงก์สำหรับลูกค้า', ok: 'คัดลอกลิงก์', cancel: 'ปิด', extra: '<button class="btn danger" data-off>ปิดลิงก์</button>',
-            body: `<p class="muted" style="margin-top:0">ลูกค้าเปิดดูและบันทึกเป็น PDF ได้โดยไม่ต้องเข้าสู่ระบบ</p><input type="text" readonly value="${esc(url)}">`,
-            onOpen: (el, close) => { $('[data-off]', el).onclick = async () => { await post(`/docs/${doc.id}/share`, { off: true }); toast('ปิดลิงก์แล้ว'); close(); render(); }; },
-            onOk: async () => { await navigator.clipboard.writeText(url).catch(() => {}); toast('คัดลอกลิงก์แล้ว'); return true; },
-          });
-          render();
-        }
-        if (act === 'pay') {
-          const ok = await dialog({
-            title: `จ่ายเงิน ${doc.number}`,
-            body: `<div class="grid g2"><label class="field"><span>วันที่จ่าย</span><input type="date" name="date" value="${T.today()}"></label>
-              <label class="field"><span>จ่ายจาก</span><select name="account">${moneyAccounts().map((m) => `<option value="${m.code}" ${m.sys === 'bank' ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
-              <label class="field"><span>วิธีชำระ</span><select name="method">${Object.entries(T.PAY_METHOD).map(([k, v]) => `<option value="${k}" ${k === 'transfer' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-              <label class="field"><span>ค่าธรรมเนียม</span><input type="number" step="0.01" name="fee" class="num" placeholder="0"></label></div>
-              <p class="muted">ยอดจ่าย ${money(doc.total - doc.wht)} บาท${doc.wht ? ` (หัก ณ ที่จ่าย ${money(doc.wht)} บาท ระบบออกเลขที่ 50 ทวิ ให้)` : ''}</p>`,
-            onOk: async (el) => post(`/docs/${doc.id}/pay`, { pay: formData(el) }),
-          });
-          if (ok) { toast('บันทึกจ่ายเงินแล้ว'); render(); }
-        }
+        if (act === 'share') { await shareDoc(doc); render(); }
+        if (act === 'pay' && await payExpense(doc)) { toast('บันทึกจ่ายเงินแล้ว'); render(); }
         if (act === 'unpay' && await confirmBox('ยกเลิกการจ่ายเงิน', 'รายการจะกลับเป็นรอจ่าย และรายการบัญชีการจ่ายจะถูกลบ')) { await post(`/docs/${doc.id}/pay`, { pay: null }); render(); }
         if (act === 'qt') { await post(`/docs/${doc.id}/status`, { status: a.dataset.v }); render(); }
-        if (act === 'void') {
-          const ok = await dialog({
-            title: `ยกเลิก ${doc.number}`, ok: 'ยกเลิกเอกสาร', danger: true,
-            body: `<p style="margin-top:0">เอกสารจะถูกขีดว่ายกเลิก เลขที่เดิมจะไม่ถูกนำมาใช้ซ้ำ และรายการบัญชีของเอกสารนี้จะถูกลบ</p><label class="field"><span>เหตุผล</span><input type="text" name="reason"></label>`,
-            onOk: async (el) => post(`/docs/${doc.id}/void`, formData(el)),
-          });
-          if (ok) { toast('ยกเลิกแล้ว'); render(); }
-        }
+        if (act === 'void' && await voidDoc(doc)) { toast('ยกเลิกแล้ว'); render(); }
         if (act === 'file') { const { url } = await get(`/attachment?key=${encodeURIComponent(doc.attachment)}`); window.open(url, '_blank', 'noopener'); }
       } catch (err) { fail(err); }
     };
@@ -1113,17 +1453,19 @@
     balance: ['งบแสดงฐานะการเงิน', 'สินทรัพย์ หนี้สิน และส่วนของเจ้าของ', 'asof', 'fs'],
     trial: ['งบทดลอง', 'ยอดเดบิต เครดิต ทุกบัญชี', 'range', 'fs'],
     ledger: ['บัญชีแยกประเภท', 'ความเคลื่อนไหวรายบัญชี', 'range', 'books'],
+    sales: ['รายงานสรุปยอดขาย', 'ใบแจ้งหนี้และขายสด ตามเอกสาร ลูกค้า หรือสินค้า', 'sales', 'sales'],
     ar: ['ลูกหนี้ค้างรับ', 'ใบแจ้งหนี้ที่ยังไม่ได้รับเงิน แยกตามอายุหนี้', 'none', 'books'],
     ap: ['เจ้าหนี้ค้างจ่าย', 'ค่าใช้จ่ายที่ยังไม่ได้จ่าย', 'none', 'books'],
   };
 
   function viewReports(main) {
-    const groups = [['tax', 'ภาษี'], ['fs', 'งบการเงิน'], ['books', 'สมุดบัญชีและติดตามหนี้']];
-    main.innerHTML = `<div class="page-h"><div><h1>รายงาน</h1><div class="sub">ส่งออกเป็น Excel (CSV) หรือพิมพ์ได้ทุกรายงาน</div></div></div>
+    const groups = [['sales', 'ขาย'], ['tax', 'ภาษี'], ['fs', 'งบการเงิน'], ['books', 'สมุดบัญชีและติดตามหนี้']];
+    main.innerHTML = `<div class="page-h"><div><h1>รายงาน</h1><div class="sub">ดาวน์โหลดเป็น Excel หรือพิมพ์ได้ทุกรายงาน</div></div></div>
       ${groups.map(([g, h]) => `<div class="rep-h">${h}</div><div class="rep-grid">${Object.entries(REPORTS).filter(([, r]) => r[3] === g && (g !== 'tax' || biz().vat_registered || !r[0].includes('ภาษีมูลค่าเพิ่ม') && !r[0].includes('ภาษีขาย') && !r[0].includes('ภาษีซื้อ'))).map(([k, r]) => `<a class="card" href="#/report/${k}"><b>${r[0]}</b><small>${r[1]}</small></a>`).join('')}</div>`).join('')}`;
   }
 
   async function viewReport(main, name, q) {
+    if (name === 'sales') return viewSales(main, q);
     const R = REPORTS[name];
     if (!R) { main.innerHTML = '<div class="empty"><b>ไม่พบรายงาน</b></div>'; return; }
     const [title, , mode] = R;
@@ -1145,7 +1487,7 @@
     const { head, body, foot, rows: csvRows, extra = '' } = reportTable(name, d);
     const periodText = mode === 'month' ? `เดือน ${T.thMonth(month)}` : mode === 'asof' ? `ณ วันที่ ${T.thDate(to)}` : mode === 'range' ? `${T.thDate(from)} – ${T.thDate(to)}` : `ณ วันที่ ${T.thDate(T.today())}`;
     main.innerHTML = `<div class="page-h"><div><a href="#/reports" class="muted" style="text-decoration:none">← รายงาน</a><h1>${esc(title)}</h1><div class="sub">${esc(biz().name)} · ${esc(periodText)}</div></div>
-      <div class="actions">${ctl}<button class="btn" data-csv>ส่งออก Excel</button><button class="btn dark" data-print>${ICON.print}พิมพ์</button></div></div>
+      <div class="actions">${ctl}<button class="btn" data-csv>ดาวน์โหลด Excel</button><button class="btn dark" data-print>${ICON.print}พิมพ์</button></div></div>
       ${extra}
       <div class="card"><div class="tbl-wrap"><table class="tbl" data-tbl><thead>${head}</thead><tbody>${body || `<tr><td colspan="9"><div class="empty"><b>ไม่มีรายการ</b></div></td></tr>`}</tbody>${foot ? `<tfoot>${foot}</tfoot>` : ''}</table></div></div>`;
     main.addEventListener('change', (e) => {
@@ -1155,8 +1497,72 @@
       if (mode === 'range') { p.set('from', $('[data-c=from]', main).value); p.set('to', $('[data-c=to]', main).value); }
       location.hash = `#/report/${name}?${p}`;
     });
-    $('[data-csv]', main).onclick = () => csv(`${title}-${mode === 'month' ? month : to}`, csvRows);
+    $('[data-csv]', main).onclick = () => excel(`${title}-${mode === 'month' ? month : to}`, csvRows, title);
     $('[data-print]', main).onclick = () => printHtml(`<div class="print-report"><h2 style="margin:0">${esc(title)}</h2><div>${esc(biz().name)}${biz().tax_id ? ` · เลขประจำตัวผู้เสียภาษี ${esc(T.taxIdFmt(biz().tax_id))}` : ''}</div><div style="margin-bottom:10px">${esc(periodText)}</div>${extra}<table>${$('[data-tbl]', main).innerHTML}</table></div>`);
+    main.querySelector('tbody').onclick = (e) => { const tr = e.target.closest('[data-doc]'); if (tr) location.hash = `#/doc/${tr.dataset.doc}`; };
+  }
+
+  /* ---------- Sales summary ---------- */
+
+  const SALES_STATUS = { '': 'สถานะทั้งหมด', open: 'รอรับชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิก' };
+  async function viewSales(main, q) {
+    const now = ymNow();
+    const preset = q.get('r') || 'month';
+    const ranges = {
+      month: monthRange(now),
+      last: (() => { const d = new Date(`${now}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return monthRange(d.toISOString().slice(0, 7)); })(),
+      quarter: (() => { const [y, m] = now.split('-').map(Number); const s = Math.floor((m - 1) / 3) * 3 + 1; return [`${y}-${String(s).padStart(2, '0')}-01`, monthRange(`${y}-${String(s + 2).padStart(2, '0')}`)[1]]; })(),
+      year: [`${now.slice(0, 4)}-01-01`, `${now.slice(0, 4)}-12-31`],
+    };
+    const [from, to] = preset === 'custom' ? [q.get('from') || ranges.month[0], q.get('to') || ranges.month[1]] : ranges[preset] || ranges.month;
+    const status = Object.keys(SALES_STATUS).includes(q.get('s') || '') ? q.get('s') || '' : '';
+    const by = ['customer', 'item'].includes(q.get('by')) ? q.get('by') : 'doc';
+    const d = await get(`/reports/sales?from=${from}&to=${to}&by=${by}${status ? `&status=${status}` : ''}`);
+    const b = biz();
+    const stName = (r) => (r.status === 'paid' && r.type === 'RE' ? 'ชำระแล้ว (ขายสด)' : SALES_STATUS[r.status] || r.status);
+    const cols = by === 'doc' ? ['เลขที่เอกสาร', 'วันที่', 'ชื่อลูกค้า', 'มูลค่า', 'ภาษีมูลค่าเพิ่ม', 'ยอดรวมสุทธิ', 'สถานะ']
+      : by === 'customer' ? ['ชื่อลูกค้า', 'เลขผู้เสียภาษี', 'จำนวนเอกสาร', 'มูลค่า', 'ภาษีมูลค่าเพิ่ม', 'ยอดรวมสุทธิ']
+        : ['สินค้า / บริการ', 'จำนวนที่ขาย', 'หน่วย', 'จำนวนเอกสาร', 'มูลค่าก่อนภาษี'];
+    const numCols = by === 'doc' ? [3, 4, 5] : by === 'customer' ? [2, 3, 4, 5] : [1, 3, 4];
+    const cells = (r) => (by === 'doc' ? [r.number, T.thDate(r.date), r.name, money(r.value), money(r.vat), money(r.total), stName(r)]
+      : by === 'customer' ? [r.name, T.taxIdFmt(r.tax_id), r.count, money(r.value), money(r.vat), money(r.total)]
+        : [r.name, T.qtyFmt(r.qty), r.unit, r.docs, money(r.value)]);
+    const raw = (r) => (by === 'doc' ? [r.number, r.date, r.name, r.value, r.vat, r.total, stName(r)]
+      : by === 'customer' ? [r.name, r.tax_id, r.count, r.value, r.vat, r.total] : [r.name, r.qty, r.unit, r.docs, r.value]);
+    const table = `<table class="tbl sales-tbl" data-tbl><thead><tr>${cols.map((c, i) => `<th class="${numCols.includes(i) ? 'num' : ''}">${c}</th>`).join('')}</tr></thead>
+      <tbody>${d.rows.length ? d.rows.map((r) => `<tr${by === 'doc' ? ` class="click${r.status === 'void' ? ' void' : ''}" data-doc="${r.id}"` : ''}>${cells(r).map((c, i) => `<td class="${numCols.includes(i) ? 'num' : ''}">${i === 0 && by === 'doc' ? `<span class="doc-no">${esc(c)}</span>` : esc(c)}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${cols.length}"><div class="empty"><b>ไม่มียอดขายในช่วงนี้</b>ลองเปลี่ยนช่วงเวลาหรือสถานะ</div></td></tr>`}</tbody></table>`;
+    const period = `${T.thDate(from)} – ${T.thDate(to)}`;
+    const head = `<div class="sum-head"><div><div class="sum-biz">${esc(b.name)}</div>
+        <dl><dt>ณ วันที่</dt><dd>${T.thDate(T.today())}</dd><dt>ช่วงเวลา</dt><dd>${period}</dd><dt>จำนวนทั้งหมด</dt><dd>${d.totals.count} เอกสาร</dd></dl></div>
+        <dl class="sum-tot"><dt>ยอดรวมทั้งสิ้น</dt><dd class="big">${money(d.totals.total)}</dd><dt>ภาษีมูลค่าเพิ่ม</dt><dd>${money(d.totals.vat)}</dd><dt>ยอดรวมก่อนภาษี</dt><dd>${money(d.totals.value)}</dd></dl></div>`;
+    main.innerHTML = `<div class="page-h"><div><a href="#/reports" class="muted" style="text-decoration:none">← รายงาน</a><h1>รายงานสรุปยอดขาย</h1><div class="sub">ใบแจ้งหนี้และขายสด (ใบเสร็จที่ไม่ได้ออกจากใบแจ้งหนี้)</div></div>
+      <div class="actions"><button class="btn" data-xls>ดาวน์โหลด Excel</button><button class="btn dark" data-print>${ICON.print}พิมพ์รายงาน</button></div></div>
+      <div class="filters card" style="margin-bottom:14px">
+        <select data-c="r">${[['month', 'เดือนปัจจุบัน'], ['last', 'เดือนก่อน'], ['quarter', 'ไตรมาสนี้'], ['year', 'ปีนี้'], ['custom', 'กำหนดเอง']].map(([v, l]) => `<option value="${v}" ${v === preset ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <span data-custom ${preset === 'custom' ? '' : 'hidden'}><input type="date" value="${from}" data-c="from" style="width:auto"> <span class="muted">ถึง</span> <input type="date" value="${to}" data-c="to" style="width:auto"></span>
+        <select data-c="s">${Object.entries(SALES_STATUS).map(([v, l]) => `<option value="${v}" ${v === status ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+      <div class="card card-pad">${head}
+        <div class="tabs" data-by>${[['doc', 'ตามเอกสาร'], ['customer', 'ตามลูกค้า'], ['item', 'ตามสินค้า']].map(([v, l]) => `<button data-v="${v}" class="${v === by ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="tbl-wrap">${table}</div></div>`;
+    const go = (patch) => {
+      const p = new URLSearchParams({ r: preset, s: status, by, ...(preset === 'custom' ? { from, to } : {}), ...patch });
+      if (p.get('r') !== 'custom') { p.delete('from'); p.delete('to'); }
+      location.hash = `#/report/sales?${p}`;
+    };
+    main.addEventListener('change', (e) => {
+      const c = e.target.dataset.c; if (!c) return;
+      if (c === 'r' && e.target.value === 'custom') { go({ r: 'custom', from, to }); return; }
+      go({ [c]: e.target.value });
+    });
+    $('[data-by]', main).onclick = (e) => { const t = e.target.closest('[data-v]'); if (t) go({ by: t.dataset.v }); };
+    $('[data-xls]', main).onclick = () => excel(`สรุปยอดขาย-${from}-${to}`, [
+      [`รายงานสรุปยอดขาย ${b.name}`], [`ช่วงเวลา ${period}`], [],
+      cols, ...d.rows.map(raw), [],
+      ['ยอดรวมก่อนภาษี', d.totals.value], ['ภาษีมูลค่าเพิ่ม', d.totals.vat], ['ยอดรวมทั้งสิ้น', d.totals.total],
+    ], 'สรุปยอดขาย');
+    $('[data-print]', main).onclick = () => printHtml(`<div class="print-report"><h2 style="margin:0">รายงานสรุปยอดขาย</h2>${head}${table}</div>`);
     main.querySelector('tbody').onclick = (e) => { const tr = e.target.closest('[data-doc]'); if (tr) location.hash = `#/doc/${tr.dataset.doc}`; };
   }
 
@@ -1277,18 +1683,77 @@
         </div>
         <div class="card card-pad"><h2>เอกสาร</h2><div class="grid g2">
           <div class="field span2"><span>ตัวอักษรนำหน้าเลขที่เอกสาร</span><div class="grid g4">${[['QT', 'ใบเสนอราคา'], ['IV', 'ใบแจ้งหนี้'], ['RE', 'ใบเสร็จ'], ['EX', 'ค่าใช้จ่าย'], ['JV', 'สมุดรายวัน'], ['WHT', '50 ทวิ']].map(([k, l]) => `<label class="field"><small>${l}</small><input type="text" data-prefix="${k}" value="${esc(P[k] || k)}" maxlength="8"></label>`).join('')}</div><small>เลขที่จะเป็น ตัวนำหน้า + ปี ค.ศ. + เดือน + ลำดับ เช่น IV2026110001</small></div>
-          <label class="field"><span>ชื่อผู้มีอำนาจลงนาม</span><input type="text" data-s="signer" value="${esc(s.signer || '')}"></label>
           <label class="field"><span>เครดิตเทอมเริ่มต้น (วัน)</span><input type="number" data-s="creditDays" min="0" value="${esc(s.creditDays ?? 30)}"></label>
           <label class="field"><span>ราคาสินค้าเริ่มต้น</span><select data-s="priceMode"><option value="excl" ${s.priceMode !== 'incl' ? 'selected' : ''}>ไม่รวม VAT</option><option value="incl" ${s.priceMode === 'incl' ? 'selected' : ''}>รวม VAT แล้ว</option></select></label>
           <label class="field"><span>เดือนเริ่มรอบบัญชี</span><select data-s="fyStart">${T.TH_MONTHS_LONG.map((mn, i) => `<option value="${i + 1}" ${(s.fyStart || 1) === i + 1 ? 'selected' : ''}>${mn}</option>`).join('')}</select></label>
           <label class="field"><span>สีหัวเอกสาร</span><input type="color" data-s="color" value="${esc(s.color || '#E8590C')}" style="height:38px;padding:2px"></label>
-          <label class="field span2"><span>ช่องทางชำระเงิน (พิมพ์ในใบเสนอราคาและใบแจ้งหนี้)</span><textarea data-s="payment" rows="2" placeholder="ธนาคารกสิกรไทย 123-4-56789-0 ชื่อบัญชี บริษัท ตัวอย่าง จำกัด">${esc(s.payment || '')}</textarea></label>
           ${['QT', 'IV', 'RE'].map((k) => `<label class="field span2"><span>หมายเหตุเริ่มต้นใน${T.TYPE_NAME[k]}</span><textarea data-note="${k}" rows="2">${esc(s.notes?.[k] || '')}</textarea></label>`).join('')}
         </div></div>
+        <div class="card card-pad"><h2>ลายเซ็นและตราประทับ</h2>
+          <p class="muted" style="margin-top:0">ถ่ายรูปหรือสแกนลายเซ็นบนกระดาษขาว ระบบลบพื้นหลังให้เป็นโปร่งใส แล้ววางในช่อง "ในนาม" ของกิจการใน PDF ใบเสนอราคา ใบแจ้งหนี้ และใบเสร็จ</p>
+          <div class="grid g2">
+            ${['signature', 'stamp'].map((k) => `<div class="mark-pick"><div class="mp" data-mp="${k}">${b[k] ? `<img src="${esc(b[k])}" alt="">` : (k === 'signature' ? 'ลายเซ็น' : 'ตราประทับ')}</div>
+              <div class="actions"><button type="button" class="btn sm" data-up="${k}">${k === 'signature' ? 'อัปโหลดลายเซ็น' : 'อัปโหลดตราประทับ'}</button><button type="button" class="btn sm ghost" data-rm="${k}" ${b[k] ? '' : 'hidden'}>เอาออก</button></div></div>`).join('')}
+            <label class="field"><span>ชื่อผู้มีอำนาจลงนาม</span><input type="text" data-s="signer" value="${esc(s.signer || '')}"></label>
+            <label class="field"><span>ตำแหน่ง</span><input type="text" data-s="signerTitle" value="${esc(s.signerTitle || '')}" placeholder="กรรมการผู้จัดการ"></label>
+            <label class="check span2"><input type="checkbox" data-sign-auto ${s.signAuto ? 'checked' : ''}> ใส่ลายเซ็นและตราประทับในเอกสารโดยอัตโนมัติ รวมถึงลิงก์และ PDF ที่ลูกค้าดาวน์โหลด</label>
+            <label class="field"><span>ภาษาเอกสารเริ่มต้น</span><select data-s="lang"><option value="th" ${s.lang !== 'en' ? 'selected' : ''}>ไทย</option><option value="en" ${s.lang === 'en' ? 'selected' : ''}>English</option></select></label>
+          </div><input type="file" accept="image/*" hidden data-mf></div>
+        <div class="card card-pad"><h2>รับชำระเงิน</h2>
+          <p class="muted" style="margin-top:0">พิมพ์ในใบเสนอราคาและใบแจ้งหนี้ (ทั้ง PDF และลิงก์ให้ลูกค้า) ใบที่ยังไม่ชำระจะมี QR พร้อมเพย์ที่ผูกยอดชำระสุทธิไว้ ลูกค้าสแกนแล้วยอดขึ้นเอง</p>
+          <div class="grid g2">
+            <label class="field"><span>พร้อมเพย์ (เบอร์มือถือ / เลขผู้เสียภาษี / เลขบัตรประชาชน)</span><input type="text" inputmode="numeric" data-pp="id" value="${esc(s.promptpay?.id || '')}" placeholder="0812345678 หรือ 0105567012345"><small data-pp-hint></small></label>
+            <label class="field"><span>ชื่อบัญชีพร้อมเพย์</span><input type="text" data-pp="name" value="${esc(s.promptpay?.name || '')}" placeholder="${esc(b.name)}"></label>
+            <label class="check span2"><input type="checkbox" data-pp="qr" ${s.promptpay?.qr === false ? '' : 'checked'}> แสดง QR พร้อมเพย์ในเอกสาร</label>
+            <div class="field span2"><span>บัญชีธนาคาร</span><div class="grid" data-banks></div><div><button type="button" class="btn sm" data-addbank>${ICON.plus}เพิ่มบัญชีธนาคาร</button></div></div>
+            <label class="field span2"><span>ข้อความเพิ่มเติม (ไม่บังคับ)</span><textarea data-s="payment" rows="2" placeholder="เช่น กรุณาส่งสลิปมาที่ LINE @example">${esc(s.payment || '')}</textarea></label>
+          </div></div>
         <div class="card card-pad"><h2>กิจการทั้งหมด</h2><p class="muted" style="margin-top:0">มี ${S.businesses.length} กิจการในบัญชีนี้</p><div class="actions"><button class="btn" data-switch2>สลับกิจการ</button><button class="btn" data-newbiz>${ICON.plus}เพิ่มกิจการ</button></div></div>
         ${S.boot.role === 'owner' ? `<div class="card card-pad" style="border-color:var(--bad-soft)"><h2 style="color:var(--bad)">ลบกิจการ</h2><p class="muted" style="margin-top:0">ลบเอกสาร ผู้ติดต่อ และรายการบัญชีทั้งหมดของกิจการนี้ กู้คืนไม่ได้</p><button class="btn danger" data-del>ลบกิจการนี้</button></div>` : ''}
       </div>`;
     let logo = b.logo;
+    const marks = { signature: b.signature || null, stamp: b.stamp || null };
+    let markKey = null;
+    const mf = $('[data-mf]', main);
+    main.addEventListener('click', (e) => {
+      const up = e.target.closest('[data-up]');
+      if (up) { markKey = up.dataset.up; mf.value = ''; mf.click(); }
+      const rm = e.target.closest('[data-rm]');
+      if (rm) { marks[rm.dataset.rm] = null; $(`[data-mp=${rm.dataset.rm}]`, main).textContent = rm.dataset.rm === 'signature' ? 'ลายเซ็น' : 'ตราประทับ'; rm.hidden = true; }
+    });
+    mf.onchange = async () => {
+      const f = mf.files[0]; if (!f || !markKey) return;
+      try {
+        marks[markKey] = await cleanMark(f);
+        $(`[data-mp=${markKey}]`, main).innerHTML = `<img src="${marks[markKey]}" alt="">`;
+        $(`[data-rm=${markKey}]`, main).hidden = false;
+        if (!b.signature && !b.stamp) $('[data-sign-auto]', main).checked = true;
+      } catch (err) { fail(err); }
+    };
+    // Bank accounts and PromptPay
+    const BANKS = ['ธนาคารกสิกรไทย', 'ธนาคารไทยพาณิชย์', 'ธนาคารกรุงเทพ', 'ธนาคารกรุงไทย', 'ธนาคารกรุงศรีอยุธยา', 'ธนาคารทหารไทยธนชาต (ttb)', 'ธนาคารออมสิน', 'ธนาคารยูโอบี', 'ธนาคารซีไอเอ็มบี ไทย', 'ธนาคารเกียรตินาคินภัทร', 'ธนาคารแลนด์ แอนด์ เฮ้าส์', 'ธ.ก.ส.'];
+    const banks = (s.banks || []).map((x) => ({ ...x }));
+    const drawBanks = () => {
+      $('[data-banks]', main).innerHTML = banks.map((x, i) => `<div class="grid g4" data-bi="${i}" style="align-items:end">
+        <label class="field"><small>ธนาคาร</small><input type="text" list="bank-dl" data-bf="bank" value="${esc(x.bank || '')}"></label>
+        <label class="field"><small>เลขที่บัญชี</small><input type="text" inputmode="numeric" data-bf="number" value="${esc(x.number || '')}" placeholder="123-4-56789-0"></label>
+        <label class="field"><small>ชื่อบัญชี</small><input type="text" data-bf="name" value="${esc(x.name || '')}" placeholder="${esc(b.name)}"></label>
+        <div style="display:flex;gap:6px;align-items:end"><label class="field" style="flex:1"><small>สาขา</small><input type="text" data-bf="branch" value="${esc(x.branch || '')}"></label><button type="button" class="btn sm ghost danger" data-rmbank style="height:38px">ลบ</button></div>
+      </div>`).join('') + `<datalist id="bank-dl">${BANKS.map((n) => `<option value="${n}">`).join('')}</datalist>`;
+    };
+    drawBanks();
+    $('[data-banks]', main).addEventListener('input', (e) => { const r = e.target.closest('[data-bi]'); if (r && e.target.dataset.bf) banks[Number(r.dataset.bi)][e.target.dataset.bf] = e.target.value; });
+    $('[data-banks]', main).addEventListener('click', (e) => { if (e.target.closest('[data-rmbank]')) { banks.splice(Number(e.target.closest('[data-bi]').dataset.bi), 1); drawBanks(); } });
+    $('[data-addbank]', main).onclick = () => { if (banks.length < 4) { banks.push({ bank: '', number: '', name: '', branch: '' }); drawBanks(); } };
+    const ppHint = () => {
+      const d = $('[data-pp=id]', main).value.replace(/\D/g, '');
+      const ok = (d.length === 10 && d[0] === '0') || d.length === 13 || d.length === 15;
+      const h = $('[data-pp-hint]', main);
+      h.textContent = !d ? 'เว้นว่างได้ถ้าไม่ใช้ QR' : ok ? `ใช้ได้ · ${d.length === 10 ? 'เบอร์มือถือ' : d.length === 13 ? 'เลขผู้เสียภาษี / บัตรประชาชน' : 'e-Wallet'}` : 'ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลข 13 หลัก';
+      h.style.color = d && !ok ? 'var(--bad)' : '';
+    };
+    $('[data-pp=id]', main).oninput = ppHint;
+    ppHint();
     const lf = $('[data-lf]', main);
     $('[data-logo]', main).onclick = () => lf.click();
     const nl = $('[data-nologo]', main); if (nl) nl.onclick = () => { logo = null; $('[data-lp]', main).textContent = 'โลโก้'; };
@@ -1308,9 +1773,12 @@
       $$('[data-prefix]', main).forEach((i) => { settings.prefixes[i.dataset.prefix] = i.value; });
       $$('[data-s]', main).forEach((i) => { settings[i.dataset.s] = i.value; });
       $$('[data-note]', main).forEach((i) => { settings.notes[i.dataset.note] = i.value; });
+      settings.banks = banks;
+      settings.signAuto = $('[data-sign-auto]', main).checked;
+      settings.promptpay = { id: $('[data-pp=id]', main).value, name: $('[data-pp=name]', main).value, qr: $('[data-pp=qr]', main).checked };
       e.target.disabled = true;
       try {
-        await put('', { name: d.name, name_en: d.name_en, tax_id: d.tax_id, branch: d.branch, address: d.address, phone: d.phone, email: d.email, website: d.website, vat_registered: d.vat_registered, logo, settings });
+        await put('', { name: d.name, name_en: d.name_en, tax_id: d.tax_id, branch: d.branch, address: d.address, phone: d.phone, email: d.email, website: d.website, vat_registered: d.vat_registered, logo, signature: marks.signature, stamp: marks.stamp, settings });
         await loadBoot();
         const list = await api('GET', '/acc/businesses'); S.businesses = list.businesses;
         shell(); render(); toast('บันทึกแล้ว');

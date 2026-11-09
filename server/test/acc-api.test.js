@@ -116,6 +116,47 @@ test('manual journal must balance; voiding a receipt reopens the invoice', async
   assert.equal(dash.months.length, 6);
 });
 
+test('payment settings keep valid bank accounts and PromptPay IDs only', async () => {
+  await A.put(P, { settings: { banks: [{ bank: 'ธนาคารกสิกรไทย', number: '123-4-56789-0', name: 'บริษัท ทดสอบ' }, { bank: '', number: '1' }], promptpay: { id: '081-234-5678', name: 'บริษัท ทดสอบ' } } });
+  let s = (await A.get(P)).business.settings;
+  assert.equal(s.banks.length, 1);
+  assert.deepEqual(s.promptpay, { id: '0812345678', name: 'บริษัท ทดสอบ', qr: true });
+  await A.put(P, { settings: { ...s, promptpay: { id: '12345' } } });
+  s = (await A.get(P)).business.settings;
+  assert.equal(s.promptpay, null);
+  await A.put(P, { settings: { ...s, promptpay: { id: '0105566000001', qr: true } } });
+});
+
+test('signature, stamp, stock items and the sales summary', async () => {
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  await A.put(P, { signature: png, stamp: 'javascript:alert(1)', settings: { ...(await A.get(P)).business.settings, signAuto: true, signer: 'ก', lang: 'en' } });
+  const bz = (await A.get(P)).business;
+  assert.equal(bz.signature, png);
+  assert.equal(bz.stamp, null);
+  assert.equal(bz.settings.signAuto, true);
+  assert.equal(bz.settings.lang, 'en');
+
+  const it = (await A.post(`${P}/items`, { kind: 'stock', name: 'ต้นไม้', price: 100, cost: 40, stock_open: 10, barcode: '885' })).item;
+  assert.equal(it.kind, 'stock');
+  assert.equal(Number(it.stock_open), 10);
+  await A.post(`${P}/docs`, { type: 'IV', date: '2026-11-08', contact_id: customer.id, lines: [{ itemId: it.id, name: 'ต้นไม้', qty: 3, price: 100 }] });
+  await A.post(`${P}/docs`, { type: 'EX', date: '2026-11-08', contact_id: vendor.id, tax_invoice: false, lines: [{ itemId: it.id, name: 'ต้นไม้', qty: 5, price: 40, account: '51100' }] });
+  const st = (await A.get(`${P}/stock`)).stock[it.id];
+  assert.deepEqual(st, { bought: 5, sold: 3 });
+
+  const sales = await A.get(`${P}/reports/sales?from=2026-11-01&to=2026-11-30`);
+  assert.ok(sales.rows.every((r) => r.type === 'IV' || r.type === 'RE'));
+  assert.equal(sales.totals.total, sales.rows.filter((r) => r.status !== 'void').reduce((a, r) => Math.round((a + r.total) * 100) / 100, 0));
+  const byItem = await A.get(`${P}/reports/sales?from=2026-11-01&to=2026-11-30&by=item`);
+  assert.equal(byItem.rows.find((r) => r.name === 'ต้นไม้').qty, 3);
+
+  const iv = (await A.get(`${P}/docs?type=IV`)).docs[0];
+  const { token } = await A.post(`${P}/docs/${iv.id}/share`);
+  const pub = await (await fetch(`${API}/api/acc/public/${token}`)).json();
+  assert.equal(pub.business.signature, png);
+  assert.equal(pub.business.settings.lang, 'en');
+});
+
 test('a shared link shows the document without signing in', async () => {
   const iv = (await A.get(`${P}/docs?type=IV`)).docs[0];
   const { token } = await A.post(`${P}/docs/${iv.id}/share`);
@@ -123,6 +164,8 @@ test('a shared link shows the document without signing in', async () => {
   assert.equal(pub.doc.number, iv.number);
   assert.equal(pub.business.name, 'บริษัท ทดสอบ จำกัด');
   assert.equal(pub.doc.lines[0].account, undefined);
+  assert.equal(pub.business.settings.promptpay.id, '0105566000001');
+  assert.equal(pub.business.settings.banks[0].bank, 'ธนาคารกสิกรไทย');
   await A.post(`${P}/docs/${iv.id}/share`, { off: true });
   assert.equal((await fetch(`${API}/api/acc/public/${token}`)).status, 404);
 });

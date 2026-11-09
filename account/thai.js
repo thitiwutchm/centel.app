@@ -134,28 +134,90 @@
 
   /* ---------- Printable document ---------- */
 
-  function partyBlock(label, p) {
+  // English amount in words for documents printed in English: 1234.5 → One Thousand Two Hundred Thirty-Four Baht and Fifty Satang
+  const EN1 = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const EN10 = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  function enWords(n) {
+    if (n < 20) return EN1[n];
+    if (n < 100) return EN10[Math.floor(n / 10)] + (n % 10 ? `-${EN1[n % 10]}` : '');
+    if (n < 1000) return `${EN1[Math.floor(n / 100)]} Hundred${n % 100 ? ` ${enWords(n % 100)}` : ''}`;
+    for (const [v, w] of [[1e9, 'Billion'], [1e6, 'Million'], [1e3, 'Thousand']]) {
+      if (n >= v) return `${enWords(Math.floor(n / v))} ${w}${n % v ? ` ${enWords(n % v)}` : ''}`;
+    }
+    return '';
+  }
+  function bahtTextEn(v) {
+    const c = Math.round(Math.abs(Number(v) || 0) * 100);
+    const b = Math.floor(c / 100);
+    const s = c % 100;
+    if (!c) return 'Zero Baht Only';
+    return `${Number(v) < 0 ? 'Minus ' : ''}${b ? `${enWords(b)} Baht` : ''}${s ? `${b ? ' and ' : ''}${enWords(s)} Satang` : ' Only'}`;
+  }
+
+  const L = {
+    th: {
+      no: 'เลขที่', date: 'วันที่', due: 'ครบกำหนด', valid: 'ยืนราคาถึง', ref: 'อ้างอิง', billNo: 'เลขที่บิลผู้ขาย',
+      customer: 'ลูกค้า', payee: 'ผู้รับเงิน / ผู้ขาย', taxId: 'เลขประจำตัวผู้เสียภาษี',
+      item: 'รายการ', qty: 'จำนวน', price: 'ราคาต่อหน่วย', disc: 'ส่วนลด', amount: 'จำนวนเงิน',
+      subtotal: 'รวมเป็นเงิน', base: 'มูลค่าก่อนภาษี', exempt: 'มูลค่ายกเว้นภาษี', vat: 'ภาษีมูลค่าเพิ่ม', grand: 'จำนวนเงินรวมทั้งสิ้น',
+      whtCust: 'ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)', whtOwn: 'หักภาษี ณ ที่จ่าย', net: 'ยอดชำระสุทธิ', netPaid: 'ยอดจ่ายสุทธิ',
+      words: 'จำนวนเงิน (ตัวอักษร)', notes: 'หมายเหตุ', payTo: 'ช่องทางชำระเงิน', promptpay: 'พร้อมเพย์', branch: 'สาขา',
+      scan: 'สแกนจ่ายด้วยแอปธนาคาร', baht: 'บาท', original: 'ต้นฉบับ', copy: 'สำเนา', void: 'ยกเลิก', on: 'ในนาม',
+      paidBy: (m, d) => `ชำระโดย${m} เมื่อ ${d}`,
+      roles: { QT: ['ผู้อนุมัติสั่งซื้อ', 'ผู้เสนอราคา'], IV: ['ผู้รับวางบิล', 'ผู้วางบิล'], RE: ['ผู้จ่ายเงิน', 'ผู้รับเงิน'], EX: ['ผู้รับเงิน', 'ผู้อนุมัติ'] },
+      prepared: 'ผู้จัดทำ',
+    },
+    en: {
+      no: 'No.', date: 'Date', due: 'Due date', valid: 'Valid until', ref: 'Reference', billNo: 'Vendor bill no.',
+      customer: 'Customer', payee: 'Payee / Vendor', taxId: 'Tax ID',
+      item: 'Description', qty: 'Qty', price: 'Unit price', disc: 'Discount', amount: 'Amount',
+      subtotal: 'Subtotal', base: 'Amount before VAT', exempt: 'VAT-exempt amount', vat: 'VAT', grand: 'Grand total',
+      whtCust: 'Withholding tax (by customer)', whtOwn: 'Withholding tax', net: 'Net amount due', netPaid: 'Net paid',
+      words: 'Amount in words', notes: 'Notes', payTo: 'Payment details', promptpay: 'PromptPay', branch: 'Branch',
+      scan: 'Scan with any Thai banking app', baht: 'THB', original: 'Original', copy: 'Copy', void: 'VOID', on: 'For',
+      paidBy: (m, d) => `Paid by ${m} on ${d}`,
+      roles: { QT: ['Accepted by', 'Quoted by'], IV: ['Received by', 'Issued by'], RE: ['Paid by', 'Received by'], EX: ['Received by', 'Approved by'] },
+      prepared: 'Prepared by',
+    },
+  };
+  const PAY_METHOD_EN = { cash: 'cash', transfer: 'bank transfer', cheque: 'cheque', card: 'card', other: 'other' };
+  const enDate = (d) => { if (!d) return ''; const [y, m, day] = String(d).slice(0, 10).split('-'); return `${day}/${m}/${y}`; };
+  const branchText = (b, lang) => (lang !== 'en' ? branchFmt(b) : !b ? '' : b === '00000' || b === 'สำนักงานใหญ่' ? 'Head office' : `Branch ${b}`);
+  // A light tint of the document colour, for the table header and the amount due.
+  function tint(hex, a) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    const n = m ? parseInt(m[1], 16) : 0xE8590C;
+    return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+
+  function partyBlock(label, p, t, lang) {
     if (!p) return '';
     return `<div class="pp-party"><div class="pp-label">${esc(label)}</div>
       <div class="pp-name">${esc(p.name)}</div>
       ${p.address ? `<div class="pp-addr">${esc(p.address).replace(/\n/g, '<br>')}</div>` : ''}
-      ${p.tax_id ? `<div class="pp-small">เลขประจำตัวผู้เสียภาษี ${esc(taxIdFmt(p.tax_id))}${p.branch ? ` · ${esc(branchFmt(p.branch))}` : ''}</div>` : ''}
+      ${p.tax_id ? `<div class="pp-small">${t.taxId} ${esc(taxIdFmt(p.tax_id))}${p.branch ? ` · ${esc(branchText(p.branch, lang))}` : ''}</div>` : ''}
       ${p.phone || p.email ? `<div class="pp-small">${esc([p.phone, p.email].filter(Boolean).join(' · '))}</div>` : ''}</div>`;
   }
 
-  // doc: a stored document (or the public shape); business: the business row; opts.copy: 'ต้นฉบับ' | 'สำเนา'
+  // doc: a stored document (or the public shape); business: the business row.
+  // opts: copy ('ต้นฉบับ' | 'สำเนา' | 'original' | 'copy'), lang ('th' | 'en'), pay (show payment details, default on),
+  //       sign (put the saved signature and stamp on the issuer's line), page (number in the corner).
   function renderDoc(doc, business, opts = {}) {
-    const [th, en] = docTitle(doc);
     const s = business.settings || {};
+    const lang = opts.lang || s.lang || 'th';
+    const t = L[lang] || L.th;
+    const fmtDate = lang === 'en' ? enDate : slashDate;
+    const [th, en] = docTitle(doc);
     const color = s.color || '#E8590C';
     const lines = doc.lines || [];
     const showDisc = lines.some((l) => Number(l.disc) > 0);
+    const copyKey = opts.copy === 'สำเนา' || opts.copy === 'copy' ? 'copy' : 'original';
     const meta = [
-      ['เลขที่', doc.number],
-      ['วันที่', slashDate(doc.date)],
-      doc.due_date ? [doc.type === 'QT' ? 'ยืนราคาถึง' : 'ครบกำหนด', slashDate(doc.due_date)] : null,
-      doc.ref ? ['อ้างอิง', doc.ref.number] : null,
-      doc.type === 'EX' && doc.ref_no ? ['เลขที่บิลผู้ขาย', doc.ref_no] : null,
+      [t.no, doc.number],
+      [t.date, fmtDate(doc.date)],
+      doc.due_date ? [doc.type === 'QT' ? t.valid : t.due, fmtDate(doc.due_date)] : null,
+      doc.ref ? [t.ref, doc.ref.number] : null,
+      doc.type === 'EX' && doc.ref_no ? [t.billNo, doc.ref_no] : null,
     ].filter(Boolean);
     const rows = lines.map((l, i) => `<tr>
       <td class="c">${i + 1}</td>
@@ -164,68 +226,101 @@
       <td class="r">${money(l.price)}</td>
       ${showDisc ? `<td class="r">${Number(l.disc) ? money(l.disc) : ''}</td>` : ''}
       <td class="r">${money(l.amount ?? (Number(l.qty) * Number(l.price) - (Number(l.disc) || 0)))}</td></tr>`).join('');
-    const vatLabel = doc.vat_rate > 0 ? `ภาษีมูลค่าเพิ่ม ${Number(doc.vat_rate)}%` : '';
-    const totals = [
-      ['รวมเป็นเงิน', doc.subtotal],
-      Number(doc.discount) ? ['ส่วนลด', -doc.discount] : null,
-      doc.vat_rate > 0 ? ['มูลค่าก่อนภาษี', doc.vat_base] : null,
-      Number(doc.exempt) || (doc.vat_rate > 0 && Math.abs(doc.total - doc.vat - doc.vat_base) > 0.004) ? ['มูลค่ายกเว้นภาษี', Math.round((doc.total - doc.vat - doc.vat_base) * 100) / 100] : null,
-      doc.vat_rate > 0 ? [vatLabel, doc.vat] : null,
-    ].filter(Boolean);
     const net = Math.round((doc.total - (doc.wht || 0)) * 100) / 100;
+    const hasWht = Number(doc.wht) > 0;
+    const totals = [
+      [t.subtotal, doc.subtotal],
+      Number(doc.discount) ? [t.disc, -doc.discount] : null,
+      doc.vat_rate > 0 ? [t.base, doc.vat_base] : null,
+      Number(doc.exempt) || (doc.vat_rate > 0 && Math.abs(doc.total - doc.vat - doc.vat_base) > 0.004) ? [t.exempt, Math.round((doc.total - doc.vat - doc.vat_base) * 100) / 100] : null,
+      doc.vat_rate > 0 ? [`${t.vat} ${Number(doc.vat_rate)}%`, doc.vat] : null,
+    ].filter(Boolean);
     const note = doc.notes || (s.notes && s.notes[doc.type]) || '';
-    const payInfo = (doc.type === 'IV' || doc.type === 'QT') && s.payment ? s.payment : '';
-    const paid = doc.type === 'RE' && doc.pay ? `ชำระโดย ${esc(PAY_METHOD[doc.pay.method] || '')} เมื่อ ${esc(slashDate(doc.pay.date))}` : '';
-    const sign = doc.type === 'QT'
-      ? [['ผู้เสนอราคา', s.signer], ['ผู้อนุมัติสั่งซื้อ (ลูกค้า)', '']]
-      : doc.type === 'RE' ? [['ผู้จ่ายเงิน', ''], ['ผู้รับเงิน', s.signer]]
-        : doc.type === 'EX' ? [['ผู้จัดทำ', ''], ['ผู้อนุมัติ', s.signer], ['ผู้รับเงิน', '']]
-          : [['ผู้รับวางบิล', ''], ['ผู้วางบิล', s.signer]];
-    return `<article class="paper" style="--pp-accent:${esc(color)}">
-      ${doc.status === 'void' ? '<div class="pp-void">ยกเลิก</div>' : ''}
-      <header class="pp-head">
+    const billing = (doc.type === 'IV' || doc.type === 'QT') && doc.status !== 'void' && opts.pay !== false;
+    const payInfo = billing && s.payment ? s.payment : '';
+    const banks = billing && Array.isArray(s.banks) ? s.banks.filter((b) => b && b.bank && b.number) : [];
+    const pp = billing && doc.status !== 'paid' && s.promptpay && s.promptpay.id && s.promptpay.qr !== false && net > 0 ? s.promptpay : null;
+    const qr = pp ? qrSvg(promptPayPayload(pp.id, net)) : '';
+    const payBlock = banks.length || payInfo || pp ? `<section class="pp-pay">
+        <div class="pp-pay-text"><div class="pp-label">${t.payTo}</div>
+          ${banks.map((b) => `<div class="pp-bank"><b>${esc(b.bank)}</b>${b.branch ? ` ${t.branch} ${esc(b.branch)}` : ''}<br><span class="pp-mono">${esc(b.number)}</span>${b.name ? ` · ${esc(b.name)}` : ''}</div>`).join('')}
+          ${pp ? `<div class="pp-bank"><b>${t.promptpay}</b><br><span class="pp-mono">${esc(promptPayFmt(pp.id))}</span>${pp.name ? ` · ${esc(pp.name)}` : ''}</div>` : ''}
+          ${payInfo ? `<div>${esc(payInfo).replace(/\n/g, '<br>')}</div>` : ''}
+        </div>
+        ${qr ? `<div class="pp-qr"><div class="pp-qr-head">PromptPay</div>${qr}<div class="pp-qr-amt">${money(net)} ${t.baht}</div><div class="pp-small">${t.scan}</div></div>` : ''}
+      </section>` : '';
+    const method = doc.pay && (lang === 'en' ? PAY_METHOD_EN : PAY_METHOD)[doc.pay.method];
+    const paid = doc.type === 'RE' && doc.pay ? t.paidBy(method || '', fmtDate(doc.pay.date)) : '';
+
+    // Signature lines: the other party on the left, the business on the right (with signature and stamp when asked).
+    const sign = opts.sign !== undefined ? opts.sign : !!s.signAuto;
+    const [otherRole, ownRole] = t.roles[doc.type] || t.roles.IV;
+    const otherName = doc.contact?.name || '';
+    const sig = (who, role, own) => {
+      const mark = own && sign && (business.signature || business.stamp);
+      return `<div class="pp-sig${own ? ' own' : ''}">
+        <div class="pp-for">${who ? `${t.on} ${esc(who)}` : '&nbsp;'}</div>
+        <div class="pp-sig-grid">
+          <div class="pp-sig-cell">
+            <div class="pp-mark">${mark && business.stamp ? `<img class="pp-stamp" src="${esc(business.stamp)}" alt="">` : ''}${mark && business.signature ? `<img class="pp-signature" src="${esc(business.signature)}" alt="">` : ''}</div>
+            <div class="pp-line"></div><div class="pp-small">${own && s.signer ? `${esc(s.signer)}${s.signerTitle ? ` · ${esc(s.signerTitle)}` : ''}<br>` : ''}${esc(role)}</div>
+          </div>
+          <div class="pp-sig-cell date"><div class="pp-mark pp-date">${mark ? esc(fmtDate(doc.date)) : ''}</div><div class="pp-line"></div><div class="pp-small">${t.date}</div></div>
+        </div></div>`;
+    };
+    const footer = doc.type === 'EX'
+      ? sig('', L[lang === 'en' ? 'en' : 'th'].prepared, false) + sig(business.name, ownRole, true) + sig(otherName, otherRole, false)
+      : sig(otherName, otherRole, false) + sig(business.name, ownRole, true);
+
+    return `<article class="paper pp-lang-${lang}" style="--pp-accent:${esc(color)};--pp-soft:${tint(color, 0.09)};--pp-mid:${tint(color, 0.35)}">
+      <div class="pp-corner"></div>${opts.page ? `<div class="pp-page">${esc(opts.page)}</div>` : ''}
+      ${doc.status === 'void' ? `<div class="pp-void">${t.void}</div>` : ''}
+      <header class="pp-top">
         <div class="pp-brand">
           ${business.logo ? `<img class="pp-logo" src="${esc(business.logo)}" alt="">` : ''}
-          <div>
-            <div class="pp-biz">${esc(business.name)}</div>
-            ${business.name_en ? `<div class="pp-small">${esc(business.name_en)}</div>` : ''}
-            ${business.address ? `<div class="pp-addr">${esc(business.address).replace(/\n/g, '<br>')}</div>` : ''}
-            ${business.tax_id ? `<div class="pp-small">เลขประจำตัวผู้เสียภาษี ${esc(taxIdFmt(business.tax_id))} · ${esc(branchFmt(business.branch || '00000'))}</div>` : ''}
-            ${business.phone || business.email ? `<div class="pp-small">${esc([business.phone, business.email, business.website].filter(Boolean).join(' · '))}</div>` : ''}
-          </div>
+          <div class="pp-biz">${esc(lang === 'en' && business.name_en ? business.name_en : business.name)}</div>
+          ${business.address ? `<div class="pp-addr">${esc(business.address).replace(/\n/g, '<br>')}</div>` : ''}
+          ${business.tax_id ? `<div class="pp-small">${t.taxId} ${esc(taxIdFmt(business.tax_id))} · ${esc(branchText(business.branch || '00000', lang))}</div>` : ''}
+          ${business.phone || business.email || business.website ? `<div class="pp-small">${esc([business.phone, business.email, business.website].filter(Boolean).join(' · '))}</div>` : ''}
         </div>
         <div class="pp-title">
-          <div class="pp-copy">${esc(opts.copy || 'ต้นฉบับ')}</div>
-          <h1>${esc(th)}</h1>
-          <div class="pp-en">${esc(en)}</div>
+          <h1>${esc(lang === 'en' ? en : th)}</h1>
+          <div class="pp-en">${esc(lang === 'en' ? th : en)}</div>
+          <div class="pp-copy">${esc(t[copyKey])}</div>
         </div>
-      </header>
-      <section class="pp-info">
-        ${partyBlock(doc.type === 'EX' ? 'ผู้รับเงิน / ผู้ขาย' : 'ลูกค้า', doc.contact)}
+        ${partyBlock(doc.type === 'EX' ? t.payee : t.customer, doc.contact, t, lang) || '<div></div>'}
         <dl class="pp-meta">${meta.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-      </section>
+      </header>
       <table class="pp-lines">
-        <thead><tr><th class="c">#</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคาต่อหน่วย</th>${showDisc ? '<th class="r">ส่วนลด</th>' : ''}<th class="r">จำนวนเงิน</th></tr></thead>
+        <thead><tr><th class="c">#</th><th>${t.item}</th><th class="r">${t.qty}</th><th class="r">${t.price}</th>${showDisc ? `<th class="r">${t.disc}</th>` : ''}<th class="r">${t.amount}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <section class="pp-sum">
         <div class="pp-words">
-          <div class="pp-label">จำนวนเงินรวมทั้งสิ้น (ตัวอักษร)</div>
-          <div class="pp-baht">(${esc(bahtText(doc.total))})</div>
-          ${paid ? `<div class="pp-small">${paid}</div>` : ''}
+          <div class="pp-label">${t.words}</div>
+          <div class="pp-baht">(${esc(lang === 'en' ? bahtTextEn(doc.total) : bahtText(doc.total))})</div>
+          ${paid ? `<div class="pp-small">${esc(paid)}</div>` : ''}
+          ${note ? `<div class="pp-notes"><div class="pp-label">${t.notes}</div><div>${esc(note).replace(/\n/g, '<br>')}</div></div>` : ''}
         </div>
         <table class="pp-totals">
           ${totals.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${money(v)}</td></tr>`).join('')}
-          <tr class="pp-grand"><th>จำนวนเงินรวมทั้งสิ้น</th><td>${money(doc.total)}</td></tr>
-          ${Number(doc.wht) ? `<tr><th>${doc.type === 'EX' ? 'หักภาษี ณ ที่จ่าย' : 'ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)'}</th><td>${money(-doc.wht)}</td></tr><tr class="pp-net"><th>${doc.type === 'EX' ? 'ยอดจ่ายสุทธิ' : 'ยอดชำระสุทธิ'}</th><td>${money(net)}</td></tr>` : ''}
+          <tr class="pp-grand${hasWht ? '' : ' pp-due'}"><th>${t.grand}</th><td>${money(doc.total)}</td></tr>
+          ${hasWht ? `<tr><th>${doc.type === 'EX' ? t.whtOwn : t.whtCust}</th><td>${money(-doc.wht)}</td></tr><tr class="pp-due"><th>${doc.type === 'EX' ? t.netPaid : t.net}</th><td>${money(net)}</td></tr>` : ''}
         </table>
       </section>
-      ${note || payInfo ? `<section class="pp-notes">
-        ${note ? `<div><div class="pp-label">หมายเหตุ</div><div>${esc(note).replace(/\n/g, '<br>')}</div></div>` : ''}
-        ${payInfo ? `<div><div class="pp-label">ช่องทางชำระเงิน</div><div>${esc(payInfo).replace(/\n/g, '<br>')}</div></div>` : ''}
-      </section>` : ''}
-      <footer class="pp-sign">${sign.map(([k, name]) => `<div><div class="pp-line"></div><div>${esc(name ? `(${name})` : '(.................................................)')}</div><div class="pp-small">${esc(k)}</div><div class="pp-small">วันที่ ......../......../............</div></div>`).join('')}</footer>
+      ${payBlock}
+      <footer class="pp-sign${doc.type === 'EX' ? ' three' : ''}">${footer}</footer>
     </article>`;
+  }
+
+  // The pages to print or download: the original and/or `copies` copies, numbered in the corner.
+  // o: { original, copy, copies, lang, pay, sign }
+  function renderSet(doc, business, o = {}) {
+    const kinds = [];
+    if (o.original !== false) kinds.push('original');
+    if (o.copy !== false && doc.type !== 'EX') for (let i = 0; i < Math.max(1, Math.min(5, Number(o.copies) || 1)); i++) kinds.push('copy');
+    if (!kinds.length) kinds.push('original');
+    return kinds.map((k, i) => renderDoc(doc, business, { ...o, copy: k, page: kinds.length > 1 ? String(i + 1) : '' })).join('');
   }
 
   // หนังสือรับรองการหักภาษี ณ ที่จ่าย ตามมาตรา 50 ทวิ, for a paid expense with WHT.
@@ -261,8 +356,77 @@
     </article>`;
   }
 
+  /* ---------- PromptPay QR (EMVCo merchant-presented, Thai QR Payment) ---------- */
+
+  function crc16(str) {
+    let crc = 0xFFFF;
+    for (let i = 0; i < str.length; i++) {
+      crc ^= str.charCodeAt(i) << 8;
+      for (let j = 0; j < 8; j++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+    return crc.toString(16).toUpperCase().padStart(4, '0');
+  }
+  const tlv = (id, v) => `${id}${String(v.length).padStart(2, '0')}${v}`;
+  // id: 10-digit mobile (0812345678), 13-digit tax / citizen ID or 15-digit e-wallet ID. amount in baht.
+  function promptPayPayload(id, amount) {
+    const d = String(id || '').replace(/\D/g, '');
+    const target = d.length === 15 ? tlv('03', d) : d.length === 13 ? tlv('02', d) : tlv('01', ('0000000000000' + '66' + d.replace(/^0/, '')).slice(-13));
+    const amt = Number(amount) > 0 ? tlv('54', (Math.round(Number(amount) * 100) / 100).toFixed(2)) : '';
+    const body = tlv('00', '01') + tlv('01', amt ? '12' : '11') + tlv('29', tlv('00', 'A000000677010111') + target)
+      + tlv('58', 'TH') + tlv('53', '764') + amt + '6304';
+    return body + crc16(body);
+  }
+  const promptPayFmt = (id) => {
+    const d = String(id || '').replace(/\D/g, '');
+    return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : d.length === 13 ? taxIdFmt(d) : d;
+  };
+  // The QR as inline SVG (needs vendor/qrcode.min.js loaded as window.qrcode).
+  function qrSvg(text) {
+    const Q = g.qrcode;
+    if (!Q) return '';
+    const q = Q(0, 'M');
+    q.addData(text);
+    q.make();
+    const n = q.getModuleCount();
+    let path = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) path += `M${c + 2} ${r + 2}h1v1h-1z`;
+    const w = n + 4;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 8}" height="${w * 8}" viewBox="0 0 ${w} ${w}" shape-rendering="crispEdges"><rect width="${w}" height="${w}" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+    // An <img> (not inline SVG) so html2canvas draws it exactly in the downloaded PDF.
+    return `<img class="pp-qr-svg" alt="PromptPay QR" src="data:image/svg+xml;base64,${btoa(svg)}">`;
+  }
+
+  /* ---------- PDF download (html2pdf from cdnjs, loaded on first use) ---------- */
+
+  let pdfLib;
+  function loadPdfLib() {
+    if (g.html2pdf) return Promise.resolve(g.html2pdf);
+    pdfLib = pdfLib || new Promise((ok, no) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      sc.onload = () => ok(g.html2pdf);
+      sc.onerror = () => { pdfLib = null; no(new Error('โหลดตัวสร้าง PDF ไม่สำเร็จ')); };
+      document.head.appendChild(sc);
+    });
+    return pdfLib;
+  }
+  // html: one or more rendered .paper articles. Saves an A4 PDF named `filename`.
+  async function downloadPdf(html, filename) {
+    const lib = await loadPdfLib();
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    // html2pdf renders the string in its own overlay container (an off-screen element of ours comes out blank).
+    await lib().set({
+      margin: 0, filename,
+      image: { type: 'jpeg', quality: 0.96 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css'] },
+    }).from(`<div class="pdf-render">${html}</div>`, 'string').save();
+  }
+
   g.Thai = {
+    downloadPdf, promptPayPayload, promptPayFmt, qrSvg,
     esc, money, qtyFmt, thDate, slashDate, thMonth, today, taxIdFmt, branchFmt, bahtText, computeTotals, WHT_RATES,
-    docTitle, TYPE_NAME, TH_MONTHS, STATUS, statusName, PAY_METHOD, renderDoc, renderWht, TH_MONTHS_LONG,
+    docTitle, TYPE_NAME, TH_MONTHS, STATUS, statusName, PAY_METHOD, renderDoc, renderSet, renderWht, TH_MONTHS_LONG, bahtTextEn,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
