@@ -355,12 +355,143 @@ export async function sendDueReminders() {
   return rows.length;
 }
 
+/* ---------- Bill reminders in the group (Flex card) ---------- */
+
+// Replaces the person's upcoming bill reminders. A reminder already sent keeps its sent_at
+// while its time stays the same, so it goes out once; sent ones are kept a week so a
+// device with an older list doesn't bring them back.
+export async function saveLineBills(userId, alerts) {
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    await client.query(
+      `delete from line_bill_alerts where user_id = $1 and not (key = any($2))
+       and (sent_at is null or at < now() - interval '7 days')`, [userId, alerts.map((a) => a.key)]);
+    for (const a of alerts) {
+      await client.query(
+        `insert into line_bill_alerts (user_id, key, at, bill) values ($1, $2, $3, $4)
+         on conflict (user_id, key) do update set bill = excluded.bill, at = excluded.at,
+           sent_at = case when line_bill_alerts.at = excluded.at then line_bill_alerts.sent_at end`,
+        [userId, a.key, a.at, a.bill]);
+    }
+    await client.query('commit');
+  } catch (e) {
+    await client.query('rollback').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+const TH_DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+const TH_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function thDue(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${TH_DAYS[day]} ${d} ${TH_MONTHS[m - 1]} ${y + 543}`;
+}
+const bahtText = (n) => `฿${Number(n).toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+const APP = () => (process.env.PUBLIC_URL || 'https://centel.app').replace(/\/+$/, '');
+const TEAL = '#3f8f95';
+
+// The card: a coloured header (when it is due), the bill with its icon, the amount, the due
+// date / wallet / status rows, and a button that opens this bill's month in the app.
+export function billFlex(b) {
+  const lead = b.days === 0 ? 'ครบกำหนดวันนี้' : b.days === 1 ? 'ครบกำหนดพรุ่งนี้' : `อีก ${b.days} วันครบกำหนด`;
+  const kicker = b.days === 0 ? '🔔 เตือนบิล · วันครบกำหนด' : `🔔 เตือนบิล · ล่วงหน้า ${b.days} วัน`;
+  const kv = (k, v, color) => ({
+    type: 'box', layout: 'horizontal', contents: [
+      { type: 'text', text: k, size: 'sm', color: '#888888', flex: 0 },
+      { type: 'text', text: v, size: 'sm', color: color || '#222222', weight: 'bold', align: 'end', wrap: true },
+    ],
+  });
+  const sub = [b.category, b.repeat].filter(Boolean).join(' · ');
+  const rows = [kv('ครบกำหนด', thDue(b.due))];
+  if (b.wallet) rows.push(kv('จ่ายจาก', b.wallet));
+  rows.push(kv('สถานะ', 'ยังไม่จ่าย', '#c0392b'));
+  const url = `${APP()}/${b.id && b.ym ? `#bill=${encodeURIComponent(b.id)}:${b.ym}` : ''}`;
+  const amount = b.amount == null
+    ? { type: 'text', text: 'ยอดไม่แน่นอน · กรอกยอดจริงในแอป', size: 'md', weight: 'bold', color: '#c0392b', wrap: true, margin: 'lg' }
+    : { type: 'text', text: bahtText(b.amount), size: 'xxl', weight: 'bold', color: '#111111', margin: 'lg' };
+  const title = `${b.days === 0 ? '📅 วันนี้ครบกำหนด' : `⏰ ${lead}`} ${b.name}${b.amount == null ? '' : ` ${bahtText(b.amount)}`}`;
+  return {
+    type: 'flex', altText: title.slice(0, 400),
+    contents: {
+      type: 'bubble', size: 'kilo',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: TEAL, paddingAll: '16px', contents: [
+          { type: 'text', text: kicker, size: 'xs', color: '#ffffffd9' },
+          { type: 'text', text: lead, size: 'lg', weight: 'bold', color: '#ffffff', margin: 'xs' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '16px', contents: [
+          {
+            type: 'box', layout: 'horizontal', spacing: 'md', alignItems: 'center', contents: [
+              {
+                type: 'box', layout: 'vertical', width: '44px', height: '44px', cornerRadius: '12px', justifyContent: 'center', flex: 0,
+                backgroundColor: b.color ? `${b.color}2e` : '#e3f0fb',
+                contents: [{ type: 'text', text: b.icon || '🧾', size: 'xl', align: 'center' }],
+              },
+              {
+                type: 'box', layout: 'vertical', contents: [
+                  { type: 'text', text: b.name, weight: 'bold', size: 'md', wrap: true },
+                  ...(sub ? [{ type: 'text', text: sub, size: 'xs', color: '#888888', wrap: true }] : []),
+                ],
+              },
+            ],
+          },
+          amount,
+          { type: 'separator', margin: 'lg' },
+          { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg', contents: rows },
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: '12px', contents: [
+          { type: 'button', style: 'primary', color: TEAL, height: 'sm', action: { type: 'uri', label: 'เปิดบิลในแอป', uri: url } },
+        ],
+      },
+    },
+  };
+}
+
+// Claims due bill reminders of people whose group has bill reminders on, then sends each as
+// a Flex card, with an @mention of the person (their "me" entry in คนในกลุ่ม LINE) after it.
+export async function sendDueLineBills() {
+  if (!lineEnabled) return 0;
+  const { rows } = await pool.query(
+    `update line_bill_alerts a set sent_at = now() from line_targets t
+     where t.user_id = a.user_id and t.active and t.bills
+       and a.sent_at is null and a.at <= now() and a.at > now() - interval '1 day'
+     returning a.user_id, a.key, a.bill, t.group_id`);
+  if (!rows.length) return 0;
+  const people = (await pool.query(
+    "select owner_id, line_user_id, name from line_people where who = 'me' and owner_id = any($1)", [[...new Set(rows.map((r) => r.user_id))]])).rows;
+  for (const r of rows) {
+    const flex = billFlex(r.bill);
+    const me = people.filter((p) => p.owner_id === r.user_id);
+    try {
+      if (!me.length) { await lineCall('push', { to: r.group_id, messages: [flex] }); continue; }
+      const text = `👥 ${me.map((_, i) => `{p${i}}`).join(' ')}`;
+      const substitution = Object.fromEntries(me.map((p, i) => [`p${i}`, { type: 'mention', mentionee: { type: 'user', userId: p.line_user_id } }]));
+      try {
+        await lineCall('push', { to: r.group_id, messages: [flex, { type: 'textV2', text, substitution }] });
+      } catch (e) {
+        if (e.status !== 400) throw e;
+        await lineCall('push', { to: r.group_id, messages: [flex, { type: 'text', text: `👥 ${me.map((p) => p.name).join(' ')}` }] });
+      }
+    } catch (e) { console.error('line bill', r.key, e.message, e.detail || ''); }
+  }
+  return rows.length;
+}
+
 // Every minute: due to-do notes (iPhone notifications, and LINE when it is set up) and
 // the bill alerts devices sent (push.js).
 export function startReminders() {
   const tick = () => {
     sendDueReminders().catch((e) => console.error('note reminders', e.message));
     sendDueAlerts().catch((e) => console.error('push alerts', e.message));
+    sendDueLineBills().catch((e) => console.error('line bills', e.message));
   };
   setTimeout(tick, Math.min(5000, TICK));
   setInterval(tick, TICK);

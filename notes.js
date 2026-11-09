@@ -535,10 +535,12 @@ function lineSettings() {
         <input id="lineGroup" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="C1a2b3…" value="${esc(l ? l.groupId : '')}" ${isCloud() ? '' : 'disabled'}></div>
       <div class="field"><label for="lineOn">ส่งเตือนสิ่งที่ต้องทำเข้ากลุ่ม</label><span style="flex:1"></span>
         <label class="switch"><input type="checkbox" id="lineOn" ${!l || l.active ? 'checked' : ''} ${l ? '' : 'disabled'}><span></span></label></div>
+      <div class="field"><label for="lineBills">ส่งเตือนบิลเข้ากลุ่ม</label><span style="flex:1"></span>
+        <label class="switch"><input type="checkbox" id="lineBills" ${!l || (l.active && l.bills !== false) ? 'checked' : ''} ${l && l.active ? '' : 'disabled'}><span></span></label></div>
     </div>
     ${isCloud() ? linePeopleList() : ''}
     ${l && l.active && ready ? '<button class="btn ghost" id="lineTest">💬 ส่งข้อความทดสอบเข้ากลุ่ม</button>' : ''}
-    <p class="hint">เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้${ready ? '' : '<br>ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ'}</p>`;
+    <p class="hint">เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้ และบิลใกล้ครบกำหนด (09:00 ของวันเตือนล่วงหน้าและวันครบกำหนด) จะส่งเข้ากลุ่มนี้${ready ? '' : '<br>ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ'}</p>`;
 }
 
 /* Who is who in the LINE group: LINE user ids (U…) with a name and which app account
@@ -608,9 +610,13 @@ function linePersonForm(i) {
 function lineSettingsBind() {
   const input = $('#lineGroup');
   if (!input || !isCloud()) return;
-  const send = (groupId, active) => {
-    cloud.line = groupId ? { groupId, active } : null;
-    cloudCall('PUT', '/line', { groupId, active }).then((r) => { if (r) toast(groupId ? 'บันทึกแล้ว' : 'ลบ Group ID แล้ว'); });
+  const send = (groupId, active, bills = !cloud.line || cloud.line.bills !== false) => {
+    cloud.line = groupId ? { groupId, active, bills } : null;
+    cloudCall('PUT', '/line', { groupId, active, bills }).then((r) => {
+      if (!r) return;
+      toast(groupId ? 'บันทึกแล้ว' : 'ลบ Group ID แล้ว');
+      if (typeof pushAlertsChanged === 'function') pushAlertsChanged(0);
+    });
     const y = window.scrollY; render(); window.scrollTo(0, y);
   };
   input.addEventListener('change', () => {
@@ -620,6 +626,7 @@ function lineSettingsBind() {
     send(v, cloud.line ? cloud.line.active : true);
   });
   $('#lineOn').addEventListener('change', (e) => { if (cloud.line) send(cloud.line.groupId, e.target.checked); });
+  $('#lineBills').addEventListener('change', (e) => { if (cloud.line) send(cloud.line.groupId, cloud.line.active, e.target.checked); });
   const test = $('#lineTest');
   if (test) test.addEventListener('click', async () => {
     test.disabled = true;

@@ -280,10 +280,61 @@ function pushHash(list) {
 }
 
 // Called by save() in app.js, on start and when the app comes back to the screen.
+// Also sends the bill reminders for the LINE group, which don't need notifications on.
 function pushAlertsChanged(delay = 1500) {
-  if (!isCloud() || !pushLocal()) return;
+  if (!isCloud()) return;
   clearTimeout(push.timer);
-  push.timer = setTimeout(pushAlertsSend, delay);
+  push.timer = setTimeout(() => { if (pushLocal()) pushAlertsSend(); lineBillsSend(); }, delay);
+}
+
+/* Bill reminders for the LINE group (Account › กลุ่ม LINE › ส่งเตือนบิลเข้ากลุ่ม): the same
+   days as the notifications, with what the group's Flex card shows. Sent while the group is
+   set up with bill reminders on; the server sends the due ones. */
+const LINE_BILLS_KEY = 'centel.linebills.v1'; // { userId, sent: hash of the last list }
+function lineBillsOn() { const l = isCloud() && cloud.line; return !!(l && l.active && l.bills !== false); }
+
+function lineBillAlerts() {
+  const now = Date.now();
+  const until = now + 62 * 86400000;
+  const out = [];
+  const ds = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const ym0 = ymOf(new Date());
+  [0, 1, 2].map((n) => addMonths(ym0, n)).forEach((ym) => {
+    occurrences(ym).forEach((o) => {
+      if (o.paid || o.bill.autopay) return;
+      const b = o.bill;
+      const c = cat(b);
+      const wid = typeof billWallet === 'function' ? billWallet(b) : '';
+      const w = wid && typeof walletById === 'function' ? walletById(wid) : null;
+      const repeat = b.type === 'monthly' ? 'ทุกเดือน' : b.type === 'installment' && o.inst ? `ผ่อนงวด ${o.inst.n}/${o.inst.of}` : b.type === 'once' ? 'ครั้งเดียว' : '';
+      const bill = {
+        id: b.id, ym, name: b.name, icon: b.icon && !billImg(b) ? b.icon : c.icon, color: c.color, category: c.label, repeat,
+        wallet: w ? w.name : '', due: ds(o.due), amount: o.needsAmount ? null : o.amount, needsAmount: o.needsAmount,
+      };
+      const add = (key, days) => {
+        const at = new Date(o.due); at.setDate(at.getDate() - days); at.setHours(9, 0, 0, 0);
+        if (at.getTime() < now - 86400000 || at.getTime() > until) return;
+        out.push({ key, at: at.toISOString(), bill: { ...bill, days } });
+      };
+      const remind = remindOf(b);
+      if (remind > 0) add(`bill:${b.id}:${ym}:r${remind}`, remind);
+      add(`bill:${b.id}:${ym}:due`, 0);
+    });
+  });
+  return out.slice(0, 500);
+}
+
+async function lineBillsSend() {
+  if (!lineBillsOn() || !cloud.user) return;
+  let cur = null;
+  try { cur = JSON.parse(localStorage.getItem(LINE_BILLS_KEY) || 'null'); } catch (e) { /* none */ }
+  const alerts = lineBillAlerts();
+  const hash = pushHash(alerts);
+  if (cur && cur.userId === cloud.user.id && cur.sent === hash) return;
+  try {
+    await api('PUT', '/line/bills', { alerts });
+    try { localStorage.setItem(LINE_BILLS_KEY, JSON.stringify({ userId: cloud.user.id, sent: hash })); } catch (e) { /* private mode */ }
+  } catch (e) { /* offline: sent next time */ }
 }
 
 async function pushAlertsSend() {

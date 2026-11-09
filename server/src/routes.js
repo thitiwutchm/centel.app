@@ -5,7 +5,7 @@ import { hashPassword, verifyPassword, createSession, destroySession, requireUse
 import { analyzeReceipt, aiEnabled, RECEIPT_MODEL } from './receipts.js';
 import { putReceipt, receiptUrl, getObject, deleteObject, storageEnabled } from './storage.js';
 import { verifyGoogleIdToken, googleClientId } from './google.js';
-import { lineEnabled, linePush } from './line.js';
+import { lineEnabled, linePush, saveLineBills } from './line.js';
 import { pushKeys, pushTo, saveSub, dropSub, subCount, saveAlerts, saveApns, dropApns } from './push.js';
 import { apnsEnabled } from './apns.js';
 import profileRoutes, { familyOf } from './profiles.js';
@@ -203,7 +203,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const planner = (await db.query('select data, rev from planner where user_id = app_uid()')).rows[0];
     const links = (await db.query('select expense_id, label_id from expense_labels')).rows;
     const notes = (await db.query('select * from notes order by date nulls last, time nulls first, created_at')).rows;
-    const line = (await db.query('select group_id, active from line_targets where user_id = app_uid()')).rows[0];
+    const line = (await db.query('select group_id, active, bills from line_targets where user_id = app_uid()')).rows[0];
     const linePeople = (await db.query('select line_user_id, name, who from line_people order by sort, name')).rows;
     let invite = null;
     if (couple && !partner) {
@@ -238,7 +238,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
       prefs: prefs ? prefs.data : {},
       planner: planner ? { data: planner.data, rev: planner.rev } : { data: null, rev: 0 },
       notes: notes.map(noteOut),
-      line: line ? { groupId: line.group_id, active: line.active } : null,
+      line: line ? { groupId: line.group_id, active: line.active, bills: line.bills } : null,
       linePeople: linePeople.map((x) => ({ userId: x.line_user_id, name: x.name, who: x.who })),
       features: { line: lineEnabled, push: true, apns: apnsEnabled(), ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
     };
@@ -575,11 +575,12 @@ router.put('/line', wrap(async (req, res) => {
   }
   if (!LINE_TARGET.test(groupId)) throw bad('bad_group_id');
   const active = req.body.active !== false;
+  const bills = req.body.bills !== false;
   await asUser(uid(req), (db) => db.query(
-    `insert into line_targets (group_id, active) values ($1, $2)
-     on conflict (user_id) do update set group_id = excluded.group_id, active = excluded.active, updated_at = now()`,
-    [groupId, active]));
-  res.json({ line: { groupId, active } });
+    `insert into line_targets (group_id, active, bills) values ($1, $2, $3)
+     on conflict (user_id) do update set group_id = excluded.group_id, active = excluded.active, bills = excluded.bills, updated_at = now()`,
+    [groupId, active, bills]));
+  res.json({ line: { groupId, active, bills } });
 }));
 
 // Replaces the person's list of who is who in the LINE group.
@@ -610,12 +611,38 @@ router.post('/line/test', rateLimit(10, 15 * 60000), wrap(async (req, res) => {
   const t = await asUser(uid(req), (db) => db.query('select group_id from line_targets where user_id = app_uid()'));
   if (!t.rows[0]) throw bad('no_group', 404);
   try {
-    await linePush(t.rows[0].group_id, '✅ Centel เชื่อมกับกลุ่มนี้แล้ว การเตือนจากโน้ตสิ่งที่ต้องทำจะส่งมาที่นี่');
+    await linePush(t.rows[0].group_id, '✅ Centel เชื่อมกับกลุ่มนี้แล้ว การเตือนสิ่งที่ต้องทำและบิลใกล้ครบกำหนดจะส่งมาที่นี่');
   } catch (e) {
     console.error('line test', e.message, e.detail || '');
     throw bad('line_failed', 502);
   }
   res.json({ ok: true });
+}));
+
+// The person's upcoming bill reminders for the LINE group (worked out on the device, where
+// bills live). Every device sends the same keys, so the list is per person.
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+router.put('/line/bills', wrap(async (req, res) => {
+  const list = Array.isArray(req.body?.alerts) ? req.body.alerts : null;
+  if (!list || list.length > 500) throw bad('bad_alerts');
+  const alerts = list.map((a) => {
+    const at = new Date(a?.at);
+    const b = a?.bill || {};
+    if (!ALERT_KEY.test(String(a?.key || '')) || Number.isNaN(at.getTime()) || !str(b.name, 80) || !YMD.test(String(b.due || ''))) throw bad('bad_alerts');
+    const amount = Number(b.amount);
+    return {
+      key: String(a.key), at: at.toISOString(),
+      bill: {
+        id: str(b.id, 60) || '', ym: /^\d{4}-\d{2}$/.test(String(b.ym || '')) ? b.ym : '', name: str(b.name, 80), icon: str(b.icon, 8) || '',
+        category: str(b.category, 40) || '', repeat: str(b.repeat, 40) || '', wallet: str(b.wallet, 60) || '', due: b.due,
+        days: Math.max(0, Math.min(31, Math.round(Number(b.days) || 0))),
+        amount: b.needsAmount || !Number.isFinite(amount) ? null : Math.round(amount * 100) / 100, needsAmount: !!b.needsAmount,
+        color: /^#[0-9a-f]{6}$/i.test(String(b.color || '')) ? b.color : '',
+      },
+    };
+  });
+  await saveLineBills(uid(req), alerts);
+  res.json({ ok: true, count: alerts.length });
 }));
 
 /* ---------- iPhone notifications (Web Push) ---------- */
