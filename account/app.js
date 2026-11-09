@@ -894,7 +894,7 @@
     if (live) more.push('<button class="btn danger" data-act="void">ยกเลิกเอกสาร</button>');
 
     main.innerHTML = `<div class="page-h"><div><h1><span class="mono">${esc(doc.number)}</span></h1><div class="sub">${esc(T.docTitle(doc)[0])} · ${statusChip(t, doc.status)}</div></div>
-      <div class="actions">${acts.join('')}<button class="btn dark" data-act="print">${ICON.print}พิมพ์ / PDF</button></div></div>
+      <div class="actions">${acts.join('')}<button class="btn" data-act="pdf">ดาวน์โหลด PDF</button><button class="btn dark" data-act="print">${ICON.print}พิมพ์</button></div></div>
       <div class="view">
         <div class="paper-wrap" data-paper>${T.renderDoc(printable, b)}</div>
         <div class="side">
@@ -922,6 +922,10 @@
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
       try {
+        if (act === 'pdf') {
+          a.disabled = true;
+          try { await T.downloadPdf(T.renderDoc(printable, b, { copy: 'ต้นฉบับ' }) + (t === 'EX' ? '' : T.renderDoc(printable, b, { copy: 'สำเนา' })), `${doc.number}.pdf`); } finally { a.disabled = false; }
+        }
         if (act === 'print') printHtml(T.renderDoc(printable, b, { copy: 'ต้นฉบับ' }) + (t === 'EX' ? '' : T.renderDoc(printable, b, { copy: 'สำเนา' })));
         if (act === 'wht') printHtml(T.renderWht(doc, b));
         if (act === 'share') {
@@ -1282,13 +1286,45 @@
           <label class="field"><span>ราคาสินค้าเริ่มต้น</span><select data-s="priceMode"><option value="excl" ${s.priceMode !== 'incl' ? 'selected' : ''}>ไม่รวม VAT</option><option value="incl" ${s.priceMode === 'incl' ? 'selected' : ''}>รวม VAT แล้ว</option></select></label>
           <label class="field"><span>เดือนเริ่มรอบบัญชี</span><select data-s="fyStart">${T.TH_MONTHS_LONG.map((mn, i) => `<option value="${i + 1}" ${(s.fyStart || 1) === i + 1 ? 'selected' : ''}>${mn}</option>`).join('')}</select></label>
           <label class="field"><span>สีหัวเอกสาร</span><input type="color" data-s="color" value="${esc(s.color || '#E8590C')}" style="height:38px;padding:2px"></label>
-          <label class="field span2"><span>ช่องทางชำระเงิน (พิมพ์ในใบเสนอราคาและใบแจ้งหนี้)</span><textarea data-s="payment" rows="2" placeholder="ธนาคารกสิกรไทย 123-4-56789-0 ชื่อบัญชี บริษัท ตัวอย่าง จำกัด">${esc(s.payment || '')}</textarea></label>
           ${['QT', 'IV', 'RE'].map((k) => `<label class="field span2"><span>หมายเหตุเริ่มต้นใน${T.TYPE_NAME[k]}</span><textarea data-note="${k}" rows="2">${esc(s.notes?.[k] || '')}</textarea></label>`).join('')}
         </div></div>
+        <div class="card card-pad"><h2>รับชำระเงิน</h2>
+          <p class="muted" style="margin-top:0">พิมพ์ในใบเสนอราคาและใบแจ้งหนี้ (ทั้ง PDF และลิงก์ให้ลูกค้า) ใบที่ยังไม่ชำระจะมี QR พร้อมเพย์ที่ผูกยอดชำระสุทธิไว้ ลูกค้าสแกนแล้วยอดขึ้นเอง</p>
+          <div class="grid g2">
+            <label class="field"><span>พร้อมเพย์ (เบอร์มือถือ / เลขผู้เสียภาษี / เลขบัตรประชาชน)</span><input type="text" inputmode="numeric" data-pp="id" value="${esc(s.promptpay?.id || '')}" placeholder="0812345678 หรือ 0105567012345"><small data-pp-hint></small></label>
+            <label class="field"><span>ชื่อบัญชีพร้อมเพย์</span><input type="text" data-pp="name" value="${esc(s.promptpay?.name || '')}" placeholder="${esc(b.name)}"></label>
+            <label class="check span2"><input type="checkbox" data-pp="qr" ${s.promptpay?.qr === false ? '' : 'checked'}> แสดง QR พร้อมเพย์ในเอกสาร</label>
+            <div class="field span2"><span>บัญชีธนาคาร</span><div class="grid" data-banks></div><div><button type="button" class="btn sm" data-addbank>${ICON.plus}เพิ่มบัญชีธนาคาร</button></div></div>
+            <label class="field span2"><span>ข้อความเพิ่มเติม (ไม่บังคับ)</span><textarea data-s="payment" rows="2" placeholder="เช่น กรุณาส่งสลิปมาที่ LINE @example">${esc(s.payment || '')}</textarea></label>
+          </div></div>
         <div class="card card-pad"><h2>กิจการทั้งหมด</h2><p class="muted" style="margin-top:0">มี ${S.businesses.length} กิจการในบัญชีนี้</p><div class="actions"><button class="btn" data-switch2>สลับกิจการ</button><button class="btn" data-newbiz>${ICON.plus}เพิ่มกิจการ</button></div></div>
         ${S.boot.role === 'owner' ? `<div class="card card-pad" style="border-color:var(--bad-soft)"><h2 style="color:var(--bad)">ลบกิจการ</h2><p class="muted" style="margin-top:0">ลบเอกสาร ผู้ติดต่อ และรายการบัญชีทั้งหมดของกิจการนี้ กู้คืนไม่ได้</p><button class="btn danger" data-del>ลบกิจการนี้</button></div>` : ''}
       </div>`;
     let logo = b.logo;
+    // Bank accounts and PromptPay
+    const BANKS = ['ธนาคารกสิกรไทย', 'ธนาคารไทยพาณิชย์', 'ธนาคารกรุงเทพ', 'ธนาคารกรุงไทย', 'ธนาคารกรุงศรีอยุธยา', 'ธนาคารทหารไทยธนชาต (ttb)', 'ธนาคารออมสิน', 'ธนาคารยูโอบี', 'ธนาคารซีไอเอ็มบี ไทย', 'ธนาคารเกียรตินาคินภัทร', 'ธนาคารแลนด์ แอนด์ เฮ้าส์', 'ธ.ก.ส.'];
+    const banks = (s.banks || []).map((x) => ({ ...x }));
+    const drawBanks = () => {
+      $('[data-banks]', main).innerHTML = banks.map((x, i) => `<div class="grid g4" data-bi="${i}" style="align-items:end">
+        <label class="field"><small>ธนาคาร</small><input type="text" list="bank-dl" data-bf="bank" value="${esc(x.bank || '')}"></label>
+        <label class="field"><small>เลขที่บัญชี</small><input type="text" inputmode="numeric" data-bf="number" value="${esc(x.number || '')}" placeholder="123-4-56789-0"></label>
+        <label class="field"><small>ชื่อบัญชี</small><input type="text" data-bf="name" value="${esc(x.name || '')}" placeholder="${esc(b.name)}"></label>
+        <div style="display:flex;gap:6px;align-items:end"><label class="field" style="flex:1"><small>สาขา</small><input type="text" data-bf="branch" value="${esc(x.branch || '')}"></label><button type="button" class="btn sm ghost danger" data-rmbank style="height:38px">ลบ</button></div>
+      </div>`).join('') + `<datalist id="bank-dl">${BANKS.map((n) => `<option value="${n}">`).join('')}</datalist>`;
+    };
+    drawBanks();
+    $('[data-banks]', main).addEventListener('input', (e) => { const r = e.target.closest('[data-bi]'); if (r && e.target.dataset.bf) banks[Number(r.dataset.bi)][e.target.dataset.bf] = e.target.value; });
+    $('[data-banks]', main).addEventListener('click', (e) => { if (e.target.closest('[data-rmbank]')) { banks.splice(Number(e.target.closest('[data-bi]').dataset.bi), 1); drawBanks(); } });
+    $('[data-addbank]', main).onclick = () => { if (banks.length < 4) { banks.push({ bank: '', number: '', name: '', branch: '' }); drawBanks(); } };
+    const ppHint = () => {
+      const d = $('[data-pp=id]', main).value.replace(/\D/g, '');
+      const ok = (d.length === 10 && d[0] === '0') || d.length === 13 || d.length === 15;
+      const h = $('[data-pp-hint]', main);
+      h.textContent = !d ? 'เว้นว่างได้ถ้าไม่ใช้ QR' : ok ? `ใช้ได้ · ${d.length === 10 ? 'เบอร์มือถือ' : d.length === 13 ? 'เลขผู้เสียภาษี / บัตรประชาชน' : 'e-Wallet'}` : 'ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลข 13 หลัก';
+      h.style.color = d && !ok ? 'var(--bad)' : '';
+    };
+    $('[data-pp=id]', main).oninput = ppHint;
+    ppHint();
     const lf = $('[data-lf]', main);
     $('[data-logo]', main).onclick = () => lf.click();
     const nl = $('[data-nologo]', main); if (nl) nl.onclick = () => { logo = null; $('[data-lp]', main).textContent = 'โลโก้'; };
@@ -1308,6 +1344,8 @@
       $$('[data-prefix]', main).forEach((i) => { settings.prefixes[i.dataset.prefix] = i.value; });
       $$('[data-s]', main).forEach((i) => { settings[i.dataset.s] = i.value; });
       $$('[data-note]', main).forEach((i) => { settings.notes[i.dataset.note] = i.value; });
+      settings.banks = banks;
+      settings.promptpay = { id: $('[data-pp=id]', main).value, name: $('[data-pp=name]', main).value, qr: $('[data-pp=qr]', main).checked };
       e.target.disabled = true;
       try {
         await put('', { name: d.name, name_en: d.name_en, tax_id: d.tax_id, branch: d.branch, address: d.address, phone: d.phone, email: d.email, website: d.website, vat_registered: d.vat_registered, logo, settings });

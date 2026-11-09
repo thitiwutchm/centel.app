@@ -245,6 +245,17 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pp-grand th, .pp-grand td { font-weight: 700; color: #1B1D21; border-top: 1.5px solid #1B1D21; padding-top: 6px; font-size: 13.5px; }
 .pp-net th, .pp-net td { font-weight: 700; color: var(--pp-accent); }
 .pp-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #E4E1DB; font-size: 12px; }
+.pp-pay { display: flex; justify-content: space-between; gap: 18px; margin-top: 14px; padding: 12px 14px; border: 1px solid #E4E1DB; border-radius: 8px; font-size: 12px; }
+.pp-pay-text { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.pp-bank { line-height: 1.45; }
+.pp-mono { font-family: var(--mono); font-size: 12.5px; letter-spacing: .02em; }
+.pp-qr { width: 132px; flex: none; text-align: center; }
+.pp-qr-head { background: #0E3D67; color: #fff; font-weight: 700; font-size: 11px; letter-spacing: .06em; border-radius: 4px 4px 0 0; padding: 2px 0; }
+.pp-qr-svg { display: block; image-rendering: pixelated; width: 132px; height: 132px; border: 1px solid #0E3D67; border-top: 0; }
+.pp-qr-amt { font-family: var(--mono); font-weight: 700; font-size: 13px; margin-top: 4px; }
+.pdf-render { width: 210mm; background: #fff; }
+.pdf-render .paper { box-shadow: none; border: 0; margin: 0; min-height: 296mm; height: 296mm; overflow: hidden; transform: none !important; }
+.pdf-render .paper:not(:last-child) { page-break-after: always; }
 .pp-sign { margin-top: auto; padding-top: 28px; display: flex; justify-content: space-around; gap: 16px; text-align: center; }
 .pp-sign > div { flex: 1; max-width: 220px; }
 .pp-line { border-bottom: 1px solid #1B1D21; height: 34px; margin-bottom: 4px; }
@@ -342,6 +353,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   body { background: #fff; }
   #app, #toast, .dlg-back { display: none !important; }
   #print { display: block !important; }
+  #print .paper, #print .paper * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #print .paper { box-shadow: none; border: 0; margin: 0; min-height: 296mm; page-break-after: always; transform: none !important; }
   #print .paper:last-child { page-break-after: auto; }
   #print .print-report { padding: 12mm; font-size: 11px; }

@@ -174,7 +174,19 @@
     ].filter(Boolean);
     const net = Math.round((doc.total - (doc.wht || 0)) * 100) / 100;
     const note = doc.notes || (s.notes && s.notes[doc.type]) || '';
-    const payInfo = (doc.type === 'IV' || doc.type === 'QT') && s.payment ? s.payment : '';
+    const billing = (doc.type === 'IV' || doc.type === 'QT') && doc.status !== 'void';
+    const payInfo = billing && s.payment ? s.payment : '';
+    const banks = billing && Array.isArray(s.banks) ? s.banks.filter((b) => b && b.bank && b.number) : [];
+    const pp = billing && doc.status !== 'paid' && s.promptpay && s.promptpay.id && s.promptpay.qr !== false && net > 0 ? s.promptpay : null;
+    const qr = pp ? qrSvg(promptPayPayload(pp.id, net)) : '';
+    const payBlock = banks.length || payInfo || qr ? `<section class="pp-pay">
+        <div class="pp-pay-text"><div class="pp-label">ช่องทางชำระเงิน</div>
+          ${banks.map((b) => `<div class="pp-bank"><b>${esc(b.bank)}</b>${b.branch ? ` สาขา${esc(b.branch)}` : ''}<br><span class="pp-mono">${esc(b.number)}</span>${b.name ? ` · ${esc(b.name)}` : ''}</div>`).join('')}
+          ${payInfo ? `<div>${esc(payInfo).replace(/\n/g, '<br>')}</div>` : ''}
+          ${pp ? `<div class="pp-bank"><b>พร้อมเพย์</b><br><span class="pp-mono">${esc(promptPayFmt(pp.id))}</span>${pp.name ? ` · ${esc(pp.name)}` : ''}</div>` : ''}
+        </div>
+        ${qr ? `<div class="pp-qr"><div class="pp-qr-head">PromptPay</div>${qr}<div class="pp-qr-amt">${money(net)} บาท</div><div class="pp-small">สแกนจ่ายด้วยแอปธนาคาร</div></div>` : ''}
+      </section>` : '';
     const paid = doc.type === 'RE' && doc.pay ? `ชำระโดย ${esc(PAY_METHOD[doc.pay.method] || '')} เมื่อ ${esc(slashDate(doc.pay.date))}` : '';
     const sign = doc.type === 'QT'
       ? [['ผู้เสนอราคา', s.signer], ['ผู้อนุมัติสั่งซื้อ (ลูกค้า)', '']]
@@ -220,10 +232,8 @@
           ${Number(doc.wht) ? `<tr><th>${doc.type === 'EX' ? 'หักภาษี ณ ที่จ่าย' : 'ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)'}</th><td>${money(-doc.wht)}</td></tr><tr class="pp-net"><th>${doc.type === 'EX' ? 'ยอดจ่ายสุทธิ' : 'ยอดชำระสุทธิ'}</th><td>${money(net)}</td></tr>` : ''}
         </table>
       </section>
-      ${note || payInfo ? `<section class="pp-notes">
-        ${note ? `<div><div class="pp-label">หมายเหตุ</div><div>${esc(note).replace(/\n/g, '<br>')}</div></div>` : ''}
-        ${payInfo ? `<div><div class="pp-label">ช่องทางชำระเงิน</div><div>${esc(payInfo).replace(/\n/g, '<br>')}</div></div>` : ''}
-      </section>` : ''}
+      ${note ? `<section class="pp-notes"><div><div class="pp-label">หมายเหตุ</div><div>${esc(note).replace(/\n/g, '<br>')}</div></div></section>` : ''}
+      ${payBlock}
       <footer class="pp-sign">${sign.map(([k, name]) => `<div><div class="pp-line"></div><div>${esc(name ? `(${name})` : '(.................................................)')}</div><div class="pp-small">${esc(k)}</div><div class="pp-small">วันที่ ......../......../............</div></div>`).join('')}</footer>
     </article>`;
   }
@@ -261,7 +271,76 @@
     </article>`;
   }
 
+  /* ---------- PromptPay QR (EMVCo merchant-presented, Thai QR Payment) ---------- */
+
+  function crc16(str) {
+    let crc = 0xFFFF;
+    for (let i = 0; i < str.length; i++) {
+      crc ^= str.charCodeAt(i) << 8;
+      for (let j = 0; j < 8; j++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+    return crc.toString(16).toUpperCase().padStart(4, '0');
+  }
+  const tlv = (id, v) => `${id}${String(v.length).padStart(2, '0')}${v}`;
+  // id: 10-digit mobile (0812345678), 13-digit tax / citizen ID or 15-digit e-wallet ID. amount in baht.
+  function promptPayPayload(id, amount) {
+    const d = String(id || '').replace(/\D/g, '');
+    const target = d.length === 15 ? tlv('03', d) : d.length === 13 ? tlv('02', d) : tlv('01', ('0000000000000' + '66' + d.replace(/^0/, '')).slice(-13));
+    const amt = Number(amount) > 0 ? tlv('54', (Math.round(Number(amount) * 100) / 100).toFixed(2)) : '';
+    const body = tlv('00', '01') + tlv('01', amt ? '12' : '11') + tlv('29', tlv('00', 'A000000677010111') + target)
+      + tlv('58', 'TH') + tlv('53', '764') + amt + '6304';
+    return body + crc16(body);
+  }
+  const promptPayFmt = (id) => {
+    const d = String(id || '').replace(/\D/g, '');
+    return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : d.length === 13 ? taxIdFmt(d) : d;
+  };
+  // The QR as inline SVG (needs vendor/qrcode.min.js loaded as window.qrcode).
+  function qrSvg(text) {
+    const Q = g.qrcode;
+    if (!Q) return '';
+    const q = Q(0, 'M');
+    q.addData(text);
+    q.make();
+    const n = q.getModuleCount();
+    let path = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) path += `M${c + 2} ${r + 2}h1v1h-1z`;
+    const w = n + 4;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 8}" height="${w * 8}" viewBox="0 0 ${w} ${w}" shape-rendering="crispEdges"><rect width="${w}" height="${w}" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+    // An <img> (not inline SVG) so html2canvas draws it exactly in the downloaded PDF.
+    return `<img class="pp-qr-svg" alt="PromptPay QR" src="data:image/svg+xml;base64,${btoa(svg)}">`;
+  }
+
+  /* ---------- PDF download (html2pdf from cdnjs, loaded on first use) ---------- */
+
+  let pdfLib;
+  function loadPdfLib() {
+    if (g.html2pdf) return Promise.resolve(g.html2pdf);
+    pdfLib = pdfLib || new Promise((ok, no) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      sc.onload = () => ok(g.html2pdf);
+      sc.onerror = () => { pdfLib = null; no(new Error('โหลดตัวสร้าง PDF ไม่สำเร็จ')); };
+      document.head.appendChild(sc);
+    });
+    return pdfLib;
+  }
+  // html: one or more rendered .paper articles. Saves an A4 PDF named `filename`.
+  async function downloadPdf(html, filename) {
+    const lib = await loadPdfLib();
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    // html2pdf renders the string in its own overlay container (an off-screen element of ours comes out blank).
+    await lib().set({
+      margin: 0, filename,
+      image: { type: 'jpeg', quality: 0.96 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css'] },
+    }).from(`<div class="pdf-render">${html}</div>`, 'string').save();
+  }
+
   g.Thai = {
+    downloadPdf, promptPayPayload, promptPayFmt, qrSvg,
     esc, money, qtyFmt, thDate, slashDate, thMonth, today, taxIdFmt, branchFmt, bahtText, computeTotals, WHT_RATES,
     docTitle, TYPE_NAME, TH_MONTHS, STATUS, statusName, PAY_METHOD, renderDoc, renderWht, TH_MONTHS_LONG,
   };

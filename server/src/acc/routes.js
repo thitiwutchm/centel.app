@@ -20,6 +20,11 @@ const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && 
 const str = (v, max = 200) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
 const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : 0);
 const LOGO = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+// PromptPay: a 10-digit mobile number, 13-digit tax / citizen ID or 15-digit e-wallet ID.
+const promptPayId = (v) => {
+  const d = String(v ?? '').replace(/\D/g, '');
+  return (d.length === 10 && d[0] === '0') || d.length === 13 || d.length === 15 ? d : null;
+};
 const bangkokToday = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
 
 /* ---------- Public document link (no sign-in) ---------- */
@@ -107,6 +112,11 @@ async function updateBusiness(db, id, body) {
       prefixes,
       notes,
       payment: str(s.payment, 600),
+      // Bank accounts printed on quotations and invoices, and the PromptPay ID their QR pays into.
+      banks: (Array.isArray(s.banks) ? s.banks : []).slice(0, 4).map((b) => ({
+        bank: str(b?.bank, 100), number: str(b?.number, 40), name: str(b?.name, 200), branch: str(b?.branch, 100),
+      })).filter((b) => b.bank && b.number),
+      promptpay: promptPayId(s.promptpay?.id) ? { id: promptPayId(s.promptpay.id), name: str(s.promptpay.name, 200), qr: s.promptpay.qr !== false } : null,
       signer: str(s.signer, 100),
       fyStart: Math.min(12, Math.max(1, Math.floor(Number(s.fyStart) || 1))),
       creditDays: Math.min(365, Math.max(0, Math.floor(Number(s.creditDays) || 30))),
@@ -652,7 +662,8 @@ function publicBusiness(b) {
   return {
     name: b.name, name_en: b.name_en, tax_id: b.tax_id, branch: b.branch, address: b.address, phone: b.phone,
     email: b.email, website: b.website, logo: b.logo, vat_registered: b.vat_registered,
-    settings: { payment: b.settings?.payment || null, notes: b.settings?.notes || {}, signer: b.settings?.signer || null, color: b.settings?.color || null },
+    settings: {
+      payment: b.settings?.payment || null, banks: b.settings?.banks || [], promptpay: b.settings?.promptpay || null, notes: b.settings?.notes || {}, signer: b.settings?.signer || null, color: b.settings?.color || null },
   };
 }
 

@@ -116,6 +116,17 @@ test('manual journal must balance; voiding a receipt reopens the invoice', async
   assert.equal(dash.months.length, 6);
 });
 
+test('payment settings keep valid bank accounts and PromptPay IDs only', async () => {
+  await A.put(P, { settings: { banks: [{ bank: 'ธนาคารกสิกรไทย', number: '123-4-56789-0', name: 'บริษัท ทดสอบ' }, { bank: '', number: '1' }], promptpay: { id: '081-234-5678', name: 'บริษัท ทดสอบ' } } });
+  let s = (await A.get(P)).business.settings;
+  assert.equal(s.banks.length, 1);
+  assert.deepEqual(s.promptpay, { id: '0812345678', name: 'บริษัท ทดสอบ', qr: true });
+  await A.put(P, { settings: { ...s, promptpay: { id: '12345' } } });
+  s = (await A.get(P)).business.settings;
+  assert.equal(s.promptpay, null);
+  await A.put(P, { settings: { ...s, promptpay: { id: '0105566000001', qr: true } } });
+});
+
 test('a shared link shows the document without signing in', async () => {
   const iv = (await A.get(`${P}/docs?type=IV`)).docs[0];
   const { token } = await A.post(`${P}/docs/${iv.id}/share`);
@@ -123,6 +134,8 @@ test('a shared link shows the document without signing in', async () => {
   assert.equal(pub.doc.number, iv.number);
   assert.equal(pub.business.name, 'บริษัท ทดสอบ จำกัด');
   assert.equal(pub.doc.lines[0].account, undefined);
+  assert.equal(pub.business.settings.promptpay.id, '0105566000001');
+  assert.equal(pub.business.settings.banks[0].bank, 'ธนาคารกสิกรไทย');
   await A.post(`${P}/docs/${iv.id}/share`, { off: true });
   assert.equal((await fetch(`${API}/api/acc/public/${token}`)).status, 404);
 });
