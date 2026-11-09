@@ -48,6 +48,14 @@
 	handle {
 		root * /srv
 
+		# account.centel.app is the accounting app in /account (account/index.html); its
+		# /api calls go to the same api service above. centel.app/account/ serves it too.
+		@acctsite {
+			host account.centel.app
+			not path /account/*
+		}
+		rewrite @acctsite /account{path}
+
 		# Always revalidate the shell and service worker so installed apps pick up updates.
 		@nocache path */ */index.html */sw.js */manifest.webmanifest
 		header @nocache Cache-Control "no-cache"
