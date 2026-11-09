@@ -95,9 +95,9 @@ test('notes: the LINE group for reminders is set, switched off and removed in Ac
   const gid = 'C' + crypto.randomBytes(16).toString('hex');
   assert.equal((await A('GET', '/bootstrap')).line, null);
   assert.equal((await A('PUT', '/line', { groupId: 'not-an-id' })).status, 400);
-  assert.deepEqual((await A('PUT', '/line', { groupId: gid })).line, { groupId: gid, active: true });
-  assert.deepEqual((await A('PUT', '/line', { groupId: gid, active: false })).line, { groupId: gid, active: false });
-  assert.deepEqual((await A('GET', '/bootstrap')).line, { groupId: gid, active: false });
+  assert.deepEqual((await A('PUT', '/line', { groupId: gid })).line, { groupId: gid, active: true, bills: true });
+  assert.deepEqual((await A('PUT', '/line', { groupId: gid, active: false, bills: false })).line, { groupId: gid, active: false, bills: false });
+  assert.deepEqual((await A('GET', '/bootstrap')).line, { groupId: gid, active: false, bills: false });
   assert.equal((await B('GET', '/bootstrap')).line, null);
   assert.equal((await A('PUT', '/line', { groupId: '' })).line, null);
   assert.equal((await A('GET', '/bootstrap')).line, null);

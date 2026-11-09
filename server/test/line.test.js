@@ -217,4 +217,41 @@ test('line: replying to the bot edits or cancels the note, without AI', async (t
   assert.equal(await note(), undefined);
 });
 
+test('line: due bill reminders go to the group as a Flex card, once, and only with bills on', async (t) => {
+  if (!on) return t.skip('API has no LINE');
+  await A('PUT', '/line', { groupId: gA, active: true });
+  await B('PUT', '/line', { groupId: gB, active: true, bills: false });
+  assert.equal((await A('GET', '/bootstrap')).line.bills, true);
+  assert.equal((await B('GET', '/bootstrap')).line.bills, false);
+  assert.equal((await A('PUT', '/line/bills', { alerts: [{ key: 'x', at: 'nope', bill: { name: 'a', due: '2026-12-07' } }] })).status, 400);
+  const past = new Date(Date.now() - 60000).toISOString();
+  const bill = (name, extra) => ({ id: 'b1', ym: '2026-12', name, icon: '💧', color: '#2fa8ff', category: 'ค่าน้ำ', repeat: 'ทุกเดือน', wallet: 'เงินสด', due: '2026-12-07', days: 1, ...extra });
+  const alerts = [
+    { key: 'bill:b1:2026-12:r1', at: past, bill: bill('PWA TripleB Lab', { amount: null, needsAmount: true }) },
+    { key: 'bill:b2:2026-12:due', at: past, bill: bill('เน็ตบ้าน', { id: 'b2', amount: 599, days: 0 }) },
+    { key: 'bill:b3:2099-01:due', at: '2099-01-01T02:00:00Z', bill: bill('ยังไม่ถึง', { amount: 1 }) },
+  ];
+  assert.equal((await A('PUT', '/line/bills', { alerts })).count, 3);
+  assert.equal((await B('PUT', '/line/bills', { alerts: [{ ...alerts[1], bill: bill('บิลของเบน', { amount: 10, days: 0 }) }] })).count, 1);
+  await wait(1500);
+  const flex = () => sent.filter((s) => s.path === '/push' && s.body.messages[0].type === 'flex');
+  const cards = flex();
+  assert.deepEqual(cards.map((s) => s.body.to), [gA, gA]);
+  const water = cards.find((s) => s.body.messages[0].altText.includes('PWA'));
+  const json = JSON.stringify(water.body.messages[0].contents);
+  assert.match(water.body.messages[0].altText, /ครบกำหนดพรุ่งนี้ PWA TripleB Lab/);
+  assert.ok(json.includes('ยอดไม่แน่นอน') && json.includes('จันทร์ 7 ธ.ค. 2569') && json.includes('เงินสด') && json.includes('#bill=b1:2026-12'));
+  assert.match(cards.find((s) => s !== water).body.messages[0].altText, /วันนี้ครบกำหนด เน็ตบ้าน ฿599/);
+  // The person's own LINE user ("me") is tagged under the card.
+  assert.equal(water.body.messages[1].type, 'textV2');
+  // Sending the same list again doesn't send again; turning bills off stops new ones.
+  await A('PUT', '/line/bills', { alerts });
+  await wait(1200);
+  assert.equal(flex().length, 2);
+  await A('PUT', '/line', { groupId: gA, active: true, bills: false });
+  await A('PUT', '/line/bills', { alerts: [{ ...alerts[0], key: 'bill:b9:2026-12:due' }] });
+  await wait(1200);
+  assert.equal(flex().length, 2);
+});
+
 test('line: teardown', () => { mock.close(); });

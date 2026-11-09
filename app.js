@@ -1631,7 +1631,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // The iOS app's web view has no service worker, so it learns about a new version here: when the
 // app comes back to the screen, the deployed sw.js says which version is live (its CACHE name);
 // if that is not the one this page loaded with, the page reloads (only with no sheet open).
-const APP_BUILD = 'billplanner-v104'; // keep equal to CACHE in sw.js
+const APP_BUILD = 'billplanner-v106'; // keep equal to CACHE in sw.js
 let buildChecked = 0;
 function checkNewBuild() {
   if (location.protocol === 'file:' || Date.now() - buildChecked < 30000) return;
@@ -1644,9 +1644,25 @@ function checkNewBuild() {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkNewBuild(); });
 
+// centel.app/#bill=<id>:<YYYY-MM> (the LINE bill reminder's button) opens that bill's month.
+// Bills may arrive with the first sync, so it tries again for a few seconds.
+function openBillLink() {
+  const m = /^#bill=([^:]+):(\d{4}-\d{2})$/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  const id = decodeURIComponent(m[1]);
+  let tries = 0;
+  const go = () => {
+    if (state.bills.some((b) => b.id === id)) { if (ui.tab !== 'home') { ui.tab = 'home'; render(); } occurrenceSheet(id, m[2]); } else if (++tries < 10) setTimeout(go, 800);
+  };
+  setTimeout(go, 300);
+}
+window.addEventListener('hashchange', openBillLink);
+
 render();
 updateBadge();
 cloudStart();
+openBillLink();
 calFeedChanged();
 pushAlertsChanged();
 aiBillsChanged();

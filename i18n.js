@@ -454,7 +454,7 @@ const I18N_EN = {
   'แจ้งเตือนในกลุ่ม LINE': 'Reminders in a LINE group', 'ตั้งกลุ่มไว้แล้ว · แก้ไขได้ที่หน้า บัญชี': 'Group set · change it in Account',
   'ตั้งค่า LINE Group ID ได้ที่หน้า บัญชี': 'Set the LINE Group ID in Account', 'ต้องเข้าสู่ระบบ': 'Sign in first',
   'ยังไม่ได้ตั้งค่า': 'Not set', 'ปิดอยู่': 'Off', 'พร้อมส่ง': 'Ready', 'รอเชื่อม LINE OA': 'Waiting for LINE OA',
-  'ส่งเตือนสิ่งที่ต้องทำเข้ากลุ่ม': 'Send to-do reminders to the group', 'ลบ Group ID แล้ว': 'Group ID removed',
+  'ส่งเตือนสิ่งที่ต้องทำเข้ากลุ่ม': 'Send to-do reminders to the group', 'ส่งเตือนบิลเข้ากลุ่ม': 'Send bill reminders to the group', 'ลบ Group ID แล้ว': 'Group ID removed',
   'Group ID ไม่ถูกต้อง (C ตามด้วยตัวอักษร 32 ตัว)': 'Invalid Group ID (C followed by 32 characters)',
   'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน แล้วใส่ Group ID (ขึ้นต้นด้วย C) ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้': 'Add the Centel LINE OA to your family group and enter its Group ID (starts with C) here. Note reminders are posted to this group.',
   'ระบบจะเริ่มส่งเมื่อเชื่อม LINE OA เสร็จ': 'Sending starts once the LINE OA is connected.',
@@ -468,8 +468,8 @@ const I18N_EN = {
     'You can add notes from the group, e.g. “ทำนัด 18:00 31 ต.ค. ไปแข่งกีฬา”, or start with นัด / เตือน / จด and a space. Add “เตือนก่อน 2 ชม.” or “ล่วงหน้า 1 วัน” to be reminded earlier. The note shows in the app of whoever typed it, shared with their partner.',
   '💬 ส่งข้อความทดสอบเข้ากลุ่ม': '💬 Send a test message to the group', 'ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE': 'Test message sent, check the LINE group',
   'ส่งไม่สำเร็จ ตรวจว่า LINE OA อยู่ในกลุ่มและ Group ID ถูกต้อง': 'Could not send. Check the LINE OA is in the group and the Group ID is right',
-  'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้จะส่งเข้ากลุ่มนี้':
-    'Add the Centel LINE OA to your family group. The bot posts the Group ID (starts with C) there, or type id in the group to get it again. Enter it here and note reminders are posted to this group.',
+  'เพิ่ม LINE OA ของ Centel เข้ากลุ่มของบ้าน บอทจะส่ง Group ID (ขึ้นต้นด้วย C) ให้ในกลุ่ม หรือพิมพ์ id ในกลุ่มเพื่อขอใหม่ แล้วนำมาใส่ที่นี่ การเตือนของโน้ตที่ตั้งเวลาไว้ และบิลใกล้ครบกำหนด (09:00 ของวันเตือนล่วงหน้าและวันครบกำหนด) จะส่งเข้ากลุ่มนี้':
+    'Add the Centel LINE OA to your family group. The bot posts the Group ID (starts with C) there, or type id in the group to get it again. Enter it here and note reminders and bills coming due (09:00 on the remind-before day and the due day) are posted to this group.',
   'แก้ไขโน้ต': 'Edit note', 'เช่น ไปเยี่ยมแม่ ลำพูน': 'e.g. Visit Mom in Lamphun', 'ลบโน้ต': 'Delete note', 'โน้ตนี้สร้างโดย {0}': 'Created by {0}',
   'เวลา': 'Time', 'ทั้งวัน': 'All day', 'แชร์กับ {0}': 'Share with {0}', 'กรุณาพิมพ์สิ่งที่ต้องทำ': 'Please type what to do',
   'เพิ่มโน้ตแล้ว': 'Note added', 'เพิ่มแล้ว · {0}': 'Added · {0}', 'เสร็จแล้ว ✓': 'Done ✓', 'ลบโน้ตนี้?': 'Delete this note?',
