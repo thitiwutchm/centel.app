@@ -20,6 +20,7 @@ const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && 
 const str = (v, max = 200) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
 const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : 0);
 const LOGO = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+const image = (v, max) => (typeof v === 'string' && v.length < max && LOGO.test(v) ? v : null);
 // PromptPay: a 10-digit mobile number, 13-digit tax / citizen ID or 15-digit e-wallet ID.
 const promptPayId = (v) => {
   const d = String(v ?? '').replace(/\D/g, '');
@@ -92,7 +93,9 @@ async function updateBusiness(db, id, body) {
     phone: body.phone !== undefined ? str(body.phone, 60) : undefined,
     email: body.email !== undefined ? str(body.email, 200) : undefined,
     website: body.website !== undefined ? str(body.website, 200) : undefined,
-    logo: body.logo !== undefined ? (typeof body.logo === 'string' && body.logo.length < 400000 && LOGO.test(body.logo) ? body.logo : null) : undefined,
+    logo: body.logo !== undefined ? image(body.logo, 400000) : undefined,
+    signature: body.signature !== undefined ? image(body.signature, 400000) : undefined,
+    stamp: body.stamp !== undefined ? image(body.stamp, 400000) : undefined,
     vat_registered: body.vat_registered !== undefined ? !!body.vat_registered : undefined,
   };
   for (const [k, v] of Object.entries(fields)) {
@@ -118,6 +121,10 @@ async function updateBusiness(db, id, body) {
       })).filter((b) => b.bank && b.number),
       promptpay: promptPayId(s.promptpay?.id) ? { id: promptPayId(s.promptpay.id), name: str(s.promptpay.name, 200), qr: s.promptpay.qr !== false } : null,
       signer: str(s.signer, 100),
+      signerTitle: str(s.signerTitle, 100),
+      // Put the signature and stamp on documents by default (the preview can turn it off per copy).
+      signAuto: !!s.signAuto,
+      lang: s.lang === 'en' ? 'en' : 'th',
       fyStart: Math.min(12, Math.max(1, Math.floor(Number(s.fyStart) || 1))),
       creditDays: Math.min(365, Math.max(0, Math.floor(Number(s.creditDays) || 30))),
       priceMode: s.priceMode === 'incl' ? 'incl' : 'excl',
@@ -233,7 +240,12 @@ biz.put('/contacts/:id', wrap(async (req, res) => {
 
 function itemFields(i) {
   return {
-    kind: i.kind === 'product' ? 'product' : 'service',
+    kind: ['product', 'stock'].includes(i.kind) ? i.kind : 'service',
+    barcode: str(i.barcode, 60),
+    image: image(i.image, 200000),
+    cost: num(i.cost),
+    stock_open: Number.isFinite(Number(i.stock_open)) ? Math.round(Number(i.stock_open) * 10000) / 10000 : 0,
+    category: str(i.category, 100),
     sku: str(i.sku, 60),
     name: str(i.name, 300),
     unit: str(i.unit, 30),
@@ -253,6 +265,19 @@ biz.put('/items/:id', wrap(async (req, res) => {
   const f = itemFields(req.body || {});
   if (!f.name) throw bad('bad_name');
   res.json({ item: await tx(req, (db) => upsertRow(db, 'acc_items', req.params.id, B(req), f)) });
+}));
+
+// Stock on hand for items that count stock: opening + bought (expenses) − sold (invoices and cash receipts).
+biz.get('/stock', wrap(async (req, res) => {
+  const rows = await tx(req, async (db) => (await db.query(
+    `select l->>'itemId' as id,
+            sum(case when d.type = 'EX' then (l->>'qty')::numeric else 0 end) as bought,
+            sum(case when d.type <> 'EX' then (l->>'qty')::numeric else 0 end) as sold
+     from acc_docs d, jsonb_array_elements(d.lines) l
+     where d.business_id = $1 and d.status <> 'void' and l->>'itemId' is not null
+       and (d.type in ('IV', 'EX') or (d.type = 'RE' and (d.ref_id is null or not exists (select 1 from acc_docs r where r.id = d.ref_id and r.type = 'IV'))))
+     group by 1`, [B(req)])).rows);
+  res.json({ stock: Object.fromEntries(rows.map((r) => [r.id, { bought: Number(r.bought), sold: Number(r.sold) }])) });
 }));
 
 /* ---------- Documents ---------- */
@@ -438,8 +463,15 @@ biz.get('/docs', wrap(async (req, res) => {
   if (isUuid(q.contact)) { p.push(q.contact); where.push(`contact_id = $${p.length}`); }
   const rows = await tx(req, async (db) => (await db.query(
     `select id, type, number, status, date, due_date, contact_id, contact->>'name' as contact_name, tax_invoice,
-            subtotal, vat, total, wht, ref_id, (pay->>'date') as paid_date, created_at
+            subtotal, vat, total, wht, ref_id, (pay->>'date') as paid_date, created_at,
+            attachment, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared
      from acc_docs where ${where.join(' and ')} order by date desc, number desc limit 2000`, p)).rows);
+  // Short-lived links to the scanned bill pictures, for the expense list thumbnails.
+  if (storageEnabled) {
+    await Promise.all(rows.filter((d) => d.attachment && /\.(jpe?g|png|webp)$/.test(d.attachment)).map(async (d) => {
+      d.thumb = await receiptUrl(d.attachment).catch(() => null);
+    }));
+  }
   res.json({ docs: rows });
 }));
 
@@ -662,8 +694,10 @@ function publicBusiness(b) {
   return {
     name: b.name, name_en: b.name_en, tax_id: b.tax_id, branch: b.branch, address: b.address, phone: b.phone,
     email: b.email, website: b.website, logo: b.logo, vat_registered: b.vat_registered,
+    // The signature and stamp only leave the app when the business chose to sign documents automatically.
+    signature: b.settings?.signAuto ? b.signature : null, stamp: b.settings?.signAuto ? b.stamp : null,
     settings: {
-      payment: b.settings?.payment || null, banks: b.settings?.banks || [], promptpay: b.settings?.promptpay || null, notes: b.settings?.notes || {}, signer: b.settings?.signer || null, color: b.settings?.color || null },
+      payment: b.settings?.payment || null, banks: b.settings?.banks || [], promptpay: b.settings?.promptpay || null, notes: b.settings?.notes || {}, signer: b.settings?.signer || null, signerTitle: b.settings?.signerTitle || null, signAuto: !!b.settings?.signAuto, lang: b.settings?.lang || 'th', color: b.settings?.color || null },
   };
 }
 
