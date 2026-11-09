@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>เอกสาร</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .pub-bar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; background: var(--rail); color: #fff; }
+    .pub-bar small { color: #9AA0AA; display: block; }
+    .pub-body { padding: 20px 16px 60px; }
+    .pub-body .paper-wrap { max-width: 210mm; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="pub-bar"><div><b data-n>กำลังโหลด…</b><small>ส่งผ่าน Centel Account</small></div><button class="btn primary" data-p hidden>บันทึก PDF / พิมพ์</button></div>
+    <div class="pub-body"><div class="paper-wrap" data-paper></div></div>
+  </div>
+  <div id="print"></div>
+  <script src="thai.js"></script>
+  <script>
+    (async () => {
+      const T = window.Thai;
+      const token = new URLSearchParams(location.search).get('t') || '';
+      const wrap = document.querySelector('[data-paper]');
+      const name = document.querySelector('[data-n]');
+      try {
+        const res = await fetch('/api/acc/public/' + encodeURIComponent(token));
+        if (!res.ok) throw new Error();
+        const { doc, business } = await res.json();
+        const title = T.docTitle(doc)[0];
+        document.title = `${title} ${doc.number} · ${business.name}`;
+        name.textContent = `${title} ${doc.number}`;
+        wrap.innerHTML = T.renderDoc(doc, business);
+        const fit = () => {
+          const p = wrap.querySelector('.paper');
+          const k = Math.min(1, wrap.clientWidth / p.offsetWidth);
+          p.style.transformOrigin = 'top left';
+          p.style.transform = k < 1 ? `scale(${k})` : '';
+          wrap.style.height = k < 1 ? `${p.offsetHeight * k}px` : '';
+        };
+        fit();
+        addEventListener('resize', fit);
+        const btn = document.querySelector('[data-p]');
+        btn.hidden = false;
+        btn.onclick = () => { document.getElementById('print').innerHTML = T.renderDoc(doc, business); print(); };
+      } catch {
+        name.textContent = 'ไม่พบเอกสาร';
+        wrap.innerHTML = '<div class="empty"><b>ลิงก์นี้ใช้ไม่ได้แล้ว</b>ติดต่อผู้ส่งเอกสารเพื่อขอลิงก์ใหม่</div>';
+      }
+    })();
+  </script>
+</body>
+</html>
