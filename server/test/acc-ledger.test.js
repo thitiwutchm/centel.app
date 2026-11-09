@@ -102,3 +102,19 @@ test('numbers and fiscal years', () => {
   assert.equal(fiscalStart('2026-11-09', 1), '2026-01-01');
   assert.equal(fiscalStart('2026-03-09', 10), '2025-10-01');
 });
+
+test('credit and debit notes move sales, output VAT and the customer balance', () => {
+  const lines = computeTotals([{ name: 'ส่วนลดหลังขาย', qty: 1, price: 1000, account: '41200' }], { vatRate: 7 }).lines;
+  const base = { lines, total: 1070, vat: 70, wht: 0, status: 'open' };
+  const cn = postingsFor({ ...base, type: 'CN' }, sys);
+  assert.ok(balanced(cn));
+  assert.deepEqual(cn.map((l) => [l.account, l.debit, l.credit]), [[sys.ar, 0, 1070], ['41200', 1000, 0], [sys.vat_out, 70, 0]]);
+  const dn = postingsFor({ ...base, type: 'DN' }, sys);
+  assert.deepEqual(dn.map((l) => [l.account, l.debit, l.credit]), [[sys.ar, 1070, 0], ['41200', 0, 1000], [sys.vat_out, 0, 70]]);
+  // Refunding the credit note clears the customer balance through the bank.
+  const paid = postingsFor({ ...base, type: 'CN', status: 'done', pay: { account: sys.bank, date: '2026-11-10' } }, sys);
+  const pay = paid.filter((l) => l.stage === 'pay');
+  assert.ok(balanced(pay));
+  assert.deepEqual(pay.map((l) => [l.account, l.debit, l.credit]), [[sys.bank, 0, 1070], [sys.ar, 1070, 0]]);
+  assert.deepEqual(postingsFor({ ...base, type: 'CN', status: 'void' }, sys), []);
+});

@@ -109,10 +109,12 @@ async function vatSales(db, biz, q) {
   const m = monthOf(q.month);
   const rows = (await db.query(
     `select id, type, number, date, status, contact, vat_base, vat, total
-     from acc_docs where business_id = $1 and type in ('IV', 'RE') and tax_invoice and date between $2 and $3
+     from acc_docs where business_id = $1 and type in ('IV', 'RE', 'CN', 'DN') and tax_invoice and date between $2 and $3
      order by date, number`, [biz.id, m.from, m.to])).rows.map((d) => {
     const v = d.status === 'void';
-    return { id: d.id, type: d.type, number: d.number, date: d.date, void: v, name: d.contact?.name || '', tax_id: d.contact?.tax_id || '', branch: d.contact?.branch || '', base: v ? 0 : d.vat_base, vat: v ? 0 : d.vat };
+    // A credit note lowers the month's sales and output VAT.
+    const k = d.type === 'CN' ? -1 : 1;
+    return { id: d.id, type: d.type, number: d.number, date: d.date, void: v, name: d.contact?.name || '', tax_id: d.contact?.tax_id || '', branch: d.contact?.branch || '', base: v ? 0 : k * d.vat_base, vat: v ? 0 : k * d.vat };
   });
   return { ...m, rows, totals: { base: r2(rows.reduce((s, x) => s + x.base, 0)), vat: r2(rows.reduce((s, x) => s + x.vat, 0)) } };
 }

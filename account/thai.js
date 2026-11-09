@@ -119,15 +119,19 @@
       case 'IV': return d.tax_invoice ? ['ใบแจ้งหนี้ / ใบกำกับภาษี', 'Invoice / Tax Invoice'] : ['ใบแจ้งหนี้ / ใบวางบิล', 'Invoice / Billing Note'];
       case 'RE': return d.tax_invoice ? ['ใบเสร็จรับเงิน / ใบกำกับภาษี', 'Receipt / Tax Invoice'] : ['ใบเสร็จรับเงิน', 'Receipt'];
       case 'EX': return ['ใบสำคัญจ่าย', 'Payment Voucher'];
+      case 'CN': return ['ใบลดหนี้', 'Credit Note'];
+      case 'DN': return ['ใบเพิ่มหนี้', 'Debit Note'];
       default: return ['เอกสาร', 'Document'];
     }
   }
-  const TYPE_NAME = { QT: 'ใบเสนอราคา', IV: 'ใบแจ้งหนี้', RE: 'ใบเสร็จรับเงิน', EX: 'ค่าใช้จ่าย', JV: 'สมุดรายวันทั่วไป' };
+  const TYPE_NAME = { QT: 'ใบเสนอราคา', IV: 'ใบแจ้งหนี้', RE: 'ใบเสร็จรับเงิน', EX: 'ค่าใช้จ่าย', CN: 'ใบลดหนี้', DN: 'ใบเพิ่มหนี้', JV: 'สมุดรายวันทั่วไป' };
   const STATUS = {
     QT: { open: 'รอตอบรับ', accepted: 'ตอบรับแล้ว', rejected: 'ไม่อนุมัติ', void: 'ยกเลิก' },
     IV: { open: 'รอรับชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิก' },
     RE: { done: 'รับเงินแล้ว', void: 'ยกเลิก' },
     EX: { open: 'รอจ่าย', paid: 'จ่ายแล้ว', void: 'ยกเลิก' },
+    CN: { open: 'รอคืนเงิน', done: 'คืนเงินแล้ว', void: 'ยกเลิก' },
+    DN: { open: 'รอรับชำระ', done: 'รับชำระแล้ว', void: 'ยกเลิก' },
   };
   const statusName = (type, s) => (STATUS[type] && STATUS[type][s]) || s;
   const PAY_METHOD = { cash: 'เงินสด', transfer: 'โอนเงิน', cheque: 'เช็ค', card: 'บัตร', other: 'อื่น ๆ' };
@@ -164,8 +168,10 @@
       words: 'จำนวนเงิน (ตัวอักษร)', notes: 'หมายเหตุ', payTo: 'ช่องทางชำระเงิน', promptpay: 'พร้อมเพย์', branch: 'สาขา',
       scan: 'สแกนจ่ายด้วยแอปธนาคาร', baht: 'บาท', original: 'ต้นฉบับ', copy: 'สำเนา', void: 'ยกเลิก', on: 'ในนาม',
       paidBy: (m, d) => `ชำระโดย${m} เมื่อ ${d}`,
-      roles: { QT: ['ผู้อนุมัติสั่งซื้อ', 'ผู้เสนอราคา'], IV: ['ผู้รับวางบิล', 'ผู้วางบิล'], RE: ['ผู้จ่ายเงิน', 'ผู้รับเงิน'], EX: ['ผู้รับเงิน', 'ผู้อนุมัติ'] },
+      roles: { QT: ['ผู้อนุมัติสั่งซื้อ', 'ผู้เสนอราคา'], IV: ['ผู้รับวางบิล', 'ผู้วางบิล'], RE: ['ผู้จ่ายเงิน', 'ผู้รับเงิน'], EX: ['ผู้รับเงิน', 'ผู้อนุมัติ'], CN: ['ผู้รับเอกสาร', 'ผู้มีอำนาจลงนาม'], DN: ['ผู้รับเอกสาร', 'ผู้มีอำนาจลงนาม'] },
       prepared: 'ผู้จัดทำ',
+      taxRef: 'ใบกำกับภาษีเดิม', origValue: 'มูลค่าตามใบกำกับภาษีเดิม', rightValue: 'มูลค่าที่ถูกต้อง', diffValue: 'ผลต่าง', reason: 'เหตุผลที่ออก',
+      replaces: (n, d, r) => `ยกเลิกและออกใบกำกับภาษีฉบับใหม่แทนฉบับเดิมเลขที่ ${n} ลงวันที่ ${d}${r ? ` เนื่องจาก${r}` : ''}`,
     },
     en: {
       no: 'No.', date: 'Date', due: 'Due date', valid: 'Valid until', ref: 'Reference', billNo: 'Vendor bill no.',
@@ -176,8 +182,10 @@
       words: 'Amount in words', notes: 'Notes', payTo: 'Payment details', promptpay: 'PromptPay', branch: 'Branch',
       scan: 'Scan with any Thai banking app', baht: 'THB', original: 'Original', copy: 'Copy', void: 'VOID', on: 'For',
       paidBy: (m, d) => `Paid by ${m} on ${d}`,
-      roles: { QT: ['Accepted by', 'Quoted by'], IV: ['Received by', 'Issued by'], RE: ['Paid by', 'Received by'], EX: ['Received by', 'Approved by'] },
+      roles: { QT: ['Accepted by', 'Quoted by'], IV: ['Received by', 'Issued by'], RE: ['Paid by', 'Received by'], EX: ['Received by', 'Approved by'], CN: ['Received by', 'Authorised signature'], DN: ['Received by', 'Authorised signature'] },
       prepared: 'Prepared by',
+      taxRef: 'Original tax invoice', origValue: 'Value on original tax invoice', rightValue: 'Correct value', diffValue: 'Difference', reason: 'Reason',
+      replaces: (n, d, r) => `Cancels and replaces tax invoice no. ${n} dated ${d}${r ? ` (${r})` : ''}`,
     },
   };
   const PAY_METHOD_EN = { cash: 'cash', transfer: 'bank transfer', cheque: 'cheque', card: 'card', other: 'other' };
@@ -216,7 +224,7 @@
       [t.no, doc.number],
       [t.date, fmtDate(doc.date)],
       doc.due_date ? [doc.type === 'QT' ? t.valid : t.due, fmtDate(doc.due_date)] : null,
-      doc.ref ? [t.ref, doc.ref.number] : null,
+      doc.ref && (doc.type === 'CN' || doc.type === 'DN') ? [t.taxRef, `${doc.ref.number}${doc.ref.date ? ` (${fmtDate(doc.ref.date)})` : ''}`] : doc.ref ? [t.ref, doc.ref.number] : null,
       doc.type === 'EX' && doc.ref_no ? [t.billNo, doc.ref_no] : null,
     ].filter(Boolean);
     const rows = lines.map((l, i) => `<tr>
@@ -228,14 +236,26 @@
       <td class="r">${money(l.amount ?? (Number(l.qty) * Number(l.price) - (Number(l.disc) || 0)))}</td></tr>`).join('');
     const net = Math.round((doc.total - (doc.wht || 0)) * 100) / 100;
     const hasWht = Number(doc.wht) > 0;
+    // Credit / debit note: the original value, the corrected value and the difference (มาตรา 86/9, 86/10).
+    const isNote = doc.type === 'CN' || doc.type === 'DN';
+    const diff = Math.round((doc.total - doc.vat) * 100) / 100;
+    const orig = isNote && doc.adjust && doc.adjust.orig != null ? Number(doc.adjust.orig) : null;
     const totals = [
+      orig != null ? [t.origValue, orig] : null,
+      orig != null ? [t.rightValue, Math.round((orig + (doc.type === 'CN' ? -diff : diff)) * 100) / 100] : null,
+      orig != null ? [t.diffValue, diff] : null,
       [t.subtotal, doc.subtotal],
       Number(doc.discount) ? [t.disc, -doc.discount] : null,
       doc.vat_rate > 0 ? [t.base, doc.vat_base] : null,
       Number(doc.exempt) || (doc.vat_rate > 0 && Math.abs(doc.total - doc.vat - doc.vat_base) > 0.004) ? [t.exempt, Math.round((doc.total - doc.vat - doc.vat_base) * 100) / 100] : null,
       doc.vat_rate > 0 ? [`${t.vat} ${Number(doc.vat_rate)}%`, doc.vat] : null,
     ].filter(Boolean);
-    const note = doc.notes || (s.notes && s.notes[doc.type]) || '';
+    const replaced = doc.adjust && doc.adjust.replaces;
+    const note = [
+      replaced ? t.replaces(replaced.number, fmtDate(replaced.date), doc.adjust.reason) : '',
+      doc.notes || (s.notes && s.notes[doc.type]) || '',
+    ].filter(Boolean).join('\n');
+    const reason = isNote && doc.adjust && doc.adjust.reason ? doc.adjust.reason : '';
     const billing = (doc.type === 'IV' || doc.type === 'QT') && doc.status !== 'void' && opts.pay !== false;
     const payInfo = billing && s.payment ? s.payment : '';
     const banks = billing && Array.isArray(s.banks) ? s.banks.filter((b) => b && b.bank && b.number) : [];
@@ -305,6 +325,7 @@
           <div class="pp-label">${t.words}</div>
           <div class="pp-baht">(${esc(lang === 'en' ? bahtTextEn(doc.total) : bahtText(doc.total))})</div>
           ${paid ? `<div class="pp-small">${esc(paid)}</div>` : ''}
+          ${reason ? `<div class="pp-notes"><div class="pp-label">${t.reason}</div><div>${esc(reason)}</div></div>` : ''}
           ${note ? `<div class="pp-notes"><div class="pp-label">${t.notes}</div><div>${esc(note).replace(/\n/g, '<br>')}</div></div>` : ''}
         </div>
         <table class="pp-totals">
@@ -440,8 +461,22 @@
     }).from(`<div class="pdf-render">${html}</div>`, 'string').save();
   }
 
+  // The same PDF as bytes (for the e-Tax email) instead of a download.
+  async function pdfBytes(html, { scale = 2, quality = 0.92 } = {}) {
+    const lib = await loadPdfLib();
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const buf = await lib().set({
+      margin: 0,
+      image: { type: 'jpeg', quality },
+      html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css'] },
+    }).from(`<div class="pdf-render">${html}</div>`, 'string').outputPdf('arraybuffer');
+    return new Uint8Array(buf);
+  }
+
   g.Thai = {
-    downloadPdf, promptPayPayload, promptPayFmt, qrSvg,
+    downloadPdf, pdfBytes, promptPayPayload, promptPayFmt, qrSvg,
     esc, money, qtyFmt, thDate, slashDate, thMonth, today, taxIdFmt, branchFmt, bahtText, computeTotals, WHT_RATES,
     docTitle, TYPE_NAME, TH_MONTHS, STATUS, statusName, PAY_METHOD, renderDoc, renderSet, renderWht, TH_MONTHS_LONG, bahtTextEn,
   };
