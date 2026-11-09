@@ -27,6 +27,11 @@ const promptPayId = (v) => {
   return (d.length === 10 && d[0] === '0') || d.length === 13 || d.length === 15 ? d : null;
 };
 const bangkokToday = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+const EMAIL = /^[^\s@<>",;]{1,64}@[^\s@<>",;]{1,190}\.[A-Za-z]{2,}$/;
+const email = (v) => (typeof v === 'string' && EMAIL.test(v.trim()) ? v.trim().toLowerCase() : null);
+// Documents that are tax invoices, and so can go out as an e-Tax Invoice by Email.
+const isTaxDoc = (d) => d && d.status !== 'void' && (((d.type === 'IV' || d.type === 'RE') && d.tax_invoice) || d.type === 'CN' || d.type === 'DN');
+const isNote = (t) => t === 'CN' || t === 'DN';
 
 /* ---------- Public document link (no sign-in) ---------- */
 
@@ -129,6 +134,8 @@ async function updateBusiness(db, id, body) {
       creditDays: Math.min(365, Math.max(0, Math.floor(Number(s.creditDays) || 30))),
       priceMode: s.priceMode === 'incl' ? 'incl' : 'excl',
       color: /^#[0-9a-f]{6}$/i.test(s.color || '') ? s.color : null,
+      // e-Tax Invoice by Email: the address registered with the Revenue Department as the sender.
+      etax: s.etax && typeof s.etax === 'object' ? { on: !!s.etax.on && !!email(s.etax.email), email: email(s.etax.email) } : null,
     };
     await db.query('update acc_businesses set settings = $2 where id = $1', [id, clean]);
   }
@@ -362,6 +369,13 @@ async function buildDoc(db, req, body, cur) {
     if (!ref) throw bad('bad_ref');
     if (!cur && ref.status === 'void') throw bad('ref_void', 409);
   }
+  const note = isNote(type);
+  if (note) {
+    // Credit / debit notes go against a tax invoice that has been paid (open invoices are
+    // corrected by cancelling them and issuing a new one).
+    if (!ref || !['IV', 'RE'].includes(ref.type) || !ref.tax_invoice || ref.status === 'void') throw bad('bad_ref');
+    if (!cur && ref.type === 'IV' && ref.status !== 'paid') throw bad('ref_unpaid', 409);
+  }
   // A receipt for an invoice carries the invoice's lines and customer; only WHT rates may change.
   const fromInvoice = type === 'RE' && ref?.type === 'IV';
   if (fromInvoice && !cur) {
@@ -372,15 +386,16 @@ async function buildDoc(db, req, body, cur) {
   let lines = Array.isArray(src.lines) ? src.lines.slice(0, 200) : [];
   if (fromInvoice && Array.isArray(body.lines)) lines = lines.map((l, i) => ({ ...l, wht: body.lines[i]?.wht ?? l.wht }));
   if (!lines.length) throw bad('no_lines');
-  const contact = fromInvoice ? { id: ref.contact_id, snap: ref.contact } : await contactSnapshot(db, bizId, body);
+  if (note) lines = lines.map((l) => ({ ...l, wht: 0 }));
+  const contact = fromInvoice || note ? { id: ref.contact_id, snap: ref.contact } : await contactSnapshot(db, bizId, body);
   if (!contact.snap.name) throw bad('bad_contact');
 
   let taxInvoice = type === 'EX' ? !!body.tax_invoice : (type === 'IV' ? !!body.tax_invoice && vatReg : false);
   let vatRate = 0;
-  if (fromInvoice) vatRate = Number(ref.vat_rate);
+  if (fromInvoice || note) vatRate = Number(ref.vat_rate);
   else if (type === 'EX') vatRate = taxInvoice ? (Number(body.vat_rate) === 0 ? 0 : 7) : 0;
   else vatRate = vatReg && Number(body.vat_rate) !== 0 ? 7 : 0;
-  const priceMode = (fromInvoice ? ref.price_mode : body.price_mode) === 'incl' ? 'incl' : 'excl';
+  const priceMode = (fromInvoice || note ? ref.price_mode : body.price_mode) === 'incl' ? 'incl' : 'excl';
   const discount = fromInvoice ? ref.discount : num(body.discount);
 
   // Line accounts: income accounts on sales documents, expense (or asset) accounts on expenses.
@@ -393,7 +408,29 @@ async function buildDoc(db, req, body, cur) {
   if (t.total < 0) throw bad('negative_total');
   // VAT on a sale needs a tax invoice: the receipt is it unless the invoice already was.
   if (type === 'RE') taxInvoice = t.vat > 0 && (fromInvoice ? !ref.tax_invoice : true);
-
+  if (note) {
+    taxInvoice = true;
+    if (t.total <= 0) throw bad('no_lines');
+    if (type === 'CN') {
+      const other = (await db.query("select coalesce(sum(total), 0) as s from acc_docs where ref_id = $1 and type = 'CN' and status <> 'void' and id <> $2",
+        [ref.id, cur?.id || '00000000-0000-0000-0000-000000000000'])).rows[0].s;
+      if (Math.round((Number(other) + t.total) * 100) > Math.round(Number(ref.total) * 100)) throw bad('credit_too_much', 409);
+    }
+  }
+  let adjust = cur?.adjust || null;
+  if (note) {
+    const reason = str(body.reason, 300) || adjust?.reason;
+    if (!reason) throw bad('bad_reason');
+    adjust = { reason, orig: Math.round((Number(ref.total) - Number(ref.vat)) * 100) / 100 };
+  } else if ((type === 'IV' || type === 'RE') && body.replaces !== undefined) {
+    // Issued to replace a cancelled tax invoice: printed on the document and in the e-Tax subject.
+    adjust = null;
+    if (isUuid(body.replaces)) {
+      const old = (await db.query('select id, type, number, date, status, tax_invoice from acc_docs where id = $1 and business_id = $2', [body.replaces, bizId])).rows[0];
+      if (!old || old.status !== 'void' || !old.tax_invoice || old.id === cur?.id) throw bad('bad_replaces');
+      adjust = { replaces: { id: old.id, number: old.number, date: old.date }, reason: str(body.replace_reason, 300) };
+    }
+  }
   let status = cur?.status;
   let pay = cur?.pay || null;
   if (type === 'QT') status = ['open', 'accepted', 'rejected'].includes(body.status) ? body.status : (cur?.status || 'open');
@@ -402,6 +439,11 @@ async function buildDoc(db, req, body, cur) {
   if (type === 'EX') {
     if (body.pay !== undefined) pay = body.pay ? cleanPay(body.pay, acc, date) : null;
     status = pay ? 'paid' : 'open';
+  }
+  if (note) {
+    // The difference received (DN) or refunded (CN), with no bank fee.
+    if (body.pay !== undefined) pay = body.pay ? { ...cleanPay(body.pay, acc, date), fee: 0 } : null;
+    status = pay ? 'done' : 'open';
   }
   let whtCert = cur?.wht_cert || null;
   if (type === 'EX' && t.wht > 0) {
@@ -417,14 +459,14 @@ async function buildDoc(db, req, body, cur) {
     tax_invoice: taxInvoice, price_mode: priceMode, vat_rate: vatRate, lines: t.lines, discount: t.discount,
     subtotal: t.subtotal, vat_base: t.vat_base, vat: t.vat, total: t.total, wht: t.wht,
     ref_id: refId, ref_no: str(body.ref_no, 60), ref_date: isDate(body.ref_date) ? body.ref_date : null,
-    pay, wht_cert: whtCert, notes: str(body.notes, 2000),
+    pay, wht_cert: whtCert, notes: str(body.notes, 2000), adjust,
     attachment: typeof body.attachment === 'string' && body.attachment.startsWith(`acc/${bizId}/`) ? body.attachment.slice(0, 200) : (cur?.attachment || null),
   };
 }
 
 const COLS = ['type', 'date', 'due_date', 'status', 'contact_id', 'contact', 'tax_invoice', 'price_mode', 'vat_rate', 'lines', 'discount',
-  'subtotal', 'vat_base', 'vat', 'total', 'wht', 'ref_id', 'ref_no', 'ref_date', 'pay', 'wht_cert', 'notes', 'attachment'];
-const jsonCols = new Set(['contact', 'lines', 'pay', 'wht_cert']);
+  'subtotal', 'vat_base', 'vat', 'total', 'wht', 'ref_id', 'ref_no', 'ref_date', 'pay', 'wht_cert', 'notes', 'attachment', 'adjust'];
+const jsonCols = new Set(['contact', 'lines', 'pay', 'wht_cert', 'adjust']);
 const val = (k, v) => (jsonCols.has(k) && v != null ? JSON.stringify(v) : v);
 
 // After a document changes: number the WHT certificate, update the source document's status, post.
@@ -464,7 +506,8 @@ biz.get('/docs', wrap(async (req, res) => {
   const rows = await tx(req, async (db) => (await db.query(
     `select id, type, number, status, date, due_date, contact_id, contact->>'name' as contact_name, tax_invoice,
             subtotal, vat, total, wht, ref_id, (pay->>'date') as paid_date, created_at,
-            attachment, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared
+            attachment, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared,
+            jsonb_array_length(coalesce(etax->'sent', '[]')) > 0 as etax_sent
      from acc_docs where ${where.join(' and ')} order by date desc, number desc limit 2000`, p)).rows);
   // Short-lived links to the scanned bill pictures, for the expense list thumbnails.
   if (storageEnabled) {
@@ -480,7 +523,7 @@ biz.get('/docs/:id', wrap(async (req, res) => {
   const out = await tx(req, async (db) => {
     const doc = (await db.query('select * from acc_docs where id = $1 and business_id = $2', [req.params.id, B(req)])).rows[0];
     if (!doc) throw bad('not_found', 404);
-    const ref = doc.ref_id ? (await db.query('select id, type, number, date, status from acc_docs where id = $1', [doc.ref_id])).rows[0] : null;
+    const ref = doc.ref_id ? (await db.query('select id, type, number, date, status, tax_invoice, total, vat from acc_docs where id = $1', [doc.ref_id])).rows[0] : null;
     const children = (await db.query('select id, type, number, date, status, total from acc_docs where ref_id = $1 order by created_at', [doc.id])).rows;
     const journal = (await db.query(
       `select e.date, e.number, l.account, l.debit, l.credit, a.name from acc_entries e join acc_lines l on l.entry_id = e.id
@@ -513,6 +556,8 @@ biz.put('/docs/:id', wrap(async (req, res) => {
     if (!cur) throw bad('not_found', 404);
     if (cur.status === 'void') throw bad('doc_void', 409);
     if (cur.type === 'IV' && cur.status === 'paid') throw bad('doc_paid', 409);
+    // Sent as an e-Tax Invoice: the Revenue Department has its copy, so it can only be cancelled and replaced.
+    if (cur.etax?.sent?.length) throw bad('etax_sent', 409);
     const d = await buildDoc(db, req, req.body || {}, cur);
     const row = (await db.query(
       `update acc_docs set ${COLS.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() where id = $1 returning *`,
@@ -523,17 +568,19 @@ biz.put('/docs/:id', wrap(async (req, res) => {
   res.json({ doc });
 }));
 
-// Pay an expense, or take the payment back off it.
+// Pay an expense, receive a debit note or refund a credit note — or take that payment back off.
 biz.post('/docs/:id/pay', wrap(async (req, res) => {
   if (!isUuid(req.params.id)) throw bad('not_found', 404);
   const doc = await tx(req, async (db) => {
-    const cur = (await db.query("select * from acc_docs where id = $1 and business_id = $2 and type = 'EX' for update", [req.params.id, B(req)])).rows[0];
+    const cur = (await db.query("select * from acc_docs where id = $1 and business_id = $2 and type in ('EX', 'CN', 'DN') for update", [req.params.id, B(req)])).rows[0];
     if (!cur) throw bad('not_found', 404);
     if (cur.status === 'void') throw bad('doc_void', 409);
     const acc = await accountsOf(db, B(req));
-    const pay = req.body?.pay ? cleanPay(req.body.pay, acc, bangkokToday()) : null;
+    let pay = req.body?.pay ? cleanPay(req.body.pay, acc, bangkokToday()) : null;
+    if (pay && cur.type !== 'EX') pay = { ...pay, fee: 0 };
+    const done = cur.type === 'EX' ? 'paid' : 'done';
     const row = (await db.query('update acc_docs set pay = $2, status = $3, updated_at = now() where id = $1 returning *',
-      [cur.id, pay ? JSON.stringify(pay) : null, pay ? 'paid' : 'open'])).rows[0];
+      [cur.id, pay ? JSON.stringify(pay) : null, pay ? done : 'open'])).rows[0];
     await afterSave(db, req, row);
     return row;
   });
@@ -558,6 +605,8 @@ biz.post('/docs/:id/void', wrap(async (req, res) => {
     if (cur.status === 'void') return;
     const live = (await db.query("select number from acc_docs where ref_id = $1 and type = 'RE' and status <> 'void'", [cur.id])).rows[0];
     if (cur.type === 'IV' && live) throw bad('has_receipt', 409);
+    const notes = (await db.query("select 1 from acc_docs where ref_id = $1 and type in ('CN', 'DN') and status <> 'void'", [cur.id])).rowCount;
+    if (notes) throw bad('has_notes', 409);
     const row = (await db.query("update acc_docs set status = 'void', updated_at = now(), notes = coalesce(notes, '') || $2 where id = $1 returning *",
       [cur.id, str(req.body?.reason, 300) ? `\nยกเลิก: ${str(req.body.reason, 300)}` : ''])).rows[0];
     if (row.ref_id) await refreshStatus(db, row.ref_id);
@@ -577,6 +626,35 @@ biz.post('/docs/:id/share', wrap(async (req, res) => {
     return r.rows[0].public_token;
   });
   res.json({ token });
+}));
+
+/* ---------- e-Tax Invoice by Email ---------- */
+
+// Records that the browser sent this tax invoice to the customer with csemail@etax.teda.th
+// in CC (through the person's Gmail, or by hand from their own mail app). The send itself
+// happens in the browser so it comes from the address registered with the Revenue Department.
+biz.post('/docs/:id/etax', rateLimit(120, 60 * 60000), wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const cfg = req.biz.settings?.etax;
+  if (!req.biz.vat_registered || !cfg?.on) throw bad('etax_off', 409);
+  const to = email(req.body?.to);
+  if (!to) throw bad('bad_email');
+  const subject = str(req.body?.subject, 200);
+  if (!subject || !/^\[\d{8}\]\[(INV|DBN|CRN)\]\[[^\]]+\](\[[^\]]+\])?$/.test(subject)) throw bad('bad_subject');
+  const entry = {
+    at: new Date().toISOString(), to, subject, from: cfg.email,
+    method: req.body?.method === 'gmail' ? 'gmail' : 'manual',
+    message_id: str(req.body?.message_id, 100), by: req.user.email || null,
+  };
+  const etax = await tx(req, async (db) => {
+    const cur = (await db.query('select * from acc_docs where id = $1 and business_id = $2 for update', [req.params.id, B(req)])).rows[0];
+    if (!cur) throw bad('not_found', 404);
+    if (!isTaxDoc(cur)) throw bad('not_tax_invoice', 409);
+    const next = { sent: [...(cur.etax?.sent || []), entry].slice(-20) };
+    await db.query('update acc_docs set etax = $2 where id = $1', [cur.id, JSON.stringify(next)]);
+    return next;
+  });
+  res.json({ etax });
 }));
 
 /* ---------- Scanned purchase bills ---------- */
@@ -687,6 +765,7 @@ function publicDoc(d, ref) {
     discount: d.discount, subtotal: d.subtotal, vat_base: d.vat_base, vat: d.vat, total: d.total, wht: d.wht,
     pay: d.pay ? { date: d.pay.date, method: d.pay.method } : null, notes: d.notes,
     ref: ref ? { type: ref.type, number: ref.number, date: ref.date } : null,
+    adjust: d.adjust ? { reason: d.adjust.reason || null, orig: d.adjust.orig ?? null, replaces: d.adjust.replaces ? { number: d.adjust.replaces.number, date: d.adjust.replaces.date } : null } : null,
   };
 }
 

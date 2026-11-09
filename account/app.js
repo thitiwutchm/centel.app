@@ -24,6 +24,10 @@
     bad_pay_account: 'เลือกบัญชีเงินสดหรือธนาคาร', negative_total: 'ยอดรวมติดลบไม่ได้', confirm_name: 'พิมพ์ชื่อกิจการให้ตรงเพื่อยืนยัน',
     too_large: 'ไฟล์ใหญ่เกินไป', forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', not_found: 'ไม่พบข้อมูล', too_many_requests: 'ลองใหม่อีกครั้งในอีกสักครู่',
     google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่', ref_void: 'เอกสารต้นทางถูกยกเลิกแล้ว', bad_code: 'รหัสบัญชีไม่ถูกต้อง',
+    bad_ref: 'เลือกใบกำกับภาษีที่จะอ้างอิง', ref_unpaid: 'ใบแจ้งหนี้ที่ยังไม่ชำระ ให้ยกเลิกแล้วออกฉบับใหม่แทนการออกใบลด/เพิ่มหนี้',
+    credit_too_much: 'ยอดลดหนี้รวมเกินยอดในใบกำกับภาษีเดิม', bad_reason: 'กรุณาระบุเหตุผลที่ออกเอกสาร', has_notes: 'ยกเลิกใบลดหนี้ / ใบเพิ่มหนี้ของเอกสารนี้ก่อน',
+    bad_replaces: 'เลือกได้เฉพาะใบกำกับภาษีที่ยกเลิกแล้ว', etax_sent: 'ส่งเป็น e-Tax Invoice แล้ว แก้ไขไม่ได้ ให้ยกเลิกแล้วออกฉบับใหม่แทน',
+    etax_off: 'เปิดใช้ e-Tax Invoice by Email ที่หน้าตั้งค่าก่อน', not_tax_invoice: 'เอกสารนี้ไม่ใช่ใบกำกับภาษี', bad_subject: 'หัวเรื่องอีเมลไม่ตรงรูปแบบของกรมสรรพากร',
   };
   async function api(method, path, body) {
     const res = await fetch('/api' + path, {
@@ -107,6 +111,9 @@
     journal: I('<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>'),
     reports: I('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
     settings: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+    cn: I('<path d="M6 3h9l4 4v14H6z"/><path d="M9 13h7"/>'),
+    dn: I('<path d="M6 3h9l4 4v14H6z"/><path d="M9 13h7M12.5 9.5v7"/>'),
+    mail: I('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'),
     plus: I('<path d="M12 5v14M5 12h14"/>'),
     print: I('<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/>'),
     link: I('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
@@ -241,7 +248,7 @@
 
   const NAV = [
     ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home]]],
-    ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
+    ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re], ['docs/CN', 'ใบลดหนี้', ICON.cn], ['docs/DN', 'ใบเพิ่มหนี้', ICON.dn]]],
     ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex]]],
     ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items]]],
     ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['settings', 'ตั้งค่า', ICON.settings]]],
@@ -313,7 +320,11 @@
     const cls = s === 'void' ? 'bad' : s === 'paid' || s === 'done' || s === 'accepted' ? 'good' : s === 'rejected' ? 'bad' : type === 'QT' ? 'info' : 'warn';
     return `<span class="chip ${cls}">${esc(T.statusName(type, s))}</span>`;
   };
-  const NEW_LABEL = { QT: 'สร้างใบเสนอราคา', IV: 'สร้างใบแจ้งหนี้', RE: 'สร้างใบเสร็จรับเงิน', EX: 'บันทึกค่าใช้จ่าย' };
+  const NEW_LABEL = { QT: 'สร้างใบเสนอราคา', IV: 'สร้างใบแจ้งหนี้', RE: 'สร้างใบเสร็จรับเงิน', EX: 'บันทึกค่าใช้จ่าย', CN: 'ออกใบลดหนี้', DN: 'ออกใบเพิ่มหนี้' };
+  const isNoteType = (t) => t === 'CN' || t === 'DN';
+  // A tax invoice that credit / debit notes can go against: a receipt that is one, or a paid invoice that is one.
+  const noteable = (d) => d && d.status !== 'void' && d.tax_invoice && (d.type === 'RE' || (d.type === 'IV' && d.status === 'paid'));
+  const etaxOn = () => !!(biz().vat_registered && biz().settings?.etax?.on);
   const ymNow = () => T.today().slice(0, 7);
   const monthRange = (ym) => {
     const [y, m] = ym.split('-').map(Number);
@@ -424,7 +435,7 @@
   async function voidDoc(doc) {
     return dialog({
       title: `ยกเลิก ${doc.number}`, ok: 'ยกเลิกเอกสาร', danger: true,
-      body: `<p style="margin-top:0">เอกสารจะถูกขีดว่ายกเลิก เลขที่เดิมจะไม่ถูกนำมาใช้ซ้ำ และรายการบัญชีของเอกสารนี้จะถูกลบ</p><label class="field"><span>เหตุผล</span><input type="text" name="reason"></label>`,
+      body: `<p style="margin-top:0">เอกสารจะถูกขีดว่ายกเลิก เลขที่เดิมจะไม่ถูกนำมาใช้ซ้ำ และรายการบัญชีของเอกสารนี้จะถูกลบ</p>${doc.etax_sent || doc.etax?.sent?.length ? '<div class="note-box" style="margin-bottom:10px">ส่งเป็น e-Tax Invoice ไปแล้ว: หลังยกเลิก ให้ออกฉบับใหม่โดยเลือก "ออกแทนใบกำกับภาษีที่ยกเลิก" แล้วส่ง e-Tax ฉบับใหม่ หัวเรื่องจะมีเลขที่เดิมให้อัตโนมัติ</div>' : ''}<label class="field"><span>เหตุผล</span><input type="text" name="reason"></label>`,
       onOk: async (el) => post(`/docs/${doc.id}/void`, formData(el)),
     });
   }
@@ -440,15 +451,183 @@
     });
   }
 
+  /* ---------- e-Tax Invoice by Email ---------- */
+
+  const loadScript = (src, ready) => new Promise((ok, no) => {
+    if (ready()) return ok(ready());
+    const sc = document.createElement('script');
+    sc.src = src;
+    sc.onload = () => (ready() ? ok(ready()) : no(new Error('load')));
+    sc.onerror = () => no(new Error(`โหลด ${src.split('/').pop()} ไม่สำเร็จ`));
+    document.head.appendChild(sc);
+  });
+  const loadPdfA = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', () => window.PDFLib);
+  const loadGis = () => loadScript('https://accounts.google.com/gsi/client', () => window.google?.accounts?.oauth2);
+  const GMAIL_SEND = 'https://www.googleapis.com/auth/gmail.send';
+  const gmail = { client: null, token: null, exp: 0, email: null, wait: null };
+
+  // Gets ready before the click so the Google window opens straight from it (Safari blocks it after a wait).
+  async function gmailPrepare(hint) {
+    if (gmail.client && gmail.hint === hint) return;
+    const cfg = await api('GET', '/config');
+    if (!cfg.googleClientId) throw new Error('ยังไม่ได้ตั้งค่า Google OAuth ที่เซิร์ฟเวอร์ (GOOGLE_CLIENT_ID)');
+    await loadGis();
+    gmail.hint = hint;
+    gmail.client = window.google.accounts.oauth2.initTokenClient({
+      client_id: cfg.googleClientId, scope: `${GMAIL_SEND} openid email`, hint,
+      callback: (r) => {
+        const w = gmail.wait; gmail.wait = null;
+        if (!w) return;
+        if (r.error) return w.no(new Error(r.error_description || r.error));
+        if (!String(r.scope || '').includes(GMAIL_SEND)) return w.no(new Error('ไม่ได้อนุญาตให้ส่งอีเมลด้วย Gmail'));
+        gmail.token = r.access_token; gmail.exp = Date.now() + (Number(r.expires_in) || 3000) * 1000 - 60000; gmail.email = null;
+        w.ok(r.access_token);
+      },
+      error_callback: (e) => { const w = gmail.wait; gmail.wait = null; if (w) w.no(new Error(e?.type === 'popup_closed' ? 'ปิดหน้าต่าง Google ก่อนอนุญาต' : 'เปิดหน้าต่าง Google ไม่ได้ (อนุญาต pop-up ให้เว็บนี้)')); },
+    });
+  }
+  // Call right inside the click handler.
+  function gmailToken() {
+    if (gmail.token && Date.now() < gmail.exp) return Promise.resolve(gmail.token);
+    if (!gmail.client) return Promise.reject(new Error('ยังเชื่อม Google ไม่เสร็จ ลองอีกครั้ง'));
+    return new Promise((ok, no) => { gmail.wait = { ok, no }; gmail.client.requestAccessToken(); });
+  }
+  async function gmailWho(token) {
+    if (gmail.email) return gmail.email;
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error('อ่านอีเมลของบัญชี Google ไม่ได้');
+    gmail.email = String((await r.json()).email || '').toLowerCase();
+    return gmail.email;
+  }
+
+  // The tax invoice as one PDF/A-3 file (original only), under the 3 MB limit.
+  async function etaxPdf(doc, ref) {
+    const b = biz();
+    const o = { ...printPrefs(), original: true, copy: false, pay: doc.type === 'IV' };
+    const html = T.renderSet({ ...doc, ref }, b, o);
+    const PDFLib = await loadPdfA();
+    const meta = { title: `${T.docTitle(doc)[o.lang === 'en' ? 1 : 0]} ${doc.number}`, author: b.name, lang: o.lang === 'en' ? 'en-US' : 'th-TH' };
+    for (const q of [{ scale: 2, quality: 0.92 }, { scale: 1.6, quality: 0.8 }, { scale: 1.3, quality: 0.7 }]) {
+      const pdf = await Etax.toPdfA3(PDFLib, await T.pdfBytes(html, q), meta);
+      if (pdf.length <= Etax.MAX_BYTES) return pdf;
+    }
+    throw new Error('ไฟล์ PDF ใหญ่เกิน 3 MB ตามที่กรมสรรพากรกำหนด ลองลดจำนวนรายการหรือเอาโลโก้ / ลายเซ็นขนาดใหญ่ออก');
+  }
+
+  const saveFile = (bytes, name, type) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([bytes], { type }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+
+  // Sends a tax invoice / credit note / debit note as an e-Tax Invoice by Email. Resolves truthy once recorded.
+  async function sendEtax(id) {
+    const { doc, ref } = await get(`/docs/${id}`);
+    const b = biz();
+    const cfg = b.settings?.etax || {};
+    if (!etaxOn()) {
+      await dialog({ title: 'e-Tax Invoice by Email', ok: 'ไปที่ตั้งค่า', body: '<p style="margin-top:0">เปิดใช้ e-Tax Invoice by Email และใส่อีเมลที่ลงทะเบียนกับกรมสรรพากรที่หน้าตั้งค่าก่อน</p>', onOk: () => { location.hash = '#/settings'; return true; } });
+      return null;
+    }
+    const c = S.boot.contacts.find((x) => x.id === doc.contact_id);
+    const to0 = doc.contact?.email || c?.email || '';
+    const subj = Etax.subject(doc, ref);
+    const kind = T.docTitle(doc)[0];
+    const sent = doc.etax?.sent || [];
+    const record = (to, method, messageId) => post(`/docs/${id}/etax`, { to, subject: subj, method, message_id: messageId });
+    const readTo = (el) => {
+      const to = $('[name=to]', el).value.trim();
+      if (!/^[^\s@<>",;]+@[^\s@<>",;]+\.[A-Za-z]{2,}$/.test(to)) throw new Error('ใส่อีเมลผู้รับ 1 อีเมล');
+      if (to.toLowerCase() === Etax.CC) throw new Error('ใส่อีเมลของลูกค้า');
+      return to;
+    };
+    return dialog({
+      title: `ส่ง e-Tax Invoice · ${doc.number}`, ok: 'ส่งผ่าน Gmail', wide: true,
+      extra: '<button class="btn" data-manual>ส่งเองจากโปรแกรมอีเมล</button>',
+      body: `${sent.length ? `<div class="note-box" style="margin-bottom:12px">ส่งไปแล้ว ${sent.length} ครั้ง ล่าสุด ${esc(new Date(sent[sent.length - 1].at).toLocaleString('th-TH'))} ถึง ${esc(sent[sent.length - 1].to)} · ส่งซ้ำเฉพาะเมื่อระบบตอบกลับว่าประทับเวลาไม่สำเร็จ ถ้าลูกค้าทำไฟล์หาย ให้ส่งต่ออีเมลที่ประทับเวลาแล้วแทน</div>` : ''}
+        <dl class="etax-row"><dt>จาก</dt><dd>${esc(cfg.email)} <span class="muted">(อีเมลที่ลงทะเบียนกับกรมสรรพากร)</span></dd>
+          <dt>สำเนา</dt><dd class="mono">${Etax.CC}</dd>
+          <dt>หัวเรื่อง</dt><dd class="mono">${esc(subj)}</dd>
+          <dt>แนบ</dt><dd>${esc(doc.number)}.pdf <span class="muted">(PDF/A-3 ต้นฉบับ ไม่เกิน 3 MB)</span></dd></dl>
+        <label class="field" style="margin-top:12px"><span>ถึง (อีเมลลูกค้า 1 อีเมล)</span><input type="email" name="to" value="${esc(to0)}" placeholder="customer@example.com"></label>
+        <label class="field"><span>ข้อความในอีเมล</span><textarea name="text" rows="7">${esc(Etax.bodyText(doc, b, kind))}</textarea></label>
+        <p class="muted" style="font-size:12px;margin-bottom:0">ระบบของ ETDA จะประทับเวลาแล้วส่งไฟล์กลับไปทั้งคุณและลูกค้าภายในไม่กี่นาที ถ้าไม่ได้รับภายใน 2 วัน ให้ดูในกล่องอีเมลขยะ หรือโทร ETDA 0 2026 6933 · ส่งแล้วเอกสารนี้จะแก้ไขไม่ได้</p>`,
+      onOpen: (el, close) => {
+        gmailPrepare(cfg.email).catch(() => {});
+        $('[data-manual]', el).onclick = async (e) => {
+          const btn = e.target; btn.disabled = true;
+          try {
+            const to = readTo(el);
+            btn.textContent = 'กำลังสร้าง PDF/A-3…';
+            const pdf = await etaxPdf(doc, ref);
+            saveFile(pdf, `${doc.number}.pdf`, 'application/pdf');
+            await navigator.clipboard?.writeText(subj).catch(() => {});
+            const text = $('[name=text]', el).value;
+            location.href = `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(Etax.CC)}&subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(text)}`;
+            close(null);
+            const ok = await dialog({
+              title: 'ส่งจากโปรแกรมอีเมลของคุณ', ok: 'ส่งแล้ว บันทึกไว้', cancel: 'ยังไม่ได้ส่ง',
+              body: `<ol style="margin:0;padding-left:20px;line-height:1.8"><li>เปิดอีเมลใหม่จาก <b>${esc(cfg.email)}</b> (ระบบเปิดให้แล้วถ้ามีโปรแกรมอีเมล)</li>
+                <li>ถึง <b>${esc(to)}</b> สำเนา <span class="mono">${Etax.CC}</span></li>
+                <li>หัวเรื่อง <span class="mono">${esc(subj)}</span> (คัดลอกไว้ให้แล้ว ห้ามเว้นวรรค)</li>
+                <li>แนบไฟล์ <b>${esc(doc.number)}.pdf</b> ที่เพิ่งดาวน์โหลด 1 ไฟล์ แล้วกดส่ง</li></ol>`,
+              onOk: async () => { await record(to, 'manual'); return true; },
+            });
+            if (ok) { toast('บันทึกการส่ง e-Tax แล้ว'); render(); }
+          } catch (err) { fail(err); } finally { btn.disabled = false; btn.textContent = 'ส่งเองจากโปรแกรมอีเมล'; }
+        };
+      },
+      onOk: async (el) => {
+        const to = readTo(el);
+        const token = await gmailToken();
+        const who = await gmailWho(token);
+        if (who !== String(cfg.email).toLowerCase()) {
+          gmail.token = null;
+          throw new Error(`บัญชี Google ที่เลือก (${who}) ไม่ใช่อีเมลที่ลงทะเบียน e-Tax (${cfg.email})`);
+        }
+        toast('กำลังสร้าง PDF/A-3…');
+        const pdf = await etaxPdf(doc, ref);
+        const raw = Etax.rawMessage(Etax.mime({ from: cfg.email, fromName: b.name, to, subject: subj, text: $('[name=text]', el).value, filename: `${doc.number}.pdf`, pdf }));
+        const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ raw }),
+        });
+        if (!r.ok) {
+          if (r.status === 401) gmail.token = null;
+          throw new Error(`Gmail ส่งไม่สำเร็จ (${r.status}) ${(await r.json().catch(() => ({})))?.error?.message || ''}`.trim());
+        }
+        const sentMsg = await r.json();
+        await record(to, 'gmail', sentMsg.id);
+        toast(`ส่ง ${doc.number} แล้ว รออีเมลประทับเวลาจาก ETDA`);
+        return true;
+      },
+    });
+  }
+
   // The status choices a list row offers; picking "paid" on an invoice goes to the receipt form.
   function statusChoices(type, d) {
     if (d.status === 'void') return [];
     if (type === 'QT') return ['open', 'accepted', 'rejected'];
     if (type === 'IV') return d.status === 'open' ? ['open', 'paid'] : [];
     if (type === 'EX') return ['open', 'paid'];
+    if (isNoteType(type)) return ['open', 'done'];
     return [];
   }
   const statusTone = (s, type) => (s === 'void' || s === 'rejected' ? 'bad' : s === 'paid' || s === 'done' || s === 'accepted' ? 'good' : type === 'QT' ? 'info' : 'warn');
+
+  // Refund a credit note / receive a debit note (the difference), or take that back off.
+  async function payNote(doc) {
+    const cn = doc.type === 'CN';
+    return dialog({
+      title: `${cn ? 'คืนเงิน' : 'รับเงิน'} ${doc.number}`,
+      body: `<div class="grid g2"><label class="field"><span>วันที่${cn ? 'คืน' : 'รับ'}เงิน</span><input type="date" name="date" value="${T.today()}"></label>
+        <label class="field"><span>${cn ? 'จ่ายจาก' : 'รับเข้า'}</span><select name="account">${moneyAccounts().map((m) => `<option value="${m.code}" ${m.sys === 'bank' ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>วิธีชำระ</span><select name="method">${Object.entries(T.PAY_METHOD).map(([k, v]) => `<option value="${k}" ${k === 'transfer' ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
+        <p class="muted">ยอด${cn ? 'คืนเงิน' : 'รับเงิน'} ${money(doc.total)} บาท</p>`,
+      onOk: async (el) => post(`/docs/${doc.id}/pay`, { pay: formData(el) }),
+    });
+  }
   const CAT_TONES = ['#2F9E44', '#1C7ED6', '#AE3EC9', '#E8590C', '#0C8599', '#C2255C', '#5C7CFA', '#B7791F'];
   const catTone = (code) => CAT_TONES[[...String(code || '')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % CAT_TONES.length];
 
@@ -507,7 +686,7 @@
 
   /* ---------- Document lists ---------- */
 
-  const LIST_TITLE = { QT: 'ใบเสนอราคา', IV: 'ใบแจ้งหนี้ / ใบวางบิล', RE: 'ใบเสร็จรับเงิน', EX: 'ค่าใช้จ่าย / บันทึกซื้อ' };
+  const LIST_TITLE = { QT: 'ใบเสนอราคา', IV: 'ใบแจ้งหนี้ / ใบวางบิล', RE: 'ใบเสร็จรับเงิน', EX: 'ค่าใช้จ่าย / บันทึกซื้อ', CN: 'ใบลดหนี้', DN: 'ใบเพิ่มหนี้' };
 
   async function viewDocs(main, type, q) {
     if (!LIST_TITLE[type]) type = 'IV';
@@ -567,7 +746,7 @@
         <td class="ck"><input type="checkbox" data-ck ${sel.has(d.id) ? 'checked' : ''} aria-label="เลือก"></td>
         ${isEx ? `<td class="th-cell"><div class="thumb">${d.thumb ? `<img src="${esc(d.thumb)}" alt="" loading="lazy">` : d.attachment ? '<span>PDF</span>' : ICON.ex}</div></td>` : ''}
         <td class="nowrap">${T.thDate(d.date)}${(type === 'IV' || isEx) && d.status === 'open' && d.due_date ? `<div class="muted" style="font-size:12px${d.due_date < today ? ';color:var(--bad)' : ''}">ครบกำหนด ${T.thDate(d.due_date)}</div>` : ''}</td>
-        <td><span class="dot ${statusTone(d.status, type)}"></span><span class="doc-no">${esc(d.number)}</span>${d.tax_invoice ? '<div><span class="chip accent">ใบกำกับภาษี</span></div>' : ''}</td>
+        <td><span class="dot ${statusTone(d.status, type)}"></span><span class="doc-no">${esc(d.number)}</span>${d.tax_invoice && !isNoteType(type) ? '<div><span class="chip accent">ใบกำกับภาษี</span></div>' : ''}${d.etax_sent ? '<div><span class="chip good">ส่ง e-Tax แล้ว</span></div>' : ''}</td>
         <td>${esc(d.contact_name || '')}</td>${isEx ? catCell(d) : ''}
         <td class="num"><b>${money(d.total)}</b>${d.wht ? `<div class="muted" style="font-size:12px">หัก ณ ที่จ่าย ${money(d.wht)}</div>` : ''}</td>
         <td>${statusCell(d)}</td>
@@ -630,6 +809,10 @@
         if (type === 'EX' && v === 'open') {
           if (await confirmBox('ยกเลิกการจ่ายเงิน', `${esc(d.number)} จะกลับเป็นรอจ่าย และรายการบัญชีการจ่ายจะถูกลบ`)) { await post(`/docs/${d.id}/pay`, { pay: null }); d.status = 'open'; }
         }
+        if (isNoteType(type) && v === 'done') { if (await payNote(d)) { d.status = 'done'; toast('บันทึกแล้ว'); } }
+        if (isNoteType(type) && v === 'open') {
+          if (await confirmBox('ยกเลิกการบันทึกเงิน', `${esc(d.number)} จะกลับเป็น${esc(T.statusName(type, 'open'))}`)) { await post(`/docs/${d.id}/pay`, { pay: null }); d.status = 'open'; }
+        }
       } catch (err) { fail(err); }
       draw();
     });
@@ -641,7 +824,9 @@
       if (!more) { location.hash = `#/doc/${d.id}`; return; }
       const live = d.status !== 'void';
       const items = [['ดูเอกสาร', () => { location.hash = `#/doc/${d.id}`; }]];
-      if (live && !(type === 'IV' && d.status === 'paid')) items.push(['แก้ไข', () => { location.hash = `#/edit/${d.id}`; }]);
+      if (live && !(type === 'IV' && d.status === 'paid') && !d.etax_sent) items.push(['แก้ไข', () => { location.hash = `#/edit/${d.id}`; }]);
+      if (etaxOn() && Etax.canSend(d)) items.push([d.etax_sent ? 'ส่ง e-Tax อีกครั้ง' : 'ส่ง e-Tax Invoice', async () => { try { if (await sendEtax(d.id)) render(); } catch (err) { fail(err); } }]);
+      if (noteable({ ...d, type })) items.push(['ออกใบลดหนี้', () => { location.hash = `#/new/CN?from=${d.id}`; }], ['ออกใบเพิ่มหนี้', () => { location.hash = `#/new/DN?from=${d.id}`; }]);
       items.push(['ทำซ้ำ', () => { location.hash = `#/new/${type}?from=${d.id}&copy=1`; }]);
       if (live && type === 'QT') items.push(['แปลงเป็นใบแจ้งหนี้', () => { location.hash = `#/new/IV?from=${d.id}`; }]);
       if (live && type === 'IV' && d.status === 'open') items.push(['รับชำระเงิน', () => { location.hash = `#/new/RE?from=${d.id}`; }]);
@@ -890,9 +1075,11 @@
     const b = biz();
     let doc;
     let src = null;
+    let replaceFrom = null;
     if (editId) {
       doc = (await get(`/docs/${editId}`)).doc;
       type = doc.type;
+      if (isNoteType(type) && doc.ref_id) src = (await get(`/docs/${doc.ref_id}`)).doc;
     } else {
       if (!LIST_TITLE[type]) type = 'IV';
       const credit = Number(b.settings?.creditDays ?? 30);
@@ -908,7 +1095,15 @@
           contact_id: src.contact_id, contact: src.contact, price_mode: src.price_mode, vat_rate: Number(src.vat_rate),
           lines: src.lines.map((l) => ({ ...l })), discount: src.discount, tax_invoice: type === 'IV' ? src.tax_invoice : false,
         });
+        // Copying a cancelled tax invoice: the new one replaces it.
+        if (q.get('copy') === '1' && src.status === 'void' && src.tax_invoice && (type === 'IV' || type === 'RE')) replaceFrom = src;
         if (q.get('copy') !== '1') doc.ref_id = src.id; else src = null;
+        if (src && isNoteType(type)) {
+          // A credit note starts from the invoice's lines (edit them down to the difference); a debit note from a blank line.
+          doc.lines = type === 'CN' ? src.lines.map((l) => ({ ...l, wht: 0 })) : [{ ...blankLine(type), account: src.lines[0]?.account || sysAcc('service') }];
+          doc.discount = type === 'CN' ? src.discount : 0;
+        }
+        if (src && isNoteType(type) && !noteable(src)) { src = null; doc.ref_id = null; }
       }
       const pick = q.get('item') && S.boot.items.find((i) => i.id === q.get('item'));
       if (pick && !from) {
@@ -918,26 +1113,37 @@
     }
     const fromInvoice = type === 'RE' && ((src && src.type === 'IV' && doc.ref_id) || (editId && doc.ref_id && (await get(`/docs/${doc.ref_id}`).catch(() => null))?.doc?.type === 'IV'));
     const isEx = type === 'EX';
+    const isNote = isNoteType(type);
+    // A credit / debit note needs the tax invoice it adjusts first.
+    if (isNote && !src) return pickNoteSource(main, type);
+    const locked = fromInvoice || isNote;   // customer and VAT come from the source document
     const vatReg = b.vat_registered;
     const lineTypes = isEx ? ['expense', 'asset'] : ['income'];
     const contacts = () => S.boot.contacts.filter((c) => !c.archived && (isEx ? c.kind !== 'customer' : c.kind !== 'vendor'));
-    let paidNow = isEx ? !!doc.pay : false;
-    if (isEx && !doc.pay) doc.pay = null;
+    let paidNow = isEx || isNote ? !!doc.pay : false;
+    if ((isEx || isNote) && !doc.pay) doc.pay = null;
     let payDraft = doc.pay || { date: T.today(), account: sysAcc('bank') || sysAcc('cash'), method: 'transfer', fee: 0 };
     let vatMode = Number(doc.vat_rate) > 0 ? doc.price_mode : 'none';
     if (isEx && !doc.tax_invoice) vatMode = 'none';
 
-    const title = editId ? `แก้ไข ${doc.number}` : src ? `${NEW_LABEL[type]} จาก ${src.number}` : NEW_LABEL[type];
+    const title = editId ? `แก้ไข ${doc.number}` : src ? `${NEW_LABEL[type]} ${isNote ? 'ของ' : 'จาก'} ${src.number}` : NEW_LABEL[type];
+    const REASONS = type === 'CN'
+      ? ['ลดราคาสินค้า / ค่าบริการ', 'สินค้าชำรุดเสียหาย รับคืนสินค้า', 'สินค้าไม่ตรงตามตัวอย่างหรือคำพรรณนา', 'คำนวณราคาสูงกว่าที่เป็นจริง', 'ยกเลิกบริการบางส่วน']
+      : ['เพิ่มราคาสินค้า / ค่าบริการ', 'ส่งสินค้าเกินกว่าจำนวนที่ตกลง', 'คำนวณราคาต่ำกว่าที่เป็นจริง', 'ให้บริการเพิ่มเติม'];
     main.innerHTML = `<div class="page-h"><div><h1>${esc(title)}</h1><div class="sub">${esc(T.docTitle({ ...doc, tax_invoice: doc.tax_invoice || (type === 'RE' && vatReg) }).join(' · '))}</div></div>
       <div class="actions"><a class="btn ghost" href="${editId ? `#/doc/${editId}` : `#/docs/${type}`}">ยกเลิก</a><button class="btn primary" data-save>บันทึก</button></div></div>
       <div class="editor">
         <div class="grid">
+          ${isNote ? `<div class="card card-pad"><div class="grid g2">
+              <div class="field span2"><span>ใบกำกับภาษีเดิม</span><div class="note-box"><b class="mono">${esc(src.number)}</b> · ${esc(T.docTitle(src)[0])} · ${T.thDate(src.date)} · มูลค่าก่อนภาษี ${money(src.total - src.vat)} บาท ภาษี ${money(src.vat)} บาท</div></div>
+              <label class="field span2"><span>เหตุผลที่ออก${type === 'CN' ? 'ใบลดหนี้' : 'ใบเพิ่มหนี้'} (พิมพ์ในเอกสาร)</span><input type="text" name="reason" list="reason-dl" value="${esc(doc.adjust?.reason || '')}" placeholder="${esc(REASONS[0])}"><datalist id="reason-dl">${REASONS.map((r) => `<option value="${esc(r)}">`).join('')}</datalist></label>
+            </div><small class="muted">ใส่เฉพาะส่วนต่าง: ${type === 'CN' ? 'รายการและจำนวนเงินที่ลดให้ลูกค้า' : 'รายการและจำนวนเงินที่เรียกเก็บเพิ่ม'} (ยังไม่รวม VAT ถ้าเอกสารเดิมราคาไม่รวม VAT)</small></div>` : ''}
           ${isEx && !editId ? `<div class="scan-drop" data-scan>${ICON.scan}<b>สแกนบิล / ใบกำกับภาษีด้วย AI</b><span class="muted">เลือกรูปหรือ PDF ระบบจะกรอกผู้ขาย รายการ และภาษีให้</span><input type="file" accept="image/*,application/pdf" hidden></div>` : ''}
           <div class="card card-pad">
             <div class="grid g2">
               <div class="field span2"><span>${isEx ? 'ผู้ขาย / ผู้รับเงิน' : 'ลูกค้า'}</span><div class="contact-pick" data-cp></div></div>
               <label class="field"><span>วันที่</span><input type="date" name="date" value="${doc.date}"></label>
-              ${type !== 'RE' ? `<label class="field"><span>${type === 'QT' ? 'ยืนราคาถึง' : 'ครบกำหนดชำระ'}</span><input type="date" name="due_date" value="${doc.due_date || ''}"></label>` : '<div></div>'}
+              ${type !== 'RE' && !isNote ? `<label class="field"><span>${type === 'QT' ? 'ยืนราคาถึง' : 'ครบกำหนดชำระ'}</span><input type="date" name="due_date" value="${doc.due_date || ''}"></label>` : '<div></div>'}
               ${isEx ? `<label class="field"><span>เลขที่บิล / ใบกำกับภาษีของผู้ขาย</span><input type="text" name="ref_no" value="${esc(doc.ref_no || '')}"></label>
                 <label class="field"><span>วันที่ในใบกำกับภาษี</span><input type="date" name="ref_date" value="${doc.ref_date || ''}"></label>` : ''}
             </div>
@@ -947,7 +1153,7 @@
               <h2 style="margin:0">รายการ</h2>
               <div class="actions" data-vatbox></div>
             </div>
-            <div class="tbl-wrap"><table class="lines"><thead><tr><th>รายการ</th><th class="w-qty">จำนวน</th><th class="w-unit">หน่วย</th><th class="w-price">ราคา/หน่วย</th><th class="w-disc">ส่วนลด</th><th class="w-wht">หัก ณ ที่จ่าย</th><th class="w-amt">จำนวนเงิน</th><th class="w-x"></th></tr></thead><tbody data-lines></tbody></table></div>
+            <div class="tbl-wrap"><table class="lines${isNote ? ' no-wht' : ''}"><thead><tr><th>รายการ</th><th class="w-qty">จำนวน</th><th class="w-unit">หน่วย</th><th class="w-price">ราคา/หน่วย</th><th class="w-disc">ส่วนลด</th><th class="w-wht">หัก ณ ที่จ่าย</th><th class="w-amt">จำนวนเงิน</th><th class="w-x"></th></tr></thead><tbody data-lines></tbody></table></div>
             ${fromInvoice ? '<div class="note-box" style="margin-top:10px">รายการและยอดดึงจากใบแจ้งหนี้ แก้ได้เฉพาะภาษีหัก ณ ที่จ่ายที่ลูกค้าหัก</div>' : `<button class="btn sm add-line" data-add>${ICON.plus}เพิ่มรายการ</button>`}
             <datalist id="items-dl">${S.boot.items.filter((i) => !i.archived).map((i) => `<option value="${esc(i.name)}">`).join('')}</datalist>
           </div>
@@ -955,10 +1161,11 @@
             <label class="field"><span>หมายเหตุในเอกสาร</span><textarea name="notes" rows="3" placeholder="${esc(b.settings?.notes?.[type] || '')}">${esc(doc.notes || '')}</textarea></label>
             <div class="field" data-whtbox></div>
           </div></div>
+          <div class="card card-pad" data-replbox hidden></div>
         </div>
         <div class="side">
           <div class="card card-pad"><h2>สรุปยอด</h2><table class="sum-tbl" data-sum></table><div class="words" data-words></div></div>
-          ${type === 'RE' || isEx ? '<div class="card card-pad" data-paybox></div>' : ''}
+          ${type === 'RE' || isEx || isNote ? '<div class="card card-pad" data-paybox></div>' : ''}
           <button class="btn primary" style="height:44px;justify-content:center" data-save>บันทึก${editId ? 'การแก้ไข' : ''}</button>
         </div>
       </div>`;
@@ -969,7 +1176,7 @@
       if (doc.contact && doc.contact.name) {
         cp.innerHTML = `<div class="card" style="padding:10px 12px;display:flex;justify-content:space-between;gap:10px;box-shadow:none;background:var(--panel-2)">
           <div><b>${esc(doc.contact.name)}</b><div class="muted" style="font-size:12px">${esc([T.taxIdFmt(doc.contact.tax_id), T.branchFmt(doc.contact.branch), doc.contact.address].filter(Boolean).join(' · ') || 'ไม่มีเลขผู้เสียภาษี')}</div></div>
-          ${fromInvoice ? '' : '<button class="btn sm ghost" data-change>เปลี่ยน</button>'}</div>`;
+          ${locked ? '' : '<button class="btn sm ghost" data-change>เปลี่ยน</button>'}</div>`;
         const ch = $('[data-change]', cp);
         if (ch) ch.onclick = () => { doc.contact = null; doc.contact_id = null; drawContact(); $('input', cp)?.focus(); };
         return;
@@ -1004,7 +1211,7 @@
     // VAT controls
     const drawVat = () => {
       const box = $('[data-vatbox]', main);
-      if (fromInvoice) { box.innerHTML = vatMode === 'none' ? '' : `<span class="chip">${vatMode === 'incl' ? 'ราคารวม VAT' : 'ราคาไม่รวม VAT'}</span>`; return; }
+      if (locked) { box.innerHTML = vatMode === 'none' ? '' : `<span class="chip">${vatMode === 'incl' ? 'ราคารวม VAT' : 'ราคาไม่รวม VAT'}</span>`; return; }
       const parts = [];
       if (isEx) parts.push(`<label class="check"><input type="checkbox" data-ti ${doc.tax_invoice ? 'checked' : ''}> ได้รับใบกำกับภาษี</label>`);
       else if (type === 'IV' && vatReg) parts.push(`<label class="check" title="ใช้เมื่อส่งมอบสินค้า (จุดความรับผิดชอบภาษีเกิดตอนส่งมอบ) ถ้าเป็นงานบริการ ใบเสร็จจะเป็นใบกำกับภาษีแทน"><input type="checkbox" data-ti ${doc.tax_invoice ? 'checked' : ''}> ออกเป็นใบกำกับภาษีด้วย</label>`);
@@ -1102,13 +1309,14 @@
       const box = $('[data-paybox]', main);
       if (!box) return;
       const fields = `<div class="grid">
-        <label class="field"><span>วันที่${isEx ? 'จ่าย' : 'รับ'}เงิน</span><input type="date" data-p="date" value="${payDraft.date}"></label>
-        <label class="field"><span>${isEx ? 'จ่ายจาก' : 'รับเข้า'}</span><select data-p="account">${moneyAccounts().map((a) => `<option value="${a.code}" ${a.code === payDraft.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>วันที่${isEx ? 'จ่าย' : type === 'CN' ? 'คืน' : 'รับ'}เงิน</span><input type="date" data-p="date" value="${payDraft.date}"></label>
+        <label class="field"><span>${isEx || type === 'CN' ? 'จ่ายจาก' : 'รับเข้า'}</span><select data-p="account">${moneyAccounts().map((a) => `<option value="${a.code}" ${a.code === payDraft.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
         <label class="field"><span>วิธีชำระ</span><select data-p="method">${Object.entries(T.PAY_METHOD).map(([k, v]) => `<option value="${k}" ${k === payDraft.method ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-        <label class="field"><span>ค่าธรรมเนียมธนาคาร</span><input type="number" step="0.01" class="num" data-p="fee" value="${payDraft.fee || ''}" placeholder="0"></label></div>`;
+        ${isNote ? '' : `<label class="field"><span>ค่าธรรมเนียมธนาคาร</span><input type="number" step="0.01" class="num" data-p="fee" value="${payDraft.fee || ''}" placeholder="0"></label>`}</div>`;
       if (box.dataset.drawn) return;
       box.dataset.drawn = '1';
-      box.innerHTML = isEx ? `<label class="check" style="margin-bottom:10px"><input type="checkbox" data-paid ${paidNow ? 'checked' : ''}> <b>จ่ายเงินแล้ว</b></label><div data-pf ${paidNow ? '' : 'hidden'}>${fields}</div>` : `<h2>การรับเงิน</h2>${fields}`;
+      const paidLabel = isEx ? 'จ่ายเงินแล้ว' : type === 'CN' ? 'คืนเงินให้ลูกค้าแล้ว' : 'รับเงินส่วนเพิ่มแล้ว';
+      box.innerHTML = isEx || isNote ? `<label class="check" style="margin-bottom:10px"><input type="checkbox" data-paid ${paidNow ? 'checked' : ''}> <b>${paidLabel}</b></label><div data-pf ${paidNow ? '' : 'hidden'}>${fields}</div>` : `<h2>การรับเงิน</h2>${fields}`;
       box.addEventListener('input', (e) => { const k = e.target.dataset.p; if (k) payDraft[k] = k === 'fee' ? Number(e.target.value) || 0 : e.target.value; });
       box.addEventListener('change', (e) => { const k = e.target.dataset.p; if (k) payDraft[k] = k === 'fee' ? Number(e.target.value) || 0 : e.target.value; });
       const pc = $('[data-paid]', box);
@@ -1133,6 +1341,22 @@
         } catch (err) { fail(err); scan.innerHTML = '<b>สแกนไม่สำเร็จ</b><span class="muted">ลองอีกครั้ง หรือกรอกเอง</span>'; }
       };
     }
+    // "Issued to replace a cancelled tax invoice": the old number goes on the document and in the e-Tax subject.
+    async function drawReplace() {
+      const box = $('[data-replbox]', main);
+      if (!box) return;
+      const cur = doc.adjust?.replaces?.id || replaceFrom?.id || '';
+      let list = [];
+      try { list = (await get(`/docs?type=${type}&status=void`)).docs.filter((d) => d.tax_invoice && d.id !== editId); } catch { /* optional */ }
+      if (!list.length) return;
+      if (replaceFrom && !list.some((d) => d.id === replaceFrom.id)) list.unshift(replaceFrom);
+      box.hidden = false;
+      box.innerHTML = `<h2>ออกแทนใบกำกับภาษีที่ยกเลิก</h2><div class="grid g2">
+        <label class="field"><span>ใบกำกับภาษีเดิม</span><select data-repl><option value="">ไม่ได้ออกแทนฉบับใด</option>${list.map((d) => `<option value="${d.id}" ${d.id === cur ? 'selected' : ''}>${esc(d.number)} · ${T.thDate(d.date)} · ${esc(d.contact_name || d.contact?.name || '')}</option>`).join('')}</select></label>
+        <label class="field"><span>เหตุผล</span><input type="text" data-repl-reason value="${esc(doc.adjust?.replaces ? doc.adjust.reason || '' : '')}" placeholder="เช่น ที่อยู่ลูกค้าไม่ถูกต้อง"></label></div>
+        <small class="muted">พิมพ์ในเอกสารว่า "ยกเลิกและออกใบกำกับภาษีฉบับใหม่แทนฉบับเดิมเลขที่ …" และใส่เลขเดิมในหัวเรื่องอีเมล e-Tax</small>`;
+    }
+
     async function applyScan(r) {
       if (r.date) { doc.date = r.date; $('[name=date]', main).value = r.date; }
       if (r.doc_no) $('[name=ref_no]', main).value = r.doc_no;
@@ -1155,6 +1379,7 @@
 
     drawVat();
     drawLines();
+    if ((type === 'IV' || type === 'RE') && vatReg) drawReplace();
     main.addEventListener('input', (e) => {
       if (e.target.name === 'date') { doc.date = e.target.value; if (!fromInvoice && type === 'RE' && payDraft) { payDraft.date = e.target.value; const pd = $('[data-p=date]', main); if (pd) pd.value = e.target.value; } }
       if (e.target.name === 'due_date') doc.due_date = e.target.value;
@@ -1172,13 +1397,41 @@
         };
         if (!body.contact_id && !body.contact) throw new Error('เลือกหรือเพิ่ม' + (isEx ? 'ผู้ขาย' : 'ลูกค้า'));
         if (type === 'RE') body.pay = payDraft;
-        if (isEx) body.pay = paidNow ? payDraft : null;
+        if (isEx || isNote) body.pay = paidNow ? payDraft : null;
+        if (isNote) {
+          body.reason = $('[name=reason]', main).value.trim();
+          if (!body.reason) throw new Error(ERR.bad_reason);
+          body.lines = doc.lines.map((l) => ({ ...l, wht: 0 }));
+        }
+        const rp = $('[data-repl]', main);
+        if (rp) { body.replaces = rp.value || null; body.replace_reason = $('[data-repl-reason]', main)?.value || null; }
         const r = editId ? await put(`/docs/${editId}`, body) : await post('/docs', body);
         toast(editId ? 'บันทึกการแก้ไขแล้ว' : `สร้าง ${r.doc.number} แล้ว`);
         location.hash = `#/doc/${r.doc.id}`;
       } catch (e) { fail(e); } finally { btn.disabled = false; }
     };
     $$('[data-save]', main).forEach((bt) => { bt.onclick = () => save(bt); });
+  }
+
+  // New credit / debit note with no source yet: pick the tax invoice it adjusts.
+  async function pickNoteSource(main, type) {
+    const [re, iv] = await Promise.all([get('/docs?type=RE'), get('/docs?type=IV&status=paid')]);
+    const list = [...re.docs.map((d) => ({ ...d, type: 'RE' })), ...iv.docs.map((d) => ({ ...d, type: 'IV' }))]
+      .filter(noteable).sort((a, b) => (a.date < b.date ? 1 : -1));
+    main.innerHTML = `<div class="page-h"><div><h1>${NEW_LABEL[type]}</h1><div class="sub">เลือกใบกำกับภาษีที่ต้องการ${type === 'CN' ? 'ลด' : 'เพิ่ม'}ยอด</div></div>
+      <div class="actions"><a class="btn ghost" href="#/docs/${type}">ยกเลิก</a></div></div>
+      <div class="card"><div class="filters"><input type="search" placeholder="ค้นหาเลขที่ ชื่อลูกค้า" data-q style="flex:1"></div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>วันที่</th><th>เลขที่</th><th>ลูกค้า</th><th class="num">ยอดรวม</th></tr></thead><tbody data-body></tbody></table></div></div>
+      <p class="muted" style="font-size:13px">ใบลดหนี้ / ใบเพิ่มหนี้ ออกได้จากใบเสร็จรับเงินที่เป็นใบกำกับภาษี หรือใบแจ้งหนี้ / ใบกำกับภาษีที่รับชำระแล้ว ถ้าใบแจ้งหนี้ยังไม่ชำระ ให้ยกเลิกแล้วออกฉบับใหม่แทน</p>`;
+    const draw = () => {
+      const q = $('[data-q]', main).value.trim().toLowerCase();
+      const rows = list.filter((d) => !q || d.number.toLowerCase().includes(q) || (d.contact_name || '').toLowerCase().includes(q)).slice(0, 200);
+      $('[data-body]', main).innerHTML = rows.length ? rows.map((d) => `<tr class="click" data-id="${d.id}"><td class="nowrap">${T.thDate(d.date)}</td><td><span class="doc-no">${esc(d.number)}</span></td><td>${esc(d.contact_name || '')}</td><td class="num">${money(d.total)}</td></tr>`).join('')
+        : '<tr><td colspan="4"><div class="empty"><b>ยังไม่มีใบกำกับภาษีที่ออกใบลด / เพิ่มหนี้ได้</b></div></td></tr>';
+    };
+    draw();
+    $('[data-q]', main).oninput = draw;
+    $('[data-body]', main).onclick = (e) => { const tr = e.target.closest('[data-id]'); if (tr) location.hash = `#/new/${type}?from=${tr.dataset.id}`; };
   }
 
   function addDays(d, n) {
@@ -1217,10 +1470,17 @@
     if (live && t === 'IV' && doc.status === 'open') acts.push(`<a class="btn primary" href="#/new/RE?from=${doc.id}">รับชำระเงิน</a>`);
     if (live && t === 'EX' && doc.status === 'open') acts.push('<button class="btn primary" data-act="pay">บันทึกจ่ายเงิน</button>');
     if (live && t === 'EX' && doc.status === 'paid' && doc.wht > 0) acts.push('<button class="btn" data-act="wht">พิมพ์ 50 ทวิ</button>');
+    if (live && isNoteType(t) && doc.status === 'open') acts.push(`<button class="btn primary" data-act="notepay">${t === 'CN' ? 'บันทึกคืนเงิน' : 'บันทึกรับเงิน'}</button>`);
+    const etaxSent = doc.etax?.sent || [];
+    const canEtax = b.vat_registered && Etax.canSend(doc);
+    if (canEtax && etaxOn()) acts.push(`<button class="btn${etaxSent.length ? '' : ' primary'}" data-act="etax">${ICON.mail}${etaxSent.length ? 'ส่ง e-Tax อีกครั้ง' : 'ส่ง e-Tax Invoice'}</button>`);
     const more = [];
-    if (live && !(t === 'IV' && doc.status === 'paid')) more.push(`<a class="btn" href="#/edit/${doc.id}">แก้ไข</a>`);
+    if (live && !(t === 'IV' && doc.status === 'paid') && !etaxSent.length) more.push(`<a class="btn" href="#/edit/${doc.id}">แก้ไข</a>`);
+    if (canEtax && !etaxOn()) more.push(`<button class="btn" data-act="etax">${ICON.mail}ส่ง e-Tax Invoice</button>`);
+    if (noteable(doc)) more.push(`<a class="btn" href="#/new/CN?from=${doc.id}">ออกใบลดหนี้</a>`, `<a class="btn" href="#/new/DN?from=${doc.id}">ออกใบเพิ่มหนี้</a>`);
+    if (live && isNoteType(t) && doc.status === 'done') more.push(`<button class="btn" data-act="noteunpay">${t === 'CN' ? 'ยกเลิกการคืนเงิน' : 'ยกเลิกการรับเงิน'}</button>`);
     if (t !== 'EX') more.push(`<button class="btn" data-act="share">${ICON.link}${doc.public_token ? 'คัดลอกลิงก์' : 'สร้างลิงก์ให้ลูกค้า'}</button>`);
-    more.push(`<a class="btn" href="#/new/${t}?from=${doc.id}&copy=1">ทำซ้ำ</a>`);
+    more.push(`<a class="btn" href="#/new/${t}?from=${doc.id}&copy=1">${!live && doc.tax_invoice && (t === 'IV' || t === 'RE') ? 'ออกใบกำกับภาษีฉบับใหม่แทน' : 'ทำซ้ำ'}</a>`);
     if (live && t === 'QT') more.push(`<button class="btn" data-act="qt" data-v="${doc.status === 'rejected' ? 'open' : 'rejected'}">${doc.status === 'rejected' ? 'เปิดใหม่' : 'ลูกค้าไม่อนุมัติ'}</button>`);
     if (live && t === 'EX' && doc.status === 'paid') more.push('<button class="btn" data-act="unpay">ยกเลิกการจ่าย</button>');
     if (live) more.push('<button class="btn danger" data-act="void">ยกเลิกเอกสาร</button>');
@@ -1249,8 +1509,13 @@
             ${doc.pay ? `<dt>${t === 'EX' ? 'จ่ายเมื่อ' : 'รับเงินเมื่อ'}</dt><dd>${T.thDate(doc.pay.date)}</dd><dt>บัญชี</dt><dd>${esc(accName(doc.pay.account))}</dd>` : ''}
             ${doc.wht_cert?.number ? `<dt>เลขที่ 50 ทวิ</dt><dd class="mono">${esc(doc.wht_cert.number)}</dd>` : ''}
             ${doc.ref_no ? `<dt>เลขที่บิลผู้ขาย</dt><dd>${esc(doc.ref_no)}</dd>` : ''}
+            ${doc.adjust?.reason && isNoteType(t) ? `<dt>เหตุผล</dt><dd>${esc(doc.adjust.reason)}</dd>` : ''}
+            ${doc.adjust?.replaces ? `<dt>ออกแทน</dt><dd class="mono">${esc(doc.adjust.replaces.number)}</dd>` : ''}
           </dl>
           ${doc.attachment ? '<button class="btn sm" style="margin-top:12px" data-act="file">ดูไฟล์บิลที่แนบ</button>' : ''}</div>
+          ${etaxSent.length ? `<div class="card card-pad"><h2>e-Tax Invoice by Email</h2><ul class="etax-sent" style="padding-left:18px;margin:0">
+            ${etaxSent.slice().reverse().map((x) => `<li>${esc(new Date(x.at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }))} ถึง ${esc(x.to)} · ${x.method === 'gmail' ? 'Gmail' : 'ส่งเอง'}</li>`).join('')}</ul>
+            <p class="muted" style="font-size:12px;margin:8px 0 0">ไฟล์ที่ประทับเวลาแล้วจะส่งกลับมาที่ ${esc(etaxSent[etaxSent.length - 1].from || '')} จาก ${Etax.CC} เก็บอีเมลนั้นไว้เป็นหลักฐาน ตรวจไฟล์ได้ที่ <a href="https://validation.teda.th" target="_blank" rel="noopener">validation.teda.th</a></p></div>` : ''}
           <div class="card card-pad"><div class="actions">${more.join('')}</div></div>
           ${ref || children.length ? `<div class="card card-pad"><h2>เอกสารที่เกี่ยวข้อง</h2><div class="rel">
             ${ref ? `<a href="#/doc/${ref.id}"><span>${esc(T.TYPE_NAME[ref.type])} <span class="mono">${esc(ref.number)}</span></span>${statusChip(ref.type, ref.status)}</a>` : ''}
@@ -1294,6 +1559,9 @@
         if (act === 'wht') printHtml(T.renderWht(doc, b));
         if (act === 'share') { await shareDoc(doc); render(); }
         if (act === 'pay' && await payExpense(doc)) { toast('บันทึกจ่ายเงินแล้ว'); render(); }
+        if (act === 'etax' && await sendEtax(doc.id)) render();
+        if (act === 'notepay' && await payNote(doc)) { toast('บันทึกแล้ว'); render(); }
+        if (act === 'noteunpay' && await confirmBox(t === 'CN' ? 'ยกเลิกการคืนเงิน' : 'ยกเลิกการรับเงิน', 'รายการบัญชีการรับ / คืนเงินจะถูกลบ')) { await post(`/docs/${doc.id}/pay`, { pay: null }); render(); }
         if (act === 'unpay' && await confirmBox('ยกเลิกการจ่ายเงิน', 'รายการจะกลับเป็นรอจ่าย และรายการบัญชีการจ่ายจะถูกลบ')) { await post(`/docs/${doc.id}/pay`, { pay: null }); render(); }
         if (act === 'qt') { await post(`/docs/${doc.id}/status`, { status: a.dataset.v }); render(); }
         if (act === 'void' && await voidDoc(doc)) { toast('ยกเลิกแล้ว'); render(); }
@@ -1682,7 +1950,7 @@
           <label class="field span2"><span>เว็บไซต์</span><input type="text" name="website" value="${esc(b.website || '')}"></label></div>
         </div>
         <div class="card card-pad"><h2>เอกสาร</h2><div class="grid g2">
-          <div class="field span2"><span>ตัวอักษรนำหน้าเลขที่เอกสาร</span><div class="grid g4">${[['QT', 'ใบเสนอราคา'], ['IV', 'ใบแจ้งหนี้'], ['RE', 'ใบเสร็จ'], ['EX', 'ค่าใช้จ่าย'], ['JV', 'สมุดรายวัน'], ['WHT', '50 ทวิ']].map(([k, l]) => `<label class="field"><small>${l}</small><input type="text" data-prefix="${k}" value="${esc(P[k] || k)}" maxlength="8"></label>`).join('')}</div><small>เลขที่จะเป็น ตัวนำหน้า + ปี ค.ศ. + เดือน + ลำดับ เช่น IV2026110001</small></div>
+          <div class="field span2"><span>ตัวอักษรนำหน้าเลขที่เอกสาร</span><div class="grid g4">${[['QT', 'ใบเสนอราคา'], ['IV', 'ใบแจ้งหนี้'], ['RE', 'ใบเสร็จ'], ['EX', 'ค่าใช้จ่าย'], ['CN', 'ใบลดหนี้'], ['DN', 'ใบเพิ่มหนี้'], ['JV', 'สมุดรายวัน'], ['WHT', '50 ทวิ']].map(([k, l]) => `<label class="field"><small>${l}</small><input type="text" data-prefix="${k}" value="${esc(P[k] || k)}" maxlength="8"></label>`).join('')}</div><small>เลขที่จะเป็น ตัวนำหน้า + ปี ค.ศ. + เดือน + ลำดับ เช่น IV2026110001</small></div>
           <label class="field"><span>เครดิตเทอมเริ่มต้น (วัน)</span><input type="number" data-s="creditDays" min="0" value="${esc(s.creditDays ?? 30)}"></label>
           <label class="field"><span>ราคาสินค้าเริ่มต้น</span><select data-s="priceMode"><option value="excl" ${s.priceMode !== 'incl' ? 'selected' : ''}>ไม่รวม VAT</option><option value="incl" ${s.priceMode === 'incl' ? 'selected' : ''}>รวม VAT แล้ว</option></select></label>
           <label class="field"><span>เดือนเริ่มรอบบัญชี</span><select data-s="fyStart">${T.TH_MONTHS_LONG.map((mn, i) => `<option value="${i + 1}" ${(s.fyStart || 1) === i + 1 ? 'selected' : ''}>${mn}</option>`).join('')}</select></label>
@@ -1708,6 +1976,17 @@
             <div class="field span2"><span>บัญชีธนาคาร</span><div class="grid" data-banks></div><div><button type="button" class="btn sm" data-addbank>${ICON.plus}เพิ่มบัญชีธนาคาร</button></div></div>
             <label class="field span2"><span>ข้อความเพิ่มเติม (ไม่บังคับ)</span><textarea data-s="payment" rows="2" placeholder="เช่น กรุณาส่งสลิปมาที่ LINE @example">${esc(s.payment || '')}</textarea></label>
           </div></div>
+        <div class="card card-pad"><h2>e-Tax Invoice by Email</h2>
+          <p class="muted" style="margin-top:0">ส่งใบกำกับภาษี ใบลดหนี้ และใบเพิ่มหนี้ให้ลูกค้าทางอีเมลเป็นไฟล์ PDF/A-3 พร้อมสำเนาถึงระบบประทับเวลาของ ETDA (${Etax.CC}) ใช้แทนกระดาษได้ตามกฎหมาย ไม่มีค่าใช้จ่าย และไม่ต้องมีใบรับรองดิจิทัล</p>
+          ${b.vat_registered ? '' : '<div class="note-box" style="margin-bottom:10px">ใช้ได้เฉพาะกิจการที่จดทะเบียนภาษีมูลค่าเพิ่ม (ติ๊ก "จดทะเบียน VAT" ด้านบน)</div>'}
+          <div class="grid g2">
+            <label class="check span2"><input type="checkbox" data-etax-on ${s.etax?.on ? 'checked' : ''} ${b.vat_registered ? '' : 'disabled'}> เปิดใช้ e-Tax Invoice by Email</label>
+            <label class="field span2"><span>อีเมลที่ลงทะเบียนกับกรมสรรพากรสำหรับส่งใบกำกับภาษี</span><input type="email" data-etax-email value="${esc(s.etax?.email || '')}" placeholder="billing@yourcompany.co.th"><small>ต้องตรงกับที่แจ้งไว้กับกรมสรรพากร ถ้าเป็น Gmail หรือ Google Workspace ส่งจากในแอปได้เลย ถ้าเป็นอีเมลอื่น ระบบจะเตรียมไฟล์และหัวเรื่องให้ส่งเองจากโปรแกรมอีเมล</small></label>
+          </div>
+          <details style="margin-top:10px"><summary>วิธีสมัคร (ทำครั้งเดียว)</summary><ol style="line-height:1.8;padding-left:20px;margin:8px 0 0">
+            <li>เข้าเว็บกรมสรรพากร <a href="https://www.rd.go.th" target="_blank" rel="noopener">rd.go.th</a> › ใบกำกับภาษีและใบรับ › e-Tax Invoice by Time Stamp แล้วเข้าสู่ระบบด้วยบัญชีผู้ใช้ของกิจการ</li>
+            <li>ยื่นคำขออนุมัติ และแจ้งอีเมลที่จะใช้ส่งใบกำกับภาษี (สำหรับผู้ประกอบการจด VAT ที่มีรายได้ไม่เกิน 30 ล้านบาทต่อปี)</li>
+            <li>เมื่อได้รับอนุมัติ เปิดสวิตช์ด้านบนและใส่อีเมลเดียวกัน แล้วกด "ส่ง e-Tax Invoice" ในหน้าเอกสาร</li></ol></details></div>
         <div class="card card-pad"><h2>กิจการทั้งหมด</h2><p class="muted" style="margin-top:0">มี ${S.businesses.length} กิจการในบัญชีนี้</p><div class="actions"><button class="btn" data-switch2>สลับกิจการ</button><button class="btn" data-newbiz>${ICON.plus}เพิ่มกิจการ</button></div></div>
         ${S.boot.role === 'owner' ? `<div class="card card-pad" style="border-color:var(--bad-soft)"><h2 style="color:var(--bad)">ลบกิจการ</h2><p class="muted" style="margin-top:0">ลบเอกสาร ผู้ติดต่อ และรายการบัญชีทั้งหมดของกิจการนี้ กู้คืนไม่ได้</p><button class="btn danger" data-del>ลบกิจการนี้</button></div>` : ''}
       </div>`;
@@ -1776,6 +2055,8 @@
       settings.banks = banks;
       settings.signAuto = $('[data-sign-auto]', main).checked;
       settings.promptpay = { id: $('[data-pp=id]', main).value, name: $('[data-pp=name]', main).value, qr: $('[data-pp=qr]', main).checked };
+      settings.etax = { on: $('[data-etax-on]', main).checked, email: $('[data-etax-email]', main).value.trim() };
+      if (settings.etax.on && !/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(settings.etax.email)) { toast('ใส่อีเมลที่ลงทะเบียน e-Tax ให้ถูกต้อง', true); return; }
       e.target.disabled = true;
       try {
         await put('', { name: d.name, name_en: d.name_en, tax_id: d.tax_id, branch: d.branch, address: d.address, phone: d.phone, email: d.email, website: d.website, vat_registered: d.vat_registered, logo, signature: marks.signature, stamp: marks.stamp, settings });

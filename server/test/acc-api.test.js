@@ -169,3 +169,58 @@ test('a shared link shows the document without signing in', async () => {
   await A.post(`${P}/docs/${iv.id}/share`, { off: true });
   assert.equal((await fetch(`${API}/api/acc/public/${token}`)).status, 404);
 });
+
+test('credit and debit notes against a paid tax invoice, and the VAT report', async () => {
+  const lines = [{ name: 'บริการติดตั้ง', qty: 2, price: 5000, account: '41200' }];
+  const re = (await A.post(`${P}/docs`, { type: 'RE', date: '2026-11-12', contact_id: customer.id, lines, pay: { account: '11200', date: '2026-11-12' } })).doc;
+  assert.equal(re.tax_invoice, true);
+  assert.equal(re.total, 10700);
+  // Needs a reason, and cannot credit more than the invoice.
+  assert.equal((await A.post(`${P}/docs`, { type: 'CN', ref_id: re.id, lines: [{ name: 'x', qty: 1, price: 100 }] })).error, 'bad_reason');
+  assert.equal((await A.post(`${P}/docs`, { type: 'CN', ref_id: re.id, reason: 'คืนสินค้า', lines: [{ name: 'x', qty: 1, price: 20000 }] })).error, 'credit_too_much');
+  const cn = (await A.post(`${P}/docs`, { type: 'CN', date: '2026-11-15', ref_id: re.id, reason: 'ลดราคา', lines: [{ name: 'ลดค่าบริการ', qty: 1, price: 1000, account: '41200' }] })).doc;
+  assert.match(cn.number, /^CN202611/);
+  assert.equal(cn.total, 1070);
+  assert.equal(cn.vat, 70);
+  assert.equal(cn.status, 'open');
+  assert.equal(cn.contact.name, 'ลูกค้า ก');
+  assert.deepEqual(cn.adjust, { reason: 'ลดราคา', orig: 10000 });
+  const refunded = (await A.post(`${P}/docs/${cn.id}/pay`, { pay: { account: '11200', date: '2026-11-16' } })).doc;
+  assert.equal(refunded.status, 'done');
+  const dn = (await A.post(`${P}/docs`, { type: 'DN', date: '2026-11-15', ref_id: re.id, reason: 'คิดราคาต่ำไป', lines: [{ name: 'ค่าบริการเพิ่ม', qty: 1, price: 500, account: '41200' }] })).doc;
+  assert.equal(dn.total, 535);
+  // A receipt with notes against it cannot be cancelled.
+  assert.equal((await A.post(`${P}/docs/${re.id}/void`, {})).error, 'has_notes');
+  const vat = await A.get(`${P}/reports/vat_sales?month=2026-11`);
+  assert.equal(vat.rows.find((r) => r.number === cn.number).vat, -70);
+  assert.equal(vat.rows.find((r) => r.number === dn.number).vat, 35);
+  // An open (unpaid) invoice is not credited, it is cancelled and reissued.
+  const iv = (await A.post(`${P}/docs`, { type: 'IV', date: '2026-11-12', contact_id: customer.id, tax_invoice: true, lines })).doc;
+  assert.equal((await A.post(`${P}/docs`, { type: 'CN', ref_id: iv.id, reason: 'x', lines })).error, 'ref_unpaid');
+});
+
+test('e-Tax Invoice by Email: settings, send record, locked after sending, replacement', async () => {
+  const lines = [{ name: 'ที่ปรึกษา', qty: 1, price: 3000, account: '41200' }];
+  const re = (await A.post(`${P}/docs`, { type: 'RE', date: '2026-11-20', contact_id: customer.id, lines, pay: { account: '11200' } })).doc;
+  const subject = `[20112569][INV][${re.number}]`;
+  assert.equal((await A.post(`${P}/docs/${re.id}/etax`, { to: 'buyer@example.com', subject })).error, 'etax_off');
+  const boot = await A.get(P);
+  await A.put(P, { settings: { ...boot.business.settings, etax: { on: true, email: 'Billing@Example.co.th' } } });
+  assert.deepEqual((await A.get(P)).business.settings.etax, { on: true, email: 'billing@example.co.th' });
+  assert.equal((await A.post(`${P}/docs/${re.id}/etax`, { to: 'buyer@example.com', subject: 'hello' })).error, 'bad_subject');
+  const r = await A.post(`${P}/docs/${re.id}/etax`, { to: 'buyer@example.com', subject, method: 'gmail', message_id: 'abc123' });
+  assert.equal(r.etax.sent.length, 1);
+  assert.equal(r.etax.sent[0].from, 'billing@example.co.th');
+  assert.equal((await A.get(`${P}/docs?type=RE`)).docs.find((d) => d.id === re.id).etax_sent, true);
+  // The Revenue Department has its copy: no more edits, only cancel and replace.
+  assert.equal((await A.put(`${P}/docs/${re.id}`, { date: '2026-11-20', contact_id: customer.id, lines, pay: { account: '11200' } })).error, 'etax_sent');
+  // A quotation is not a tax invoice.
+  const qt = (await A.post(`${P}/docs`, { type: 'QT', contact_id: customer.id, lines })).doc;
+  assert.equal((await A.post(`${P}/docs/${qt.id}/etax`, { to: 'buyer@example.com', subject: `[20112569][INV][${qt.number}]` })).error, 'not_tax_invoice');
+  // Replacing it: only a cancelled tax invoice can be replaced.
+  assert.equal((await A.post(`${P}/docs`, { type: 'RE', contact_id: customer.id, lines, replaces: re.id })).error, 'bad_replaces');
+  await A.post(`${P}/docs/${re.id}/void`, { reason: 'ที่อยู่ผิด' });
+  const nre = (await A.post(`${P}/docs`, { type: 'RE', date: '2026-11-21', contact_id: customer.id, lines, replaces: re.id, replace_reason: 'ที่อยู่ผิด' })).doc;
+  assert.deepEqual(nre.adjust.replaces, { id: re.id, number: re.number, date: '2026-11-20' });
+  assert.equal(nre.adjust.reason, 'ที่อยู่ผิด');
+});

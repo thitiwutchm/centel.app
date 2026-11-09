@@ -2,8 +2,9 @@
 // (VAT, discounts, withholding tax) and the double-entry lines each document posts.
 // Money is worked in satang (integers) so every total adds up to the last satang.
 
-export const DOC_TYPES = ['QT', 'IV', 'RE', 'EX'];
-export const DEFAULT_PREFIX = { QT: 'QT', IV: 'IV', RE: 'RE', EX: 'EX', JV: 'JV', WHT: 'WT' };
+// CN ใบลดหนี้ and DN ใบเพิ่มหนี้ are issued against a tax invoice (an IV or RE that is one).
+export const DOC_TYPES = ['QT', 'IV', 'RE', 'EX', 'CN', 'DN'];
+export const DEFAULT_PREFIX = { QT: 'QT', IV: 'IV', RE: 'RE', EX: 'EX', CN: 'CN', DN: 'DN', JV: 'JV', WHT: 'WT' };
 export const WHT_RATES = [0, 1, 1.5, 2, 3, 5, 10, 15];
 
 // A small chart for a Thai service / trading SME. `sys` marks the accounts the app posts to.
@@ -182,6 +183,18 @@ export function postingsFor(doc, sys, ref = null) {
       dr(need('bank_fee'), fee);
       cr(doc.pay?.account || need('cash'), total - wht + fee);
       cr(need('wht_pay'), wht);
+    }
+  } else if (doc.type === 'CN' || doc.type === 'DN') {
+    // A debit note books more sales like an invoice; a credit note takes sales and output VAT
+    // back. The customer's balance moves on AR until the difference is received or refunded.
+    const s = doc.type === 'CN' ? -1 : 1;
+    dr(need('ar'), s * total);
+    for (const [a, c] of byAccount(doc.lines, need('sales'))) cr(a, s * c);
+    cr(need('vat_out'), s * vat);
+    if (doc.pay) {
+      stage = 'pay';
+      dr(doc.pay.account || need('cash'), s * total);
+      cr(need('ar'), s * total);
     }
   }
   // Merge same-account same-side lines so the journal stays short.

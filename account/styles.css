@@ -468,3 +468,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   #print .print-report th, #print .print-report td { border-bottom: 1px solid #ccc; padding: 4px 6px; }
 }
 #print { display: none; }
+
+/* Credit / debit notes have no withholding tax column. */
+.lines.no-wht .w-wht { display: none; }
+/* e-Tax send dialog */
+.etax-sent { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.etax-sent li { margin: 2px 0; }
+.etax-row { display: grid; grid-template-columns: 70px 1fr; gap: 6px 10px; font-size: 13px; align-items: baseline; }
+.etax-row dt { color: var(--muted); }
+.etax-row dd { margin: 0; word-break: break-all; }
