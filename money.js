@@ -884,6 +884,7 @@ function renderHome() {
     </div>
 
     <div class="home-grid"><div class="home-col">
+    ${window.appUpdateCard ? appUpdateCard() : ''}
     ${window.photoSlipsCard ? photoSlipsCard() : ''}
 
     <div class="card list-card">

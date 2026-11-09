@@ -525,6 +525,11 @@ function renderSettings() {
       setRow({ id: 'aiOpen', ico: '✨', color: '#bf5af2', name: 'เชื่อมกับ Claude / ChatGPT', value: aiApps ? `${aiApps} แอป` : '' }),
     ])}
 
+    ${setGroup('ความปลอดภัยและแอป', [
+      window.appLockRow ? appLockRow() : '',
+      window.appUpdateRow ? appUpdateRow() : '',
+    ])}
+
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     ${setGroup('ข้อมูล', [
       setRow({ action: 'export', ico: '⬇️', color: '#30b0c7', name: 'ส่งออกข้อมูล (JSON)', chev: false }),
@@ -566,6 +571,8 @@ const SET_SHEETS = {
       <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
     <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>`],
   photoslips: ['ดึงสลิปจากรูปภาพ', () => (window.photoSlipsSettings ? photoSlipsSettings() : '')],
+  applock: ['ล็อกแอป', () => (window.appLockSettings ? appLockSettings() : '')],
+  appver: ['เวอร์ชันแอป', () => (window.appUpdateSettings ? appUpdateSettings() : '')],
   appicon: ['ไอคอนแอป', () => (window.appIconSettings ? appIconSettings().replace(/<div class="section-title">[^<]*<\/div>/, '') : '')],
   lang: ['ภาษา · Language', () => `
     <div class="seg lang-seg">${[['th', 'ไทย'], ['en', 'English']]
@@ -611,6 +618,8 @@ function settingsSheet(key, again = false) {
   if (key === 'push') pushSettingsBind();
   if (key === 'chat') chatSettingsBind();
   if (key === 'photoslips' && window.photoSlipsBind) photoSlipsBind();
+  if (key === 'applock' && window.appLockBind) appLockBind();
+  if (key === 'appver' && window.appUpdateBind) appUpdateBind();
 }
 
 /* ---------- Sheets ---------- */

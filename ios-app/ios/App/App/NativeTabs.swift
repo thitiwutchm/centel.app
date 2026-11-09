@@ -17,6 +17,7 @@ class CentelViewController: CAPBridgeViewController, UITabBarDelegate {
         bridge?.registerPluginInstance(AppIconPlugin())
         bridge?.registerPluginInstance(ShareInboxPlugin())
         bridge?.registerPluginInstance(PhotoSlipsPlugin())
+        bridge?.registerPluginInstance(AppLockPlugin())
     }
 
     override func viewDidLoad() {

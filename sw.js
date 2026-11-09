@@ -1,6 +1,6 @@
 // Bump CACHE when shipping changes so installed apps pick up the new files.
 // Keep APP_BUILD in app.js equal to it: the iOS app reloads when they differ.
-const CACHE = 'billplanner-v106';
+const CACHE = 'billplanner-v107';
 const ASSETS = [
   './',
   'index.html',
@@ -27,6 +27,8 @@ const ASSETS = [
   'appicon.js',
   'share.js',
   'photoslips.js',
+  'applock.js',
+  'appupdate.js',
   'manifest.webmanifest',
   'icons/centel-192.png',
   'icons/centel-512.png',
@@ -50,7 +52,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   // API answers are per-account and must never be served from the cache.
-  if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/install/')) return;
   // Always ask the server (the browser's HTTP cache may hold an old copy); offline, use ours.
   const fresh = req.mode === 'navigate' ? fetch(req) : fetch(req, { cache: 'no-cache' });
   e.respondWith(

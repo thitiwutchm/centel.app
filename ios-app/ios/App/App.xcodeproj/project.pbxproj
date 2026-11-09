@@ -23,6 +23,7 @@
 		C3A7E2082F0B000100A1B2C3 /* CentelWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C3A7E2072F0B000100A1B2C3 /* CentelWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C3A7E3022F0B000100A1B2C3 /* AppIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */; };
 		C3A7E4022F0B000100A1B2C3 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */; };
+		C3A7E6022F0D000100A1B2C3 /* AppLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E6012F0D000100A1B2C3 /* AppLock.swift */; };
 		C3A7E5022F0C000100A1B2C3 /* PhotoSlips.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E5012F0C000100A1B2C3 /* PhotoSlips.swift */; };
 		C3A7E5042F0B000100A1B2C3 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E5032F0B000100A1B2C3 /* ShareViewController.swift */; };
 		C3A7E5082F0B000100A1B2C3 /* CentelShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C3A7E5072F0B000100A1B2C3 /* CentelShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -49,6 +50,7 @@
 		C3A7E2072F0B000100A1B2C3 /* CentelWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CentelWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcon.swift; sourceTree = "<group>"; };
 		C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInbox.swift; sourceTree = "<group>"; };
+		C3A7E6012F0D000100A1B2C3 /* AppLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLock.swift; sourceTree = "<group>"; };
 		C3A7E5012F0C000100A1B2C3 /* PhotoSlips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSlips.swift; sourceTree = "<group>"; };
 		C3A7E5032F0B000100A1B2C3 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		C3A7E5052F0B000100A1B2C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -147,6 +149,7 @@
 				C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */,
 				C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */,
 				C3A7E5012F0C000100A1B2C3 /* PhotoSlips.swift */,
+				C3A7E6012F0D000100A1B2C3 /* AppLock.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -327,6 +330,7 @@
 				C3A7E3022F0B000100A1B2C3 /* AppIcon.swift in Sources */,
 				C3A7E4022F0B000100A1B2C3 /* ShareInbox.swift in Sources */,
 				C3A7E5022F0C000100A1B2C3 /* PhotoSlips.swift in Sources */,
+				C3A7E6022F0D000100A1B2C3 /* AppLock.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -506,7 +510,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = app.centel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -531,7 +535,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.centel;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -554,7 +558,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.centel.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -578,7 +582,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.centel.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -602,7 +606,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.centel.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -626,7 +630,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.centel.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

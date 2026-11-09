@@ -1937,6 +1937,16 @@ body.ch-covered > :not(.ch-screen) { visibility: hidden; }
 .sheet .tp.on .tp-prev { box-shadow: 0 0 0 2.5px var(--accent), 0 4px 14px rgba(0, 20, 50, .18); }
 .set-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .set-dot.ok { background: #34c759; }
+.set-dot.bad { background: #ff3b30; }
+/* Home: a newer iPhone app build (appupdate.js). */
+.card.au-home { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; }
+.au-home .au-ico { font-size: 26px; line-height: 1; }
+.au-home .main { flex: 1; min-width: 0; }
+.au-home .btn.small { width: auto; padding: 8px 16px; margin: 0; text-decoration: none; }
+.au-home .au-x { border: 0; background: none; color: var(--muted); font-size: 15px; padding: 6px; }
+.au-card .item { cursor: default; }
+a.btn { text-decoration: none; text-align: center; box-sizing: border-box; }
+.al-note { color: var(--bad, #ff3b30); }
 .set-list + .hint { margin-top: 8px; }
 .set-foot { text-align: center; margin-top: 18px; }
 

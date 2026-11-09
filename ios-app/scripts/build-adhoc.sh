@@ -28,4 +28,8 @@ cp build/export/*.ipa ../install/Centel.ipa
 if [ -f build/export/manifest.plist ]; then
   sed 's#<string>App</string>#<string>METANG</string>#' build/export/manifest.plist > ../install/manifest.plist
 fi
-echo "Built ../install/Centel.ipa (build $BUILD)"
+# The installed app compares its own build with this (applock.js › เวอร์ชันแอป) and offers
+# "อัปเดต" when this one is newer. Builds are numbered by time, so larger is newer.
+VERSION=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' build/Centel.xcarchive/Info.plist)
+printf '{ "version": "%s", "build": "%s", "created_at": "%s" }\n' "$VERSION" "$BUILD" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ../install/build.json
+echo "Built ../install/Centel.ipa (version $VERSION build $BUILD)"

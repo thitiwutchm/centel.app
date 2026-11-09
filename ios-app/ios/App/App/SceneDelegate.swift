@@ -11,6 +11,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // CentelViewController (NativeTabs.swift) registers the app's own plugins.
         window?.rootViewController = CentelViewController()
         window?.makeKeyAndVisible()
+        // Face ID lock on (AppLock.swift): the page starts covered until it is unlocked.
+        AppLock.shared.attach(window)
 
         // Opened by tapping the widget: the page is not loaded yet, so it asks for this later.
         if let url = connectionOptions.urlContexts.first?.url, let link = WidgetDataPlugin.link(from: url) {
@@ -30,7 +32,16 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
+        AppLock.shared.didEnterBackground()
         PhotoSlipsBackground.schedule()
+    }
+
+    func sceneWillEnterForeground(_ scene: UIScene) {
+        AppLock.shared.willEnterForeground()
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        AppLock.shared.didBecomeActive()
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
