@@ -77,6 +77,8 @@
 	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>METANG ใช้กล้องเพื่อสแกนสลิปและใบเสร็จ</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>METANG ใช้ Face ID เพื่อล็อกแอปและปลดล็อกเมื่อคุณเปิดใช้ "ล็อกแอปด้วย Face ID"</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>METANG ใช้ตำแหน่งในโหมดนักเดินทาง เพื่อเลือกสกุลเงินของประเทศที่คุณอยู่</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -62,6 +62,18 @@ For our own iPhones: install from a Safari link, valid for a year.
 
 A newly added iPhone needs a fresh build. Web changes do not.
 
+`build-adhoc.sh` also writes `install/build.json` (version + build number). The installed
+app compares its own build (`App.getInfo`) with it and offers "อัปเดต" on Home and in
+Account › เวอร์ชันแอป (`appupdate.js`), which opens the same itms-services link, so a
+rebuild reaches the phones without anyone visiting /install. Bump `MARKETING_VERSION`
+in Xcode for builds with native changes.
+
+## Face ID lock
+
+`App/AppLock.swift` (ported from the UMAKER Portal app) covers the page on a cold start and
+after more than a minute away until Face ID or the iPhone passcode unlocks it, and hides the
+page in the app switcher. Switched on in Account › ล็อกแอปด้วย Face ID (`applock.js`).
+
 ## Before App Store review (still to do)
 
 1. **Native push** is done: the Account switch registers the APNs token
