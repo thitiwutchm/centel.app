@@ -123,6 +123,8 @@ async function updateBusiness(db, id, body) {
       promptpay: promptPayId(s.promptpay?.id) ? { id: promptPayId(s.promptpay.id), name: str(s.promptpay.name, 200), qr: s.promptpay.qr !== false } : null,
       signer: str(s.signer, 100),
       signerTitle: str(s.signerTitle, 100),
+      // เล่มที่ printed on 50 ทวิ certificates (blank = Buddhist year of the payment).
+      whtBook: str(s.whtBook, 20),
       // Put the signature and stamp on documents by default (the preview can turn it off per copy).
       signAuto: !!s.signAuto,
       lang: s.lang === 'en' ? 'en' : 'th',
@@ -358,6 +360,12 @@ function cleanPay(p, acc, date) {
   };
 }
 
+// ภ.ง.ด.53 for a juristic person (13-digit tax ID starts with 0), ภ.ง.ด.3 for a person.
+const whtFormFor = (c) => {
+  const id = String(c?.tax_id || '').replace(/\D/g, '');
+  if (id.length === 13) return id[0] === '0' ? 'pnd53' : 'pnd3';
+  return c?.is_company === false ? 'pnd3' : 'pnd53';
+};
 const WHT_INCOME = ['ค่าบริการ', 'ค่าจ้างทำของ', 'ค่าเช่า', 'ค่าโฆษณา', 'ค่าขนส่ง', 'ค่าวิชาชีพอิสระ', 'ค่านายหน้า', 'ดอกเบี้ย', 'เงินปันผล', 'ค่ารางวัล', 'อื่น ๆ'];
 
 // Builds a document row from what the browser sent. `cur` is the stored document when editing.
@@ -420,7 +428,7 @@ async function buildDoc(db, req, body, cur) {
   if (type === 'EX' && t.wht > 0) {
     whtCert = {
       ...(whtCert || {}),
-      form: body.wht_form === 'pnd3' || body.wht_form === 'pnd53' ? body.wht_form : (contact.snap.is_company ? 'pnd53' : 'pnd3'),
+      form: body.wht_form === 'pnd3' || body.wht_form === 'pnd53' ? body.wht_form : whtFormFor(contact.snap),
       income: WHT_INCOME.includes(body.wht_income) ? body.wht_income : (whtCert?.income || 'ค่าบริการ'),
     };
   }

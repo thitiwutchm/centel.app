@@ -1094,7 +1094,7 @@
       if (!totals.wht) { box.innerHTML = ''; return; }
       if (!isEx) { box.innerHTML = '<span>ภาษีหัก ณ ที่จ่าย</span><div class="note-box">ลูกค้าจะหักภาษี ณ ที่จ่าย และส่งหนังสือรับรอง 50 ทวิ ให้ ระบบบันทึกเป็นภาษีถูกหัก ณ ที่จ่าย (นำไปเครดิตภาษีเงินได้)</div>'; return; }
       const cur = doc.wht_cert || {};
-      const form = cur.form || (doc.contact && doc.contact.is_company === false ? 'pnd3' : 'pnd53');
+      const form = cur.form || window.Wht50.formFor(doc.contact);
       box.innerHTML = `<span>หนังสือรับรองหัก ณ ที่จ่าย (50 ทวิ)</span>
         <div class="grid g2"><select data-wf><option value="pnd53" ${form === 'pnd53' ? 'selected' : ''}>ภ.ง.ด.53 (นิติบุคคล)</option><option value="pnd3" ${form === 'pnd3' ? 'selected' : ''}>ภ.ง.ด.3 (บุคคลธรรมดา)</option></select>
         <select data-wi>${['ค่าบริการ', 'ค่าจ้างทำของ', 'ค่าเช่า', 'ค่าโฆษณา', 'ค่าขนส่ง', 'ค่าวิชาชีพอิสระ', 'ค่านายหน้า', 'อื่น ๆ'].map((x) => `<option ${cur.income === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
@@ -1223,7 +1223,7 @@
     if (live && t === 'QT') acts.push(`<a class="btn primary" href="#/new/IV?from=${doc.id}">แปลงเป็นใบแจ้งหนี้</a>`, `<a class="btn" href="#/new/RE?from=${doc.id}">ออกใบเสร็จ (ขายสด)</a>`);
     if (live && t === 'IV' && doc.status === 'open') acts.push(`<a class="btn primary" href="#/new/RE?from=${doc.id}">รับชำระเงิน</a>`);
     if (live && t === 'EX' && doc.status === 'open') acts.push('<button class="btn primary" data-act="pay">บันทึกจ่ายเงิน</button>');
-    if (live && t === 'EX' && doc.status === 'paid' && doc.wht > 0) acts.push('<button class="btn" data-act="wht">พิมพ์ 50 ทวิ</button>');
+    if (live && t === 'EX' && doc.status === 'paid' && doc.wht > 0) acts.push('<button class="btn" data-act="wht">หนังสือรับรองหัก ณ ที่จ่าย</button>');
     const more = [];
     if (live && !(t === 'IV' && doc.status === 'paid')) more.push(`<a class="btn" href="#/edit/${doc.id}">แก้ไข</a>`);
     if (t !== 'EX') more.push(`<button class="btn" data-act="share">${ICON.link}${doc.public_token ? 'คัดลอกลิงก์' : 'สร้างลิงก์ให้ลูกค้า'}</button>`);
@@ -1298,7 +1298,7 @@
           try { await T.downloadPdf(T.renderSet(printable, b, opts()), `${doc.number}.pdf`); } finally { a.disabled = false; a.textContent = label; }
         }
         if (act === 'print') printHtml(T.renderSet(printable, b, opts()));
-        if (act === 'wht') printHtml(T.renderWht(doc, b));
+        if (act === 'wht') whtDialog(doc, b);
         if (act === 'share') { await shareDoc(doc); render(); }
         if (act === 'pay' && await payExpense(doc)) { toast('บันทึกจ่ายเงินแล้ว'); render(); }
         if (act === 'unpay' && await confirmBox('ยกเลิกการจ่ายเงิน', 'รายการจะกลับเป็นรอจ่าย และรายการบัญชีการจ่ายจะถูกลบ')) { await post(`/docs/${doc.id}/pay`, { pay: null }); render(); }
@@ -1307,6 +1307,67 @@
         if (act === 'file') { const { url } = await get(`/attachment?key=${encodeURIComponent(doc.attachment)}`); window.open(url, '_blank', 'noopener'); }
       } catch (err) { fail(err); }
     };
+  }
+
+  // หนังสือรับรองการหักภาษี ณ ที่จ่าย on the official RD form (wht50.js): preview, PDF, print.
+  function whtDialog(doc, b) {
+    const W = window.Wht50;
+    const canSign = !!(b.signature || b.stamp);
+    const opts = (el) => ({
+      copies: [1, 2].filter((n) => $(`[data-wc="${n}"]`, el).checked),
+      sign: canSign && $('[data-ws]', el).checked,
+    });
+    const make = async (el) => {
+      const o = opts(el);
+      if (!o.copies.length) throw new Error('เลือกอย่างน้อย 1 ฉบับ');
+      return W.pdf(doc, b, o);
+    };
+    const name = `${doc.wht_cert?.number || doc.number}-50ทวิ.pdf`;
+    return dialog({
+      title: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย', wide: true, ok: '', cancel: 'ปิด',
+      extra: '<button class="btn" data-wpdf>ดาวน์โหลด PDF</button><button class="btn dark" data-wprint>พิมพ์</button>',
+      body: `<div class="wht50">
+        <div class="wht50-paper" data-wp><div class="muted">กำลังสร้างตัวอย่าง…</div></div>
+        <div class="wht50-side">
+          <p class="muted" style="margin-top:0">แบบฟอร์มของกรมสรรพากร (50 ทวิ) ระบบเติมข้อมูลให้ในช่องเท่านั้น</p>
+          <label class="check"><input type="checkbox" data-wc="1" checked> ฉบับที่ 1 (ให้ผู้ถูกหัก)</label>
+          <label class="check"><input type="checkbox" data-wc="2" checked> ฉบับที่ 2 (เก็บเป็นหลักฐาน)</label>
+          <label class="sw-row${canSign ? '' : ' off'}"><span>ลายเซ็นและตราประทับ${canSign ? '' : '<small>อัปโหลดได้ที่ <a href="#/settings">ตั้งค่า</a></small>'}</span><input type="checkbox" class="sw" data-ws ${canSign && b.settings?.signAuto ? 'checked' : ''} ${canSign ? '' : 'disabled'}></label>
+          ${b.settings?.signer ? '' : '<p class="muted" style="font-size:12px">ใส่ชื่อผู้ลงนามได้ที่ <a href="#/settings">ตั้งค่า</a> › ชื่อผู้มีอำนาจลงนาม</p>'}
+        </div></div>`,
+      onOpen: (el) => {
+        const draw = async () => {
+          const o = opts(el);
+          try {
+            const cv = await W.canvas(doc, b, { ...o, copy: o.copies[0] || 1, background: 'forms/50tawi.png', scale: 2 });
+            const box = $('[data-wp]', el);
+            box.innerHTML = '';
+            box.appendChild(cv);
+          } catch (err) { fail(err); }
+        };
+        draw();
+        el.addEventListener('change', (e) => { if (e.target.closest('[data-wc],[data-ws]')) draw(); });
+        const busy = async (btn, fn) => {
+          const label = btn.textContent;
+          btn.disabled = true; btn.textContent = 'กำลังสร้าง PDF…';
+          try { await fn(); } catch (err) { fail(err); } finally { btn.disabled = false; btn.textContent = label; }
+        };
+        $('[data-wpdf]', el).onclick = (e) => busy(e.target, async () => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(await make(el));
+          a.download = name;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        });
+        $('[data-wprint]', el).onclick = (e) => {
+          const w = window.open('', '_blank');
+          busy(e.target, async () => {
+            const url = URL.createObjectURL(await make(el));
+            if (w) w.location.href = url; else window.location.href = url;
+          }).then(() => { if (w && w.location.href === 'about:blank') w.close(); });
+        };
+      },
+    });
   }
 
   // Scales the A4 paper down to fit narrow screens.
@@ -1690,6 +1751,7 @@
         </div>
         <div class="card card-pad"><h2>เอกสาร</h2><div class="grid g2">
           <div class="field span2"><span>ตัวอักษรนำหน้าเลขที่เอกสาร</span><div class="grid g4">${[['QT', 'ใบเสนอราคา'], ['IV', 'ใบแจ้งหนี้'], ['RE', 'ใบเสร็จ'], ['EX', 'ค่าใช้จ่าย'], ['JV', 'สมุดรายวัน'], ['WHT', '50 ทวิ']].map(([k, l]) => `<label class="field"><small>${l}</small><input type="text" data-prefix="${k}" value="${esc(P[k] || k)}" maxlength="8"></label>`).join('')}</div><small>เลขที่จะเป็น ตัวนำหน้า + ปี ค.ศ. + เดือน + ลำดับ เช่น IV2026110001</small></div>
+          <label class="field"><span>เล่มที่ หนังสือรับรอง 50 ทวิ</span><input type="text" data-s="whtBook" maxlength="20" value="${esc(s.whtBook || '')}" placeholder="ว่างไว้ = ปี พ.ศ. ที่จ่าย"></label>
           <label class="field"><span>เครดิตเทอมเริ่มต้น (วัน)</span><input type="number" data-s="creditDays" min="0" value="${esc(s.creditDays ?? 30)}"></label>
           <label class="field"><span>ราคาสินค้าเริ่มต้น</span><select data-s="priceMode"><option value="excl" ${s.priceMode !== 'incl' ? 'selected' : ''}>ไม่รวม VAT</option><option value="incl" ${s.priceMode === 'incl' ? 'selected' : ''}>รวม VAT แล้ว</option></select></label>
           <label class="field"><span>เดือนเริ่มรอบบัญชี</span><select data-s="fyStart">${T.TH_MONTHS_LONG.map((mn, i) => `<option value="${i + 1}" ${(s.fyStart || 1) === i + 1 ? 'selected' : ''}>${mn}</option>`).join('')}</select></label>
