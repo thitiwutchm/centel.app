@@ -7,7 +7,7 @@ import chatRoutes, { bridgeRouter, startChatJobs } from './chat.js';
 import { oauthRouter, wellKnown } from './oauth.js';
 import { mcpRouter, aiRouter } from './mcp.js';
 import { udidReply } from './udid.js';
-import accRoutes from './acc/routes.js';
+import accRoutes, { startAccJobs } from './acc/routes.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -53,3 +53,4 @@ await migrate();
 app.listen(port, () => console.log(`centel api on :${port}`));
 startReminders();
 startChatJobs();
+startAccJobs();

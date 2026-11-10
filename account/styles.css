@@ -470,3 +470,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   #print .print-report th, #print .print-report td { border-bottom: 1px solid #ccc; padding: 4px 6px; }
 }
 #print { display: none; }
+
+/* Integrations */
+.int-card { display: flex; gap: 14px; align-items: center; text-decoration: none; color: inherit; }
+.int-status { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.int-logo { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: 15px; letter-spacing: .5px; background: #0E1116; color: #C6F432; }
+.cc-flow { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.6; }
+.cc-flow li::marker { color: var(--muted); }
+.grid > .card { min-width: 0; }
+.tbl select { max-width: 280px; }

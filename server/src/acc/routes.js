@@ -11,6 +11,7 @@ import {
 } from './ledger.js';
 import { report, REPORTS } from './reports.js';
 import { readPurchaseDoc } from './ai.js';
+import { CC_KINDS, DEFAULT_BASE, ccFetch, cleanBase, cleanKey, reportFor, sinceMonth, toDocBody, venueContact } from './capcourt.js';
 
 const router = express.Router();
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -152,7 +153,19 @@ biz.put('/', wrap(async (req, res) => {
 biz.delete('/', wrap(async (req, res) => {
   if (req.biz.role !== 'owner') throw bad('forbidden', 403);
   if (String(req.body?.confirm || '') !== req.biz.name) throw bad('confirm_name');
-  await pool.query('delete from acc_businesses where id = $1', [B(req)]);
+  // Journal lines first: their foreign key to the chart of accounts does not cascade.
+  const db = await pool.connect();
+  try {
+    await db.query('begin');
+    await db.query('delete from acc_lines where business_id = $1', [B(req)]);
+    await db.query('delete from acc_businesses where id = $1', [B(req)]);
+    await db.query('commit');
+  } catch (e) {
+    await db.query('rollback').catch(() => {});
+    throw e;
+  } finally {
+    db.release();
+  }
   res.json({ ok: true });
 }));
 
@@ -464,7 +477,7 @@ biz.get('/docs', wrap(async (req, res) => {
   const rows = await tx(req, async (db) => (await db.query(
     `select id, type, number, status, date, due_date, contact_id, contact->>'name' as contact_name, tax_invoice,
             subtotal, vat, total, wht, ref_id, (pay->>'date') as paid_date, created_at,
-            attachment, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared
+            attachment, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared, ext_no
      from acc_docs where ${where.join(' and ')} order by date desc, number desc limit 2000`, p)).rows);
   // Short-lived links to the scanned bill pictures, for the expense list thumbnails.
   if (storageEnabled) {
@@ -503,6 +516,7 @@ biz.post('/docs', wrap(async (req, res) => {
     await afterSave(db, req, row);
     return row;
   });
+  if (doc.type === 'RE') ccKick(B(req), doc.ref_id).catch(() => {});
   res.json({ doc });
 }));
 
@@ -552,7 +566,7 @@ biz.post('/docs/:id/status', wrap(async (req, res) => {
 
 biz.post('/docs/:id/void', wrap(async (req, res) => {
   if (!isUuid(req.params.id)) throw bad('not_found', 404);
-  await tx(req, async (db) => {
+  const voided = await tx(req, async (db) => {
     const cur = (await db.query('select * from acc_docs where id = $1 and business_id = $2 for update', [req.params.id, B(req)])).rows[0];
     if (!cur) throw bad('not_found', 404);
     if (cur.status === 'void') return;
@@ -562,7 +576,9 @@ biz.post('/docs/:id/void', wrap(async (req, res) => {
       [cur.id, str(req.body?.reason, 300) ? `\nยกเลิก: ${str(req.body.reason, 300)}` : ''])).rows[0];
     if (row.ref_id) await refreshStatus(db, row.ref_id);
     await repost(db, B(req), row);
+    return row;
   });
+  if (voided?.type === 'RE') ccKick(B(req), voided.ref_id).catch(() => {});
   res.json({ ok: true });
 }));
 
@@ -676,6 +692,186 @@ biz.get('/reports/:name', wrap(async (req, res) => {
   const out = await tx(req, (db) => report(db, req.biz, req.params.name, req.query));
   res.json(out);
 }));
+
+/* ---------- CapCourt Admin: monthly venue bills become invoices here ---------- */
+
+const ccRunning = new Map();
+
+function ccPublic(row) {
+  if (!row) return null;
+  const s = row.settings || {};
+  return {
+    base_url: row.base_url, key_suffix: row.api_key.slice(-4), enabled: row.enabled,
+    settings: { itemMap: s.itemMap || {}, venueMap: s.venueMap || {}, venues: s.venues || [] },
+    last_sync_at: row.last_sync_at, last_error: row.last_error, last_result: s.lastResult || null,
+  };
+}
+
+function ccMaps(body, cur = {}) {
+  const itemMap = {};
+  for (const [k] of CC_KINDS) if (isUuid(body?.itemMap?.[k])) itemMap[k] = body.itemMap[k];
+  const venueMap = {};
+  for (const [v, c] of Object.entries(body?.venueMap || cur.venueMap || {}).slice(0, 500)) if (isUuid(v) && isUuid(c)) venueMap[v] = c;
+  return { ...cur, itemMap: body?.itemMap ? itemMap : (cur.itemMap || {}), venueMap };
+}
+
+biz.get('/integrations/capcourt', wrap(async (req, res) => {
+  const out = await tx(req, async (db) => ({
+    row: (await db.query("select * from acc_integrations where business_id = $1 and kind = 'capcourt'", [B(req)])).rows[0],
+    history: (await db.query(
+      `select d.id, d.number, d.ext_no, d.status, d.total, d.date, d.contact->>'name' as contact_name, d.ext_reported, d.created_at,
+              (select r.number from acc_docs r where r.ref_id = d.id and r.type = 'RE' and r.status <> 'void' limit 1) as receipt
+       from acc_docs d where d.business_id = $1 and d.ext_source = 'capcourt' order by d.date desc, d.number desc limit 100`, [B(req)])).rows,
+  }));
+  res.json({ integration: ccPublic(out.row), history: out.history });
+}));
+
+biz.put('/integrations/capcourt', wrap(async (req, res) => {
+  const body = req.body || {};
+  const cur = await tx(req, async (db) => (await db.query("select * from acc_integrations where business_id = $1 and kind = 'capcourt'", [B(req)])).rows[0]);
+  const base = body.base_url !== undefined ? cleanBase(body.base_url) : (cur?.base_url || DEFAULT_BASE);
+  if (!base) throw bad('bad_url');
+  const key = body.api_key ? cleanKey(body.api_key) : cur?.api_key;
+  if (!key) throw bad('capcourt_key');
+  if (!cur || key !== cur.api_key || base !== cur.base_url) {
+    // Check the key before saving it.
+    try { await ccFetch(base, key, `invoices/?since=${sinceMonth(bangkokToday())}`); } catch (e) { throw bad(e.message === 'capcourt_key' ? 'capcourt_key' : 'capcourt_down', 400); }
+  }
+  const settings = ccMaps(body, cur?.settings || {});
+  await tx(req, (db) => db.query(
+    `insert into acc_integrations (business_id, kind, base_url, api_key, settings, user_id, enabled) values ($1, 'capcourt', $2, $3, $4, app_uid(), $5)
+     on conflict (business_id, kind) do update set base_url = $2, api_key = $3, settings = $4, enabled = $5, last_error = null`,
+    [B(req), base, key, settings, body.enabled !== false]));
+  const row = await tx(req, async (db) => (await db.query("select * from acc_integrations where business_id = $1 and kind = 'capcourt'", [B(req)])).rows[0]);
+  res.json({ integration: ccPublic(row) });
+}));
+
+biz.delete('/integrations/capcourt', wrap(async (req, res) => {
+  await tx(req, (db) => db.query("delete from acc_integrations where business_id = $1 and kind = 'capcourt'", [B(req)]));
+  res.json({ ok: true });
+}));
+
+biz.post('/integrations/capcourt/sync', rateLimit(60, 60 * 60000), wrap(async (req, res) => {
+  res.json({ result: await syncCapcourt(req.user.id, B(req)) });
+}));
+
+// Pull new bills, issue them, void the ones CapCourt cancelled, report numbers and payments.
+// Safe to run any time: a bill is issued once (unique ext_id) and a report only goes once per state.
+export async function syncCapcourt(userId, bizId, { fetchImpl } = {}) {
+  if (ccRunning.has(bizId)) return ccRunning.get(bizId);
+  const run = (async () => {
+    const req = { user: { id: userId }, biz: null };
+    const loaded = await asUser(userId, async (db) => ({
+      biz: (await db.query('select b.*, m.role from acc_businesses b join acc_members m on m.business_id = b.id and m.user_id = app_uid() where b.id = $1', [bizId])).rows[0],
+      row: (await db.query("select * from acc_integrations where business_id = $1 and kind = 'capcourt'", [bizId])).rows[0],
+    }));
+    if (!loaded.biz || !loaded.row) throw bad('not_found', 404);
+    if (loaded.biz.role === 'viewer') throw bad('forbidden', 403);
+    req.biz = loaded.biz;
+    const { row } = loaded;
+    const cfg = row.settings || {};
+    const out = { created: [], reported: 0, voided: [], errors: [] };
+    const call = (path, opts) => ccFetch(row.base_url, row.api_key, path, { ...opts, fetchImpl });
+    let invoices = [];
+    try {
+      invoices = (await call(`invoices/?since=${sinceMonth(bangkokToday())}`)).invoices || [];
+    } catch (e) {
+      await pool.query("update acc_integrations set last_sync_at = now(), last_error = $2 where business_id = $1 and kind = 'capcourt'", [bizId, e.message]);
+      return { ...out, errors: [e.message] };
+    }
+    const venueMap = { ...(cfg.venueMap || {}) };
+    const venues = new Map((cfg.venues || []).map((v) => [v.id, v]));
+    for (const inv of invoices) {
+      if (inv.venue?.id) venues.set(inv.venue.id, { id: inv.venue.id, name: inv.venue.name, code: inv.venue.code });
+      try {
+        const r = await asUser(userId, async (db) => {
+          const have = (await db.query("select * from acc_docs where business_id = $1 and ext_source = 'capcourt' and ext_id = $2", [bizId, inv.id])).rows[0];
+          if (have) {
+            if (inv.status === 'void' && have.status === 'open') return { voided: await ccVoid(db, req, have, `CapCourt ยกเลิกบิล ${inv.number}`) };
+            return null;
+          }
+          // Only bills still waiting for payment; ones settled in CapCourt before connecting stay there.
+          if (inv.status !== 'issued') return null;
+          let contactId = venueMap[inv.venue.id];
+          if (contactId && !(await db.query('select 1 from acc_contacts where id = $1 and business_id = $2', [contactId, bizId])).rowCount) contactId = null;
+          if (!contactId) {
+            contactId = (await upsertRow(db, 'acc_contacts', null, bizId, contactFields(venueContact(inv.venue)))).id;
+            venueMap[inv.venue.id] = contactId;
+          }
+          const items = new Map((await db.query('select id, name, account from acc_items where business_id = $1', [bizId])).rows.map((i) => [i.id, i]));
+          const d = await buildDoc(db, req, toDocBody(inv, cfg, { vatRegistered: req.biz.vat_registered, contactId, items }), null);
+          const prefix = req.biz.settings?.prefixes?.IV || DEFAULT_PREFIX.IV;
+          const number = await nextNumber(db, bizId, prefix, d.date);
+          const doc = (await db.query(
+            `insert into acc_docs (business_id, number, created_by, ext_source, ext_id, ext_no, public_token, ${COLS.join(', ')})
+             values ($1, $2, app_uid(), 'capcourt', $3, $4, $5, ${COLS.map((_, i) => `$${i + 6}`).join(', ')}) returning *`,
+            [bizId, number, inv.id, inv.number, crypto.randomBytes(24).toString('base64url'), ...COLS.map((k) => val(k, d[k]))])).rows[0];
+          await afterSave(db, req, doc);
+          if (Math.abs(Number(doc.total) - Number(inv.total)) > 0.005) console.warn(`capcourt ${inv.number}: total ${doc.total} ≠ ${inv.total}`);
+          return { created: { number: doc.number, ext_no: inv.number, total: doc.total } };
+        });
+        if (r?.created) out.created.push(r.created);
+        if (r?.voided) out.voided.push(r.voided);
+      } catch (e) {
+        if (e.code !== '23505') out.errors.push(`${inv.number}: ${e.message}`);
+      }
+    }
+    // Report what CapCourt does not know yet: new invoice numbers and links, and payments.
+    const docs = await asUser(userId, async (db) => (await db.query(
+      `select d.*, (select row_to_json(r) from (select number, date, pay from acc_docs r where r.ref_id = d.id and r.type = 'RE' and r.status <> 'void' limit 1) r) as receipt
+       from acc_docs d where d.business_id = $1 and d.ext_source = 'capcourt' and d.status <> 'void'`, [bizId])).rows);
+    for (const doc of docs) {
+      const rep = reportFor(doc, doc.receipt);
+      if (!rep) continue;
+      try {
+        const back = await call(`invoices/${encodeURIComponent(doc.ext_id)}/centel/`, { method: 'POST', body: rep.body });
+        await asUser(userId, async (db) => {
+          await db.query('update acc_docs set ext_reported = $2 where id = $1', [doc.id, rep.state]);
+          if (back?.status === 'void' && doc.status === 'open') out.voided.push(await ccVoid(db, req, doc, `CapCourt ยกเลิกบิล ${doc.ext_no}`));
+        });
+        out.reported += 1;
+      } catch (e) {
+        out.errors.push(`${doc.number}: ${e.message}`);
+      }
+    }
+    const settings = { ...cfg, venueMap, venues: [...venues.values()].slice(0, 500), lastResult: { created: out.created.length, reported: out.reported, voided: out.voided.length, errors: out.errors.length } };
+    await pool.query("update acc_integrations set last_sync_at = now(), last_error = $2, settings = $3 where business_id = $1 and kind = 'capcourt'",
+      [bizId, out.errors[0] || null, settings]);
+    return out;
+  })();
+  ccRunning.set(bizId, run);
+  try { return await run; } finally { ccRunning.delete(bizId); }
+}
+
+async function ccVoid(db, req, doc, reason) {
+  const live = (await db.query("select 1 from acc_docs where ref_id = $1 and type = 'RE' and status <> 'void'", [doc.id])).rowCount;
+  if (live) return null;
+  const row = (await db.query("update acc_docs set status = 'void', updated_at = now(), notes = coalesce(notes, '') || $2 where id = $1 returning *", [doc.id, `\nยกเลิก: ${reason}`])).rows[0];
+  await repost(db, B(req), row);
+  return row.number;
+}
+
+// After a receipt for a CapCourt invoice is issued or cancelled, tell CapCourt soon (not inside the request).
+async function ccKick(bizId, refId) {
+  if (!refId) return;
+  const r = (await pool.query(
+    "select i.user_id from acc_docs d join acc_integrations i on i.business_id = d.business_id and i.kind = 'capcourt' and i.enabled where d.id = $1 and d.ext_source = 'capcourt'", [refId])).rows[0];
+  if (r) setTimeout(() => syncCapcourt(r.user_id, bizId).catch((e) => console.error('capcourt sync', e.message)), 500);
+}
+
+// Hourly: CapCourt issues bills on the 1st after 06:00 (Bangkok); payments are reported on the next run too.
+export function startAccJobs() {
+  const tick = async () => {
+    try {
+      const rows = (await pool.query("select business_id, user_id from acc_integrations where kind = 'capcourt' and enabled")).rows;
+      for (const r of rows) await syncCapcourt(r.user_id, r.business_id).catch((e) => console.error('capcourt sync', r.business_id, e.message));
+    } catch (e) {
+      console.error('acc jobs', e.message);
+    }
+  };
+  setTimeout(tick, 30000);
+  setInterval(tick, 60 * 60000);
+}
 
 /* ---------- Public shapes ---------- */
 

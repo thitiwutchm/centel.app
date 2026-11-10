@@ -53,3 +53,18 @@
 ## ทดสอบ
 
 `server/test/acc-ledger.test.js` (ไม่ต้องใช้ฐานข้อมูล) และ `server/test/acc-api.test.js` (ต้องมี API ที่ `API_URL`)
+
+## เชื่อมต่อ CapCourt Admin (บิลรายเดือนของสนาม)
+
+เมนู **เชื่อมต่อระบบ → CapCourt Admin** (`#/integrations/capcourt`) ในกิจการ CapCourt
+วางรหัส `ccb_…` ที่สร้างจาก admin.capcourt.com → Billing สนาม → Centel Account แล้ว API (`server/src/acc/capcourt.js` + ส่วน CapCourt ใน `routes.js`) จะ
+
+1. ดึงบิลจาก `GET {CapCourt}/api/v1/billing/invoices/?since=` ทุกชั่วโมง (`startAccJobs`) และเมื่อกด "ดึงบิลตอนนี้"
+2. ออกบิลที่ยัง `issued` เป็น **ใบแจ้งหนี้ (ไม่ใช่ใบกำกับภาษี)** ทันที ยอดตาม CapCourt, `ext_source = 'capcourt'`, `ext_id` = id บิล (unique จึงไม่ออกซ้ำ), สร้างลิงก์ลูกค้าให้เลย
+   สนามใหม่ถูกสร้างเป็นผู้ติดต่อจากข้อมูลสนาม, เลือกสินค้า/บริการต่อประเภทบรรทัด (package / slips / gp) ได้
+3. แจ้ง `POST {CapCourt}/api/v1/billing/invoices/<id>/centel/` ด้วยเลขที่และลิงก์ แล้วเมื่อออกใบเสร็จจากใบแจ้งหนี้ (ซึ่งเป็น **ใบเสร็จรับเงิน/ใบกำกับภาษี**) แจ้งว่าชำระแล้ว (`ext_reported` กันแจ้งซ้ำ)
+4. ถ้า CapCourt ยกเลิกบิลที่ยังไม่มีใบเสร็จ ใบแจ้งหนี้ที่นี่ถูกยกเลิกด้วย
+
+ทดสอบ: `test/acc-capcourt.test.js` (ส่วนแรกไม่ต้องใช้ฐานข้อมูล ส่วน e2e ต้องมี `API_URL` และจำลอง CapCourt เอง)
+
+![CapCourt integration](screens/account/capcourt-integration.png)
