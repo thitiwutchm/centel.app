@@ -279,8 +279,8 @@
       ${doc.status === 'void' ? `<div class="pp-void">${t.void}</div>` : ''}
       <header class="pp-top">
         <div class="pp-brand">
-          ${business.logo ? `<img class="pp-logo" src="${esc(business.logo)}" alt="">` : ''}
-          <div class="pp-biz">${esc(lang === 'en' && business.name_en ? business.name_en : business.name)}</div>
+          <div class="pp-head">${business.logo ? `<img class="pp-logo" src="${esc(business.logo)}" alt="">` : ''}
+          <div class="pp-biz">${esc(lang === 'en' && business.name_en ? business.name_en : business.name)}</div></div>
           ${business.address ? `<div class="pp-addr">${esc(business.address).replace(/\n/g, '<br>')}</div>` : ''}
           ${business.tax_id ? `<div class="pp-small">${t.taxId} ${esc(taxIdFmt(business.tax_id))} · ${esc(branchText(business.branch || '00000', lang))}</div>` : ''}
           ${business.phone || business.email || business.website ? `<div class="pp-small">${esc([business.phone, business.email, business.website].filter(Boolean).join(' · '))}</div>` : ''}

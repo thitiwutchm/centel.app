@@ -215,7 +215,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pp-page { position: absolute; top: 3mm; right: 4.5mm; color: #fff; font-weight: 700; font-size: 15px; font-family: var(--mono); }
 .pp-top { display: grid; grid-template-columns: 1fr 74mm; gap: 10px 22px; align-items: start; }
 .pp-brand { min-width: 0; }
-.pp-logo { display: block; max-height: 19mm; max-width: 62mm; object-fit: contain; object-position: left center; margin-bottom: 6px; }
+/* The logo spans the width of the business name under it. */
+.pp-head { width: fit-content; min-width: 40mm; max-width: 100%; }
+.pp-logo { display: block; width: 0; min-width: 100%; height: auto; margin-bottom: 6px; }
 .pp-biz { font-size: 15.5px; font-weight: 700; line-height: 1.35; }
 .pp-addr, .pp-small { font-size: 11.5px; color: #4A4E57; }
 .pp-title { text-align: left; padding-top: 6mm; }
