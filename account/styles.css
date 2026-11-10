@@ -303,12 +303,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pp-sign-one > div { max-width: 320px; }
 .pp-sign-one .pp-line { height: 34px; border-bottom-color: #1B1D21; }
 .pp-void { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-18deg); font-size: 84px; font-weight: 700; color: rgba(201, 42, 42, .18); border: 6px solid rgba(201, 42, 42, .18); padding: 0 30px; border-radius: 16px; pointer-events: none; }
-.pp-wht .pp-copy { align-self: flex-end; }
-.pp-wht-title { text-align: center; font-size: 18px; margin: 10px 0 0; }
-.pp-wht-sub { text-align: center; margin-bottom: 12px; }
-.pp-wht-no { margin-left: 18px; font-variant-numeric: tabular-nums; }
-.pp-wht-party { border: 1px solid #1B1D21; border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
-.pp-wht-forms { margin: 10px 0; }
 .pp-box { display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1px solid #1B1D21; font-size: 11px; vertical-align: -2px; }
 
 /* ---------- Dialogs, toast, auth ---------- */
@@ -530,3 +524,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 :where(:root[data-theme="dark"]) .dlg-back { background: rgba(0, 0, 0, .6); }
 :where(:root[data-theme="dark"]) .dlg { border: 1px solid var(--line); }
 :where(:root[data-theme="dark"]) .paper { border-color: transparent; }
+
+/* 50 ทวิ on the official form: preview dialog */
+.wht50 { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; align-items: start; }
+.wht50-paper { background: #fff; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; min-height: 200px; display: grid; place-items: center; }
+.wht50-paper canvas { display: block; width: 100%; height: auto; }
+.wht50-side { display: grid; gap: 8px; font-size: 14px; }
+@media (max-width: 720px) { .wht50 { grid-template-columns: 1fr; } .wht50-side { order: -1; } }
