@@ -461,7 +461,10 @@
     const d = await get(`/reports/dashboard?month=${month}`);
     const max = Math.max(1, ...d.months.flatMap((m) => [m.income, m.expense]));
     const W = 560; const H = 200; const bw = 26; const gap = W / 6;
-    const bars = d.months.map((m, i) => {
+    // Faint guide lines at a quarter, half and three quarters of the tallest bar.
+    const grid = [0.25, 0.5, 0.75, 1].map((f) => { const y = H - 22 - f * (H - 40); return `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-dasharray="${f === 1 ? '0' : '3 4'}" stroke-width="1"/>`; }).join('')
+      + `<line x1="0" x2="${W}" y1="${H - 22}" y2="${H - 22}" stroke="var(--line)" stroke-width="1"/>`;
+    const bars = grid + d.months.map((m, i) => {
       const x = i * gap + gap / 2 - bw - 2;
       const hi = (m.income / max) * (H - 40); const he = (m.expense / max) * (H - 40);
       return `<rect x="${x}" y="${H - 22 - hi}" width="${bw}" height="${hi}" rx="4" fill="var(--accent)"><title>รายได้ ${money(m.income)}</title></rect>
@@ -1257,7 +1260,7 @@
           ${ref || children.length ? `<div class="card card-pad"><h2>เอกสารที่เกี่ยวข้อง</h2><div class="rel">
             ${ref ? `<a href="#/doc/${ref.id}"><span>${esc(T.TYPE_NAME[ref.type])} <span class="mono">${esc(ref.number)}</span></span>${statusChip(ref.type, ref.status)}</a>` : ''}
             ${children.map((c) => `<a href="#/doc/${c.id}"><span>${esc(T.TYPE_NAME[c.type])} <span class="mono">${esc(c.number)}</span></span>${statusChip(c.type, c.status)}</a>`).join('')}</div></div>` : ''}
-          <div class="card card-pad"><h2>บันทึกบัญชี</h2>${journal.length ? `<table class="journal-mini"><tbody>${journal.map((j) => `<tr><td>${j.debit ? '' : '&emsp;'}${esc(j.account)} ${esc(j.name || '')}</td><td class="num">${j.debit ? money(j.debit) : ''}</td><td class="num">${j.credit ? money(j.credit) : ''}</td></tr>`).join('')}</tbody></table>`
+          <div class="card card-pad"><h2>บันทึกบัญชี</h2>${journal.length ? `<table class="journal-mini"><tbody>${journal.map((j) => `<tr><td${j.debit ? '' : ' class="cr"'}><span class="j-code">${esc(j.account)}</span>${esc(j.name || '')}</td><td class="num">${j.debit ? money(j.debit) : ''}</td><td class="num">${j.credit ? money(j.credit) : ''}</td></tr>`).join('')}</tbody></table>`
     : `<div class="muted" style="font-size:13px">${t === 'QT' ? 'ใบเสนอราคาไม่ลงบัญชี' : doc.status === 'void' ? 'เอกสารถูกยกเลิก ไม่มีรายการบัญชี' : '—'}</div>`}</div>
         </div>
       </div>`;
