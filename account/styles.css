@@ -264,23 +264,23 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pdf-render { width: 210mm; background: #fff; }
 .pdf-render .paper { box-shadow: none; border: 0; margin: 0; min-height: 296mm; height: 296mm; overflow: hidden; transform: none !important; }
 .pdf-render .paper:not(:last-child) { page-break-after: always; }
-.pp-sign { margin-top: auto; padding-top: 22px; display: flex; justify-content: space-between; gap: 28px; }
-.pp-sig { flex: 1; max-width: 86mm; }
-.pp-sign.three .pp-sig { max-width: 60mm; }
-.pp-for { font-size: 11.5px; color: #4A4E57; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pp-sig-grid { display: grid; grid-template-columns: 1fr 26mm; gap: 12px; }
-.pp-sign.three .pp-sig-grid { grid-template-columns: 1fr 18mm; gap: 6px; }
-.pp-sign.three { gap: 16px; }
-.pp-sign.three .pp-sig { max-width: 62mm; }
-.pp-sig-cell { text-align: center; }
-.pp-mark { position: relative; height: 22mm; }
-.pp-stamp { position: absolute; left: 0; bottom: 1mm; height: 21mm; max-width: 34mm; object-fit: contain; opacity: .92; }
-.pp-signature { position: absolute; right: 2mm; bottom: 0; height: 15mm; max-width: 40mm; object-fit: contain; }
+.pp-sign { margin-top: auto; padding-top: 18px; display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; }
+.pp-signer { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-side { width: 66mm; flex: none; }
+.pp-for { font-size: 11.5px; font-weight: 600; color: #1B1D21; margin-bottom: 4mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-side.own .pp-for { text-align: right; }
+.pp-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+.pp-cell { text-align: center; }
+.pp-mark { position: relative; height: 15mm; }
+.pp-signature { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: 14mm; max-width: 31mm; object-fit: contain; }
 .pp-date { display: flex; align-items: flex-end; justify-content: center; font-family: var(--mono); font-size: 12px; padding-bottom: 2px; }
-.pp-line { border-bottom: 1px solid #1B1D21; margin-bottom: 4px; }
+.pp-line { border-bottom: 1px solid #C9CBD0; margin-bottom: 5px; }
+.pp-role { font-size: 12px; font-weight: 600; color: #1B1D21; }
+.pp-seal { flex: 1; min-width: 0; height: 36mm; margin-top: 2mm; display: flex; align-items: center; justify-content: center; }
+.pp-stamp { display: block; max-height: 36mm; max-width: 40mm; object-fit: contain; opacity: .95; }
 .pp-sign-one { justify-content: flex-end; text-align: center; }
 .pp-sign-one > div { max-width: 320px; }
-.pp-sign-one .pp-line { height: 34px; }
+.pp-sign-one .pp-line { height: 34px; border-bottom-color: #1B1D21; }
 .pp-void { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-18deg); font-size: 84px; font-weight: 700; color: rgba(201, 42, 42, .18); border: 6px solid rgba(201, 42, 42, .18); padding: 0 30px; border-radius: 16px; pointer-events: none; }
 .pp-wht .pp-copy { align-self: flex-end; }
 .pp-wht-title { text-align: center; font-size: 18px; margin: 10px 0 0; }
