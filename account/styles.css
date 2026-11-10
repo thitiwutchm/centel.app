@@ -165,7 +165,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .kpi.accent .k, .kpi.accent .d { color: #9AA0AA; }
 .dash { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; }
 .chart { padding: 8px 18px 16px; }
-.chart svg { width: 100%; height: 200px; display: block; }
+.chart svg { width: 100%; height: 180px; display: block; }
+.chart-x { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin-top: 6px; font-size: 12px; color: var(--muted); text-align: center; }
 .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); padding: 0 18px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 .quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
