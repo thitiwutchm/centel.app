@@ -355,6 +355,9 @@ function cleanPay(p, acc, date) {
     fee: Math.max(0, num(p.fee)),
     method: ['cash', 'transfer', 'cheque', 'card', 'other'].includes(p.method) ? p.method : 'transfer',
     note: str(p.note, 300),
+    // Printed on the receipt's payment lines: the bank and the cheque / transfer / card number.
+    bank: str(p.bank, 120),
+    ref: str(p.ref, 60),
   };
 }
 
@@ -881,7 +884,7 @@ function publicDoc(d, ref) {
     tax_invoice: d.tax_invoice, price_mode: d.price_mode, vat_rate: d.vat_rate,
     lines: (d.lines || []).map(({ account, itemId, ...l }) => l),
     discount: d.discount, subtotal: d.subtotal, vat_base: d.vat_base, vat: d.vat, total: d.total, wht: d.wht,
-    pay: d.pay ? { date: d.pay.date, method: d.pay.method } : null, notes: d.notes,
+    pay: d.pay ? { date: d.pay.date, method: d.pay.method, bank: d.pay.bank || null, ref: d.pay.ref || null } : null, notes: d.notes,
     ref: ref ? { type: ref.type, number: ref.number, date: ref.date } : null,
   };
 }
