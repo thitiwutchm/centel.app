@@ -1983,3 +1983,6 @@ a.btn { text-decoration: none; text-align: center; box-sizing: border-box; }
   background: rgba(255, 255, 255, .16); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%); }
 .sv-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .25); border-top-color: #fff; animation: sv-spin .8s linear infinite; }
 @keyframes sv-spin { to { transform: rotate(360deg); } }
+/* Photos slips › ใช้กับโปรไฟล์ */
+.ps-targets .ps-pf { display: flex; align-items: center; gap: 10px; }
+.ps-targets .ps-pf .avatar.pf-mini { margin-left: 0; border: 0; width: 28px; height: 28px; flex-basis: 28px; }
