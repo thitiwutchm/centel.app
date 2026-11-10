@@ -22,6 +22,7 @@
     doc_void: 'เอกสารถูกยกเลิกแล้ว', unbalanced: 'ยอดเดบิตและเครดิตต้องเท่ากัน', debit_and_credit: 'บรรทัดหนึ่งใส่ได้แค่เดบิตหรือเครดิต',
     unknown_account: 'มีรหัสบัญชีที่ไม่อยู่ในผังบัญชี', account_in_use: 'บัญชีนี้มีรายการหรือระบบใช้อยู่ ลบหรือเปลี่ยนหมวดไม่ได้',
     bad_pay_account: 'เลือกบัญชีเงินสดหรือธนาคาร', negative_total: 'ยอดรวมติดลบไม่ได้', confirm_name: 'พิมพ์ชื่อกิจการให้ตรงเพื่อยืนยัน',
+    capcourt_key: 'รหัสเชื่อมต่อ CapCourt ไม่ถูกต้องหรือถูกยกเลิก', capcourt_down: 'ติดต่อ CapCourt ไม่ได้ ลองใหม่อีกครั้ง', bad_url: 'ที่อยู่ต้องขึ้นต้นด้วย https://',
     too_large: 'ไฟล์ใหญ่เกินไป', forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', not_found: 'ไม่พบข้อมูล', too_many_requests: 'ลองใหม่อีกครั้งในอีกสักครู่',
     google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่', ref_void: 'เอกสารต้นทางถูกยกเลิกแล้ว', bad_code: 'รหัสบัญชีไม่ถูกต้อง',
   };
@@ -244,7 +245,7 @@
     ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
     ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex]]],
     ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items]]],
-    ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['settings', 'ตั้งค่า', ICON.settings]]],
+    ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['settings', 'ตั้งค่า', ICON.settings]]],
   ];
 
   function shell() {
@@ -297,6 +298,7 @@
       else if (r === 'accounts') await viewAccounts(main);
       else if (r === 'journal') await viewJournal(main, q);
       else if (r === 'reports') viewReports(main);
+      else if (r === 'integrations') await viewIntegrations(main, parts[1]);
       else if (r === 'report') await viewReport(main, parts[1], q);
       else if (r === 'settings') viewSettings(main);
       else main.innerHTML = '<div class="empty"><b>ไม่พบหน้านี้</b></div>';
@@ -567,7 +569,7 @@
         <td class="ck"><input type="checkbox" data-ck ${sel.has(d.id) ? 'checked' : ''} aria-label="เลือก"></td>
         ${isEx ? `<td class="th-cell"><div class="thumb">${d.thumb ? `<img src="${esc(d.thumb)}" alt="" loading="lazy">` : d.attachment ? '<span>PDF</span>' : ICON.ex}</div></td>` : ''}
         <td class="nowrap">${T.thDate(d.date)}${(type === 'IV' || isEx) && d.status === 'open' && d.due_date ? `<div class="muted" style="font-size:12px${d.due_date < today ? ';color:var(--bad)' : ''}">ครบกำหนด ${T.thDate(d.due_date)}</div>` : ''}</td>
-        <td><span class="dot ${statusTone(d.status, type)}"></span><span class="doc-no">${esc(d.number)}</span>${d.tax_invoice ? '<div><span class="chip accent">ใบกำกับภาษี</span></div>' : ''}</td>
+        <td><span class="dot ${statusTone(d.status, type)}"></span><span class="doc-no">${esc(d.number)}</span>${d.ext_no ? `<div><span class="chip info">CapCourt ${esc(d.ext_no)}</span></div>` : ''}${d.tax_invoice ? '<div><span class="chip accent">ใบกำกับภาษี</span></div>' : ''}</td>
         <td>${esc(d.contact_name || '')}</td>${isEx ? catCell(d) : ''}
         <td class="num"><b>${money(d.total)}</b>${d.wht ? `<div class="muted" style="font-size:12px">หัก ณ ที่จ่าย ${money(d.wht)}</div>` : ''}</td>
         <td>${statusCell(d)}</td>
@@ -1708,6 +1710,7 @@
             <div class="field span2"><span>บัญชีธนาคาร</span><div class="grid" data-banks></div><div><button type="button" class="btn sm" data-addbank>${ICON.plus}เพิ่มบัญชีธนาคาร</button></div></div>
             <label class="field span2"><span>ข้อความเพิ่มเติม (ไม่บังคับ)</span><textarea data-s="payment" rows="2" placeholder="เช่น กรุณาส่งสลิปมาที่ LINE @example">${esc(s.payment || '')}</textarea></label>
           </div></div>
+        <a class="card card-pad int-card" href="#/integrations"><span class="int-logo">CC</span><div style="flex:1"><h2 style="margin:0 0 2px">เชื่อมต่อระบบ</h2><div class="muted">CapCourt Admin: ออกใบแจ้งหนี้รายเดือนให้สนามอัตโนมัติ และแจ้งผลการชำระกลับ</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
         <div class="card card-pad"><h2>กิจการทั้งหมด</h2><p class="muted" style="margin-top:0">มี ${S.businesses.length} กิจการในบัญชีนี้</p><div class="actions"><button class="btn" data-switch2>สลับกิจการ</button><button class="btn" data-newbiz>${ICON.plus}เพิ่มกิจการ</button></div></div>
         ${S.boot.role === 'owner' ? `<div class="card card-pad" style="border-color:var(--bad-soft)"><h2 style="color:var(--bad)">ลบกิจการ</h2><p class="muted" style="margin-top:0">ลบเอกสาร ผู้ติดต่อ และรายการบัญชีทั้งหมดของกิจการนี้ กู้คืนไม่ได้</p><button class="btn danger" data-del>ลบกิจการนี้</button></div>` : ''}
       </div>`;
@@ -1796,6 +1799,123 @@
         location.hash = ''; start(); return true;
       },
     });
+  }
+
+  /* ---------- Integrations: CapCourt Admin ---------- */
+
+  const CC_LOGO = '<span class="int-logo">CC</span>';
+  const CC_KINDS = [['package', 'แพ็กเกจเว็บรายเดือน'], ['slips', 'ค่าตรวจสลิป'], ['gp', 'GP จากยอดขายคลิป']];
+  const thDateTime = (iso) => { if (!iso) return ''; const d = new Date(new Date(iso).getTime() + 7 * 3600e3).toISOString(); return `${T.thDate(d.slice(0, 10))} ${d.slice(11, 16)}`; };
+
+  async function viewIntegrations(main, which) {
+    if (which === 'capcourt') return viewCapcourt(main);
+    const { integration: cc } = await get('/integrations/capcourt');
+    main.innerHTML = `<div class="page-h"><div><h1>เชื่อมต่อระบบ</h1><div class="sub">ให้ระบบอื่นออกเอกสารในกิจการนี้ให้อัตโนมัติ</div></div></div>
+      <div class="grid" style="max-width:860px">
+        <a class="card card-pad int-card" href="#/integrations/capcourt">${CC_LOGO}<div style="flex:1"><h2 style="margin:0 0 2px">CapCourt Admin</h2>
+          <div class="muted">ออกใบแจ้งหนี้รายเดือนให้สนามที่ใช้บริการ CapCourt อัตโนมัติทุกวันที่ 1 ออกใบเสร็จ/ใบกำกับภาษีเมื่ออนุมัติการชำระ แล้วแจ้งผลกลับไปที่ CapCourt</div>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${cc ? `<span class="chip good">เชื่อมต่อแล้ว</span><span class="chip">${esc(cc.base_url.replace(/^https?:\/\//, ''))}</span><span class="chip">${cc.settings.venues.length} สนาม</span>` : '<span class="chip">ยังไม่เชื่อมต่อ</span>'}</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
+      </div>`;
+  }
+
+  async function viewCapcourt(main) {
+    const { integration: cc, history } = await get('/integrations/capcourt');
+    const head = `<div class="page-h"><div><div class="muted" style="font-size:13px"><a class="link" href="#/integrations">เชื่อมต่อระบบ</a> ›</div><h1>CapCourt Admin</h1><div class="sub">บิลค่าบริการรายเดือนของ CapCourt ออกเป็นใบแจ้งหนี้ของกิจการนี้</div></div>
+      <div class="actions">${cc ? '<button class="btn" data-sync>ดึงบิลตอนนี้</button><button class="btn primary" data-save>บันทึก</button>' : ''}</div></div>`;
+    const keyFields = (connected) => `<div class="grid g2">
+          <label class="field span2"><span>ที่อยู่หลังบ้าน CapCourt</span><input type="text" data-cc="base_url" value="${esc(cc?.base_url || 'https://admin.capcourt.com')}"></label>
+          <label class="field span2"><span>รหัสเชื่อมต่อ Centel (จาก CapCourt)</span><input type="text" data-cc="api_key" autocomplete="off" spellcheck="false" placeholder="${connected ? `ccb_…${esc(cc.key_suffix)} (วางรหัสใหม่เพื่อเปลี่ยน)` : 'ccb_…'}">
+            <small>สร้างที่ admin.capcourt.com → Billing สนาม → Centel Account → สร้างรหัสเชื่อมต่อ แล้ววางที่นี่ รหัสนี้อ่านบิลของทุกสนาม และแจ้งเลขเอกสารกับการชำระเงินกลับได้เท่านั้น</small></label>
+        </div>`;
+    if (!cc) {
+      main.innerHTML = `${head}<div class="grid" style="max-width:860px"><div class="card card-pad"><h2>เชื่อมต่อ CapCourt</h2>${keyFields(false)}
+        <div class="actions" style="margin-top:14px"><button class="btn primary" data-connect>เชื่อมต่อ</button></div></div>${ccHow()}</div>`;
+      $('[data-connect]', main).onclick = async (e) => {
+        e.target.disabled = true;
+        try {
+          await put('/integrations/capcourt', { base_url: $('[data-cc=base_url]', main).value, api_key: $('[data-cc=api_key]', main).value.trim() });
+          toast('เชื่อมต่อแล้ว กำลังดึงบิล…');
+          const { result } = await post('/integrations/capcourt/sync');
+          ccToast(result);
+          await loadBoot();
+          render();
+        } catch (err) { fail(err); e.target.disabled = false; }
+      };
+      return;
+    }
+    const s = cc.settings;
+    const items = S.boot.items.filter((i) => !i.archived);
+    const customers = S.boot.contacts.filter((c) => !c.archived && c.kind !== 'vendor');
+    const r = cc.last_result;
+    main.innerHTML = `${head}
+      <div class="grid" style="max-width:860px">
+        <div class="card card-pad int-status">${CC_LOGO}<div style="flex:1;min-width:200px"><b>${cc.last_error ? 'เชื่อมต่อไม่สำเร็จ' : 'เชื่อมต่อแล้ว'}</b> <span class="chip ${cc.last_error ? 'bad' : 'good'}">${cc.last_error ? esc(ERR[cc.last_error] || cc.last_error) : 'ทำงานอยู่'}</span>
+          <div class="muted" style="font-size:13px;margin-top:2px">${cc.last_sync_at ? `ดึงบิลล่าสุด ${thDateTime(cc.last_sync_at)}${r ? ` · ออกใหม่ ${r.created} ใบ · แจ้ง CapCourt ${r.reported} รายการ` : ''}` : 'ยังไม่เคยดึงบิล'} · ดึงอัตโนมัติทุกชั่วโมง (CapCourt ออกบิลวันที่ 1 หลัง 06:00)</div></div>
+          <button class="btn sm ghost danger" data-off>ตัดการเชื่อมต่อ</button></div>
+
+        <div class="card card-pad"><h2>การออกเอกสาร</h2>
+          <ol class="cc-flow">
+            <li><b>วันที่ 1</b> CapCourt ออกบิลค่าบริการเดือนก่อน แล้วระบบนี้ออก<b>ใบแจ้งหนี้</b>ทันที ใช้ยอดตามที่ CapCourt คำนวณ วันที่เอกสารและวันครบกำหนดตามบิล CapCourt</li>
+            <li>สนามเห็นปุ่ม "ชำระ / ดูใบแจ้งหนี้" ในหลังบ้านของสนาม ซึ่งเปิดลิงก์ใบแจ้งหนี้นี้ มี QR พร้อมเพย์ผูกยอดและ PDF</li>
+            <li>ได้รับเงินแล้ว เปลี่ยนสถานะใบแจ้งหนี้เป็น <b>ชำระแล้ว</b> ระบบจะออก<b>ใบเสร็จรับเงิน/ใบกำกับภาษี</b>${biz().vat_registered ? '' : ' (กิจการนี้ยังไม่จด VAT จึงเป็นใบเสร็จรับเงินอย่างเดียว)'}</li>
+            <li>บิลใน CapCourt และหน้าบิลของสนามเปลี่ยนเป็น "ชำระแล้ว" เอง ถ้า CapCourt ยกเลิกบิลที่ยังไม่ได้รับเงิน ใบแจ้งหนี้ที่นี่จะถูกยกเลิกด้วย</li>
+          </ol></div>
+
+        <div class="card card-pad"><h2>รายการในบิล → สินค้า / บริการ</h2><p class="muted" style="margin-top:0">ยอดเงินใช้ตามที่ CapCourt คำนวณ ส่วนนี้เลือกชื่อรายการและบัญชีรายได้ ไม่เลือกจะใช้ชื่อจาก CapCourt และบัญชีรายได้เริ่มต้น</p>
+          <div class="tbl-wrap"><table class="tbl"><thead><tr><th>รายการจาก CapCourt</th><th>สินค้า / บริการใน Centel</th></tr></thead><tbody>
+          ${CC_KINDS.map(([k, label]) => `<tr><td><b>${label}</b><div class="muted" style="font-size:12px">${k}</div></td><td><select data-item="${k}"><option value="">ใช้ชื่อจาก CapCourt</option>${items.map((i) => `<option value="${i.id}" ${s.itemMap[k] === i.id ? 'selected' : ''}>${esc(i.sku ? `${i.sku} ` : '')}${esc(i.name)}${i.account ? ` · ${esc(i.account)}` : ''}</option>`).join('')}</select></td></tr>`).join('')}
+          </tbody></table></div></div>
+
+        <div class="card card-pad"><h2>สนาม → ลูกค้า</h2><p class="muted" style="margin-top:0">สนามใหม่จะถูกสร้างเป็นผู้ติดต่อให้เองจากข้อมูลใน CapCourt เพิ่มเลขผู้เสียภาษีและที่อยู่ของสนามที่หน้า <a class="link" href="#/contacts">ผู้ติดต่อ</a> ก่อนออกใบเสร็จ/ใบกำกับภาษี</p>
+          <div class="tbl-wrap"><table class="tbl"><thead><tr><th>สนามใน CapCourt</th><th>ลูกค้าใน Centel</th></tr></thead><tbody>
+          ${s.venues.length ? s.venues.map((v) => `<tr><td><b>${esc(v.name)}</b><div class="muted" style="font-size:12px">${esc(v.code)}</div></td><td><select data-venue="${v.id}"><option value="">สร้างจากข้อมูลสนาม</option>${customers.map((c) => `<option value="${c.id}" ${s.venueMap[v.id] === c.id ? 'selected' : ''}>${esc(c.name)}${c.tax_id ? ` · ${esc(c.tax_id)}` : ' · ยังไม่มีเลขผู้เสียภาษี'}</option>`).join('')}</select></td></tr>`).join('')
+            : '<tr><td colspan="2"><div class="empty">ยังไม่มีสนามที่ออกบิล สนามจะขึ้นที่นี่หลังดึงบิลครั้งแรก</div></td></tr>'}
+          </tbody></table></div></div>
+
+        <div class="card card-pad"><h2>การเชื่อมต่อ</h2>${keyFields(true)}</div>
+
+        <div class="card card-pad"><h2>บิลที่ออกเป็นใบแจ้งหนี้แล้ว</h2>
+          <div class="tbl-wrap"><table class="tbl"><thead><tr><th>วันที่</th><th>บิล CapCourt</th><th>ลูกค้า</th><th class="num">ยอด</th><th>เอกสาร Centel</th></tr></thead><tbody>
+          ${history.length ? history.map((h) => `<tr class="click" data-doc="${h.id}"><td class="nowrap">${T.thDate(h.date)}</td><td><span class="doc-no">${esc(h.ext_no)}</span></td><td>${esc(h.contact_name || '')}</td><td class="num"><b>${money(h.total)}</b></td>
+            <td><span class="dot ${statusTone(h.status, 'IV')}"></span><span class="doc-no">${esc(h.number)}</span>${h.receipt ? ` → <span class="doc-no">${esc(h.receipt)}</span>` : ''}
+              <div style="margin-top:4px"><span class="chip ${h.status === 'paid' ? 'good' : h.status === 'void' ? 'bad' : 'warn'}">${esc(T.statusName('IV', h.status))}</span>${h.status !== 'void' ? ` <span class="chip ${h.ext_reported && h.ext_reported !== 'issued' ? 'good' : h.ext_reported ? 'info' : ''}">${h.ext_reported?.startsWith('paid') ? 'แจ้ง CapCourt ว่าชำระแล้ว' : h.ext_reported ? 'แจ้งเลขที่ให้ CapCourt แล้ว' : 'รอแจ้ง CapCourt'}</span>` : ''}</div></td></tr>`).join('')
+            : '<tr><td colspan="5"><div class="empty">ยังไม่มี</div></td></tr>'}
+          </tbody></table></div></div>
+      </div>`;
+    main.addEventListener('click', (e) => { const tr = e.target.closest('[data-doc]'); if (tr) location.hash = `#/doc/${tr.dataset.doc}`; });
+    $('[data-sync]', main).onclick = async (e) => {
+      e.target.disabled = true;
+      try { ccToast((await post('/integrations/capcourt/sync')).result); await loadBoot(); render(); } catch (err) { fail(err); e.target.disabled = false; }
+    };
+    $('[data-save]', main).onclick = async (e) => {
+      const itemMap = {}; $$('[data-item]', main).forEach((x) => { if (x.value) itemMap[x.dataset.item] = x.value; });
+      const venueMap = {}; $$('[data-venue]', main).forEach((x) => { if (x.value) venueMap[x.dataset.venue] = x.value; });
+      const key = $('[data-cc=api_key]', main).value.trim();
+      e.target.disabled = true;
+      try {
+        await put('/integrations/capcourt', { base_url: $('[data-cc=base_url]', main).value, ...(key ? { api_key: key } : {}), itemMap, venueMap });
+        toast('บันทึกแล้ว'); render();
+      } catch (err) { fail(err); e.target.disabled = false; }
+    };
+    $('[data-off]', main).onclick = async () => {
+      if (!await dialog({ title: 'ตัดการเชื่อมต่อ CapCourt', body: '<p style="margin-top:0">ระบบจะหยุดดึงบิลและหยุดแจ้งผลการชำระ ใบแจ้งหนี้ที่ออกไปแล้วยังอยู่ครบ เชื่อมต่อใหม่ได้ทุกเมื่อด้วยรหัสจาก CapCourt</p>', ok: 'ตัดการเชื่อมต่อ', danger: true, onOk: () => true })) return;
+      try { await api('DELETE', A('/integrations/capcourt')); toast('ตัดการเชื่อมต่อแล้ว'); render(); } catch (err) { fail(err); }
+    };
+  }
+
+  function ccHow() {
+    return `<div class="card card-pad"><h2>ทำงานอย่างไร</h2><ol class="cc-flow">
+      <li>CapCourt ออกบิลค่าบริการให้สนามทุกวันที่ 1 ระบบนี้ดึงมาออกเป็น<b>ใบแจ้งหนี้</b>ของกิจการนี้ทันที</li>
+      <li>สนามเปิดดูและสแกน QR พร้อมเพย์จากลิงก์ใบแจ้งหนี้ได้</li>
+      <li>เมื่ออนุมัติการชำระ ระบบออก<b>ใบเสร็จรับเงิน/ใบกำกับภาษี</b> และแจ้ง CapCourt ว่าชำระแล้ว</li></ol></div>`;
+  }
+
+  function ccToast(r) {
+    if (!r) return;
+    if (r.errors?.length && !r.created.length && !r.reported) return toast(ERR[r.errors[0]] || `ดึงบิลไม่สำเร็จ: ${r.errors[0]}`, true);
+    toast(r.created.length || r.reported || r.voided.length
+      ? [r.created.length ? `ออกใบแจ้งหนี้ใหม่ ${r.created.length} ใบ` : '', r.reported ? `แจ้ง CapCourt ${r.reported} รายการ` : '', r.voided.length ? `ยกเลิก ${r.voided.length} ใบ` : ''].filter(Boolean).join(' · ')
+      : 'ไม่มีบิลใหม่');
   }
 
   /* ---------- Start ---------- */
