@@ -8,7 +8,10 @@
    Haiku). Each read slip waits in "สลิปรอยืนยัน" on Home: the person approves it as it is (✓),
    opens it to change the category, amount or anything else first, or drops it (✕).
    Nothing is added to the accounts until approved.
-   Waiting slips are kept on this device per account (localStorage). Older app builds have no
+   Waiting slips are kept on this device in one list for the whole sign-in (all its profiles),
+   because the photo library and the check's place in it belong to the phone, not a profile.
+   Account › ดึงสลิปจากรูปภาพ picks which profiles show that list (all of them until chosen);
+   a slip approved or dropped in one profile is gone from the others. Older app builds have no
    plugin, so nothing is shown. Loaded after app.js and share.js. */
 
 (() => {
@@ -24,16 +27,59 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const ready = () => isCloud() && cloud.user && cloud.features && cloud.features.storage;
 
-  /* ---------- Waiting list (per account, on this device) ---------- */
+  /* ---------- Profiles that get the slips ---------- */
 
-  const storeKey = () => `centel.photoSlips.v1.${cloud.user ? cloud.user.id : 'local'}`;
+  // Every profile of this sign-in (profiles.js); just this one when there are no others.
+  const family = () => (Array.isArray(cloud.profiles) && cloud.profiles.length ? cloud.profiles
+    : cloud.user ? [{ ...cloud.user, main: true, current: true }] : []);
+  const rootId = () => { const m = family().find((p) => p.main); return m ? m.id : (cloud.user ? cloud.user.id : 'local'); };
+  const toKey = () => `centel.photoSlips.to.${rootId()}`;
+  // Ids of the profiles that show waiting slips, or null when never chosen (= all of them).
+  function targets() {
+    try {
+      const v = JSON.parse(localStorage.getItem(toKey()) || 'null');
+      if (Array.isArray(v)) { const ids = family().map((p) => p.id); const t = v.filter((id) => ids.includes(id)); if (t.length) return t; }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+  function setTargets(ids) {
+    try {
+      if (ids.length >= family().length) localStorage.removeItem(toKey()); else localStorage.setItem(toKey(), JSON.stringify(ids));
+    } catch (e) { /* ignore */ }
+  }
+  const isTarget = (id) => { const t = targets(); return !t || t.includes(id); };
+  const forMe = () => !!cloud.user && isTarget(cloud.user.id);
+  const nameOf = (p) => p.nickname || p.name || '';
+  const targetNames = () => family().filter((p) => isTarget(p.id)).map(nameOf).join(', ');
+
+  /* ---------- Waiting list (whole sign-in, on this device) ---------- */
+
+  const storeKey = () => `centel.photoSlips.v2.${rootId()}`;
+  // Before profiles could share it, each profile kept its own list: fold those in (once each).
+  function migrate(v) {
+    let moved = false;
+    family().forEach((p) => {
+      const k = `centel.photoSlips.v1.${p.id}`;
+      try {
+        const o = JSON.parse(localStorage.getItem(k) || 'null');
+        if (!o) return;
+        (o.items || []).forEach((x) => { if (!v.items.some((y) => y.id === x.id)) v.items.push(x); });
+        (o.queue || []).forEach((x) => { if (!v.queue.some((y) => y.id === x.id)) v.queue.push(x); });
+        (o.seen || []).forEach((x) => { if (!v.seen.includes(x)) v.seen.push(x); });
+        localStorage.removeItem(k);
+        moved = true;
+      } catch (e) { /* ignore */ }
+    });
+    if (moved) store(v);
+    return v;
+  }
   // { items: [{ id, key, created, status, r }], queue: [{ id, created }], seen: [id] }
   // items: read slips waiting for approval; queue: slips Vision found that are not read yet;
   // seen: pictures already sent to AI Slips, so checking back again never reads one twice.
   function load() {
     try {
       const v = JSON.parse(localStorage.getItem(storeKey()) || '{}');
-      return { items: Array.isArray(v.items) ? v.items : [], queue: Array.isArray(v.queue) ? v.queue : [], seen: Array.isArray(v.seen) ? v.seen : [] };
+      return migrate({ items: Array.isArray(v.items) ? v.items : [], queue: Array.isArray(v.queue) ? v.queue : [], seen: Array.isArray(v.seen) ? v.seen : [] });
     } catch (e) { return { items: [], queue: [], seen: [] }; }
   }
   function store(v) {
@@ -102,7 +148,7 @@
         const v = load(); v.queue = v.queue.filter((x) => x.id !== q.id); if (!v.seen.includes(q.id)) v.seen.push(q.id); store(v);
       }
       if (ps.found) {
-        toast(`พบสลิปใหม่ในรูปภาพ ${ps.found} รายการ รอยืนยันที่หน้าหลัก`);
+        toast(forMe() ? `พบสลิปใหม่ในรูปภาพ ${ps.found} รายการ รอยืนยันที่หน้าหลัก` : `พบสลิปใหม่ในรูปภาพ ${ps.found} รายการ รอยืนยันได้ในโปรไฟล์ ${targetNames()}`);
         rerender();
       }
     } catch (e) {
@@ -180,7 +226,7 @@
   }
 
   window.photoSlipsCard = () => {
-    if (!ps.on && !items().length) return '';
+    if (!forMe() || (!ps.on && !items().length)) return '';
     const list = items();
     if (!list.length) return '';
     return `
@@ -226,7 +272,21 @@
   /* ---------- Account › ดึงสลิปจากรูปภาพ ---------- */
 
   window.photoSlipsRow = () => setRow({ set: 'photoslips', ico: '📷', color: '#ff9f0a', name: 'ดึงสลิปจากรูปภาพ',
-    value: ps.on && (ps.access === 'authorized' || ps.access === 'limited') ? 'เปิดอยู่' : 'ปิดอยู่' });
+    value: ps.on && (ps.access === 'authorized' || ps.access === 'limited')
+      ? (family().length > 1 && targets() ? `เปิด · ${targetNames()}` : 'เปิดอยู่') : 'ปิดอยู่' });
+
+  // ใช้กับโปรไฟล์: one switch per profile of this sign-in; at least one stays on.
+  function targetsBlock() {
+    const list = family();
+    if (list.length < 2) return '';
+    return `
+      <div class="section-row"><span>ใช้กับโปรไฟล์</span></div>
+      <div class="form ps-targets">
+        ${list.map((p) => `<div class="field"><span class="ps-pf">${userAvatar(p, 'avatar pf-mini')}<label for="psTo-${esc(p.id)}">${esc(nameOf(p))}${p.current ? ' <span class="muted small">(ใช้อยู่)</span>' : ''}</label></span><span style="flex:1"></span>
+          <label class="switch"><input type="checkbox" id="psTo-${esc(p.id)}" data-ps-to="${esc(p.id)}" ${isTarget(p.id) ? 'checked' : ''}><span></span></label></div>`).join('')}
+      </div>
+      <p class="hint">สลิปที่พบจะรอยืนยันในทุกโปรไฟล์ที่เปิดไว้ ยืนยันหรือกด ✕ ในโปรไฟล์ไหนแล้ว จะหายจากโปรไฟล์อื่นด้วย ตรวจรูปได้ไม่ว่าจะเปิดโปรไฟล์ไหนอยู่</p>`;
+  }
 
   window.photoSlipsSettings = () => {
     const denied = ps.access === 'denied' || ps.access === 'restricted';
@@ -243,7 +303,8 @@
       ${denied ? '<button class="btn ghost" id="psSettings">เปิดการตั้งค่า</button>' : ''}
       ${ps.on && !denied ? `<button class="btn ghost" id="psNow" ${ps.busy ? 'disabled' : ''}>${ps.busy ? 'กำลังตรวจรูป…' : '🔍 ตรวจรูปตอนนี้'}</button>
         <button class="btn ghost" id="psBack" ${ps.busy ? 'disabled' : ''}>🔄 ตรวจย้อนหลัง 7 วันอีกครั้ง</button>` : ''}
-      <p class="hint">${hint}</p>`;
+      <p class="hint">${hint}</p>
+      ${ready() ? targetsBlock() : ''}`;
   };
 
   window.photoSlipsBind = () => {
@@ -257,6 +318,13 @@
       settingsSheet('photoslips', true);
       if (ps.on) { await run(); if (ui.setSheet === 'photoslips') settingsSheet('photoslips', true); }
     });
+    $('#sheet').querySelectorAll('[data-ps-to]').forEach((b) => b.addEventListener('change', () => {
+      const ids = [...$('#sheet').querySelectorAll('[data-ps-to]')].filter((x) => x.checked).map((x) => x.dataset.psTo);
+      if (!ids.length) { b.checked = true; toast('ต้องเลือกอย่างน้อย 1 โปรไฟล์'); return; }
+      setTargets(ids);
+      render();
+      settingsSheet('photoslips', true);
+    }));
     const st = $('#psSettings');
     if (st) st.addEventListener('click', () => plugin.openSettings().catch(() => {}));
     const now = $('#psNow');
