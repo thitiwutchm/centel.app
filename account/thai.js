@@ -164,6 +164,8 @@
       words: 'จำนวนเงิน (ตัวอักษร)', notes: 'หมายเหตุ', payTo: 'ช่องทางชำระเงิน', promptpay: 'พร้อมเพย์', branch: 'สาขา',
       scan: 'สแกนจ่ายด้วยแอปธนาคาร', baht: 'บาท', original: 'ต้นฉบับ', copy: 'สำเนา', void: 'ยกเลิก', on: 'ในนาม',
       paidBy: (m, d) => `ชำระโดย${m} เมื่อ ${d}`,
+      payDone: 'การชำระเงินจะสมบูรณ์เมื่อบริษัทได้รับเงินเรียบร้อยแล้ว', bank: 'ธนาคาร',
+      pm: { cash: 'เงินสด', cheque: 'เช็ค', transfer: 'โอนเงิน', card: 'บัตรเครดิต' },
       roles: { QT: ['ผู้อนุมัติสั่งซื้อ', 'ผู้เสนอราคา'], IV: ['ผู้รับวางบิล', 'ผู้วางบิล'], RE: ['ผู้จ่ายเงิน', 'ผู้รับเงิน'], EX: ['ผู้รับเงิน', 'ผู้อนุมัติ'] },
     },
     en: {
@@ -175,6 +177,8 @@
       words: 'Amount in words', notes: 'Notes', payTo: 'Payment details', promptpay: 'PromptPay', branch: 'Branch',
       scan: 'Scan with any Thai banking app', baht: 'THB', original: 'Original', copy: 'Copy', void: 'VOID', on: 'For',
       paidBy: (m, d) => `Paid by ${m} on ${d}`,
+      payDone: 'Payment is complete once the company has received the funds.', bank: 'Bank',
+      pm: { cash: 'Cash', cheque: 'Cheque', transfer: 'Transfer', card: 'Credit card' },
       roles: { QT: ['Accepted by', 'Quoted by'], IV: ['Received by', 'Issued by'], RE: ['Paid by', 'Received by'], EX: ['Received by', 'Approved by'] },
     },
   };
@@ -255,6 +259,18 @@
     const method = doc.pay && (lang === 'en' ? PAY_METHOD_EN : PAY_METHOD)[doc.pay.method];
     const paid = doc.type === 'RE' && doc.pay ? t.paidBy(method || '', fmtDate(doc.pay.date)) : '';
 
+    // Payment record: the method ticked and the lines filled from the recorded payment on a receipt,
+    // left blank on an invoice so the payer can fill it in by hand.
+    const payForm = (doc.type === 'RE' || doc.type === 'IV') && doc.status !== 'void' ? (() => {
+      const p = doc.type === 'RE' && doc.pay ? doc.pay : null;
+      const box = (k) => `<span class="pp-pf-opt"><span class="pp-box">${p && p.method === k ? '✓' : ''}</span>${esc(t.pm[k])}</span>`;
+      const fill = (label, v, cls = '') => `<div class="pp-pf-field${cls}"><span>${esc(label)}</span><span class="pp-pf-line">${v ? esc(v) : '&nbsp;'}</span></div>`;
+      return `<section class="pp-pf">
+        <div class="pp-pf-row"><span class="pp-pf-note">${esc(t.payDone)}</span>${['cash', 'cheque', 'transfer', 'card'].map(box).join('')}</div>
+        <div class="pp-pf-row">${fill(t.bank, p && p.bank, ' w')}${fill(t.no, p && p.ref)}${fill(t.date, p && fmtDate(p.date))}${fill(t.amount, p && money(net))}</div>
+      </section>`;
+    })() : '';
+
     // Footer: the other party on the left, the business on the right, the company stamp centred between.
     // Each side has a signature line and a date line under "ในนาม …".
     const sign = opts.sign !== undefined ? opts.sign : !!s.signAuto;
@@ -297,20 +313,15 @@
         <thead><tr><th class="c">#</th><th>${t.item}</th><th class="r">${t.qty}</th><th class="r">${t.price}</th>${showDisc ? `<th class="r">${t.disc}</th>` : ''}<th class="r">${t.amount}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <section class="pp-sum">
-        <div class="pp-words">
-          <div class="pp-label">${t.words}</div>
-          <div class="pp-baht">(${esc(lang === 'en' ? bahtTextEn(doc.total) : bahtText(doc.total))})</div>
-          ${paid ? `<div class="pp-small">${esc(paid)}</div>` : ''}
-          ${note ? `<div class="pp-notes"><div class="pp-label">${t.notes}</div><div>${esc(note).replace(/\n/g, '<br>')}</div></div>` : ''}
-        </div>
-        <table class="pp-totals">
-          ${totals.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${money(v)}</td></tr>`).join('')}
-          <tr class="pp-grand${hasWht ? '' : ' pp-due'}"><th>${t.grand}</th><td>${money(doc.total)}</td></tr>
-          ${hasWht ? `<tr><th>${doc.type === 'EX' ? t.whtOwn : t.whtCust}</th><td>${money(-doc.wht)}</td></tr><tr class="pp-due"><th>${doc.type === 'EX' ? t.netPaid : t.net}</th><td>${money(net)}</td></tr>` : ''}
-        </table>
-      </section>
+      <table class="pp-sum">
+        ${totals.map(([k, v]) => `<tr><td class="pp-left"></td><th>${esc(k)}</th><td class="pp-amt">${money(v)}</td></tr>`).join('')}
+        <tr class="pp-grand${hasWht ? '' : ' pp-due'}"><td class="pp-left pp-baht">(${esc(lang === 'en' ? bahtTextEn(doc.total) : bahtText(doc.total))})</td><th>${t.grand}</th><td class="pp-amt">${money(doc.total)}</td></tr>
+        ${hasWht ? `<tr><td class="pp-left"></td><th>${doc.type === 'EX' ? t.whtOwn : t.whtCust}</th><td class="pp-amt">${money(-doc.wht)}</td></tr><tr class="pp-due"><td class="pp-left"></td><th>${doc.type === 'EX' ? t.netPaid : t.net}</th><td class="pp-amt">${money(net)}</td></tr>` : ''}
+      </table>
+      ${paid && !payForm ? `<div class="pp-small pp-paid">${esc(paid)}</div>` : ''}
+      ${note ? `<div class="pp-notes"><div class="pp-label">${t.notes}</div><div>${esc(note).replace(/\n/g, '<br>')}</div></div>` : ''}
       ${payBlock}
+      ${payForm}
       <footer class="pp-sign">${footer}</footer>
     </article>`;
   }

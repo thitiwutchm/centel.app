@@ -1112,7 +1112,9 @@
         <label class="field"><span>วันที่${isEx ? 'จ่าย' : 'รับ'}เงิน</span><input type="date" data-p="date" value="${payDraft.date}"></label>
         <label class="field"><span>${isEx ? 'จ่ายจาก' : 'รับเข้า'}</span><select data-p="account">${moneyAccounts().map((a) => `<option value="${a.code}" ${a.code === payDraft.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
         <label class="field"><span>วิธีชำระ</span><select data-p="method">${Object.entries(T.PAY_METHOD).map(([k, v]) => `<option value="${k}" ${k === payDraft.method ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-        <label class="field"><span>ค่าธรรมเนียมธนาคาร</span><input type="number" step="0.01" class="num" data-p="fee" value="${payDraft.fee || ''}" placeholder="0"></label></div>`;
+        <label class="field"><span>ค่าธรรมเนียมธนาคาร</span><input type="number" step="0.01" class="num" data-p="fee" value="${payDraft.fee || ''}" placeholder="0"></label>
+        ${isEx ? '' : `<label class="field"><span>ธนาคาร (พิมพ์ในใบเสร็จ)</span><input type="text" data-p="bank" list="pay-banks" maxlength="120" value="${esc(payDraft.bank || '')}" placeholder="เช่น กสิกรไทย ออมทรัพย์"><datalist id="pay-banks">${[...new Set((biz().settings?.banks || []).map((b) => b && b.bank).filter(Boolean))].map((b) => `<option value="${esc(b)}">`).join('')}</datalist></label>
+        <label class="field"><span>เลขที่ (เช็ค / บัญชี / อ้างอิง)</span><input type="text" data-p="ref" maxlength="60" value="${esc(payDraft.ref || '')}"></label>`}</div>`;
       if (box.dataset.drawn) return;
       box.dataset.drawn = '1';
       box.innerHTML = isEx ? `<label class="check" style="margin-bottom:10px"><input type="checkbox" data-paid ${paidNow ? 'checked' : ''}> <b>จ่ายเงินแล้ว</b></label><div data-pf ${paidNow ? '' : 'hidden'}>${fields}</div>` : `<h2>การรับเงิน</h2>${fields}`;
