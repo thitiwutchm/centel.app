@@ -462,15 +462,17 @@
     const max = Math.max(1, ...d.months.flatMap((m) => [m.income, m.expense]));
     const W = 560; const H = 200; const bw = 26; const gap = W / 6;
     // Faint guide lines at a quarter, half and three quarters of the tallest bar.
-    const grid = [0.25, 0.5, 0.75, 1].map((f) => { const y = H - 22 - f * (H - 40); return `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-dasharray="${f === 1 ? '0' : '3 4'}" stroke-width="1"/>`; }).join('')
-      + `<line x1="0" x2="${W}" y1="${H - 22}" y2="${H - 22}" stroke="var(--line)" stroke-width="1"/>`;
+    const grid = [0.25, 0.5, 0.75, 1].map((f) => { const y = H - 2 - f * (H - 20); return `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-dasharray="${f === 1 ? '0' : '3 4'}" stroke-width="1"/>`; }).join('')
+      + `<line x1="0" x2="${W}" y1="${H - 2}" y2="${H - 2}" stroke="var(--line)" stroke-width="1"/>`;
     const bars = grid + d.months.map((m, i) => {
       const x = i * gap + gap / 2 - bw - 2;
-      const hi = (m.income / max) * (H - 40); const he = (m.expense / max) * (H - 40);
-      return `<rect x="${x}" y="${H - 22 - hi}" width="${bw}" height="${hi}" rx="4" fill="var(--accent)"><title>รายได้ ${money(m.income)}</title></rect>
-        <rect x="${x + bw + 4}" y="${H - 22 - he}" width="${bw}" height="${he}" rx="4" fill="var(--ink-2)" opacity=".55"><title>ค่าใช้จ่าย ${money(m.expense)}</title></rect>
-        <text x="${i * gap + gap / 2}" y="${H - 4}" text-anchor="middle" font-size="12" fill="var(--muted)">${T.TH_MONTHS[Number(m.month.slice(5)) - 1]}</text>`;
+      const hi = (m.income / max) * (H - 20); const he = (m.expense / max) * (H - 20);
+      return `<rect x="${x}" y="${H - 2 - hi}" width="${bw}" height="${hi}" rx="4" fill="var(--accent)"><title>รายได้ ${money(m.income)}</title></rect>
+        <rect x="${x + bw + 4}" y="${H - 2 - he}" width="${bw}" height="${he}" rx="4" fill="var(--ink-2)" opacity=".55"><title>ค่าใช้จ่าย ${money(m.expense)}</title></rect>`;
     }).join('');
+    // Month names sit in HTML under the chart: the SVG stretches to the card width
+    // (preserveAspectRatio none), which would stretch any text drawn inside it.
+    const monthRow = `<div class="chart-x">${d.months.map((m) => `<span>${T.TH_MONTHS[Number(m.month.slice(5)) - 1]}</span>`).join('')}</div>`;
     main.innerHTML = `<div class="page-h"><div><h1>สวัสดี ${esc(S.user?.name || '')}</h1><div class="sub">${esc(biz().name)} · ${esc(T.thMonth(month))}</div></div>
       <div class="actions"><input type="month" value="${month}" data-month style="width:auto"></div></div>
       <div class="quick">
@@ -488,7 +490,7 @@
       <div class="dash">
         <div class="grid">
           <div class="card"><div class="card-h"><h2>รายได้และค่าใช้จ่าย 6 เดือน</h2></div>
-            <div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="กราฟรายได้และค่าใช้จ่าย">${bars}</svg></div>
+            <div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="กราฟรายได้และค่าใช้จ่าย">${bars}</svg>${monthRow}</div>
             <div class="legend" style="padding-bottom:14px"><span><i style="background:var(--accent)"></i>รายได้</span><span><i style="background:var(--ink-2);opacity:.55"></i>ค่าใช้จ่าย</span></div></div>
           <div class="card"><div class="card-h"><h2>เอกสารล่าสุด</h2></div>
             ${d.recent.length ? `<div class="tbl-wrap"><table class="tbl"><tbody>${d.recent.map((r) => `<tr class="click" data-go="#/doc/${r.id}"><td><span class="doc-no">${esc(r.number)}</span><div class="muted" style="font-size:12px">${esc(T.TYPE_NAME[r.type])} · ${T.thDate(r.date)}</div></td><td>${esc(r.contact_name || '')}</td><td>${statusChip(r.type, r.status)}</td><td class="num">${money(r.total)}</td></tr>`).join('')}</tbody></table></div>`
