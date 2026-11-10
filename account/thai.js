@@ -165,7 +165,6 @@
       scan: 'สแกนจ่ายด้วยแอปธนาคาร', baht: 'บาท', original: 'ต้นฉบับ', copy: 'สำเนา', void: 'ยกเลิก', on: 'ในนาม',
       paidBy: (m, d) => `ชำระโดย${m} เมื่อ ${d}`,
       roles: { QT: ['ผู้อนุมัติสั่งซื้อ', 'ผู้เสนอราคา'], IV: ['ผู้รับวางบิล', 'ผู้วางบิล'], RE: ['ผู้จ่ายเงิน', 'ผู้รับเงิน'], EX: ['ผู้รับเงิน', 'ผู้อนุมัติ'] },
-      prepared: 'ผู้จัดทำ',
     },
     en: {
       no: 'No.', date: 'Date', due: 'Due date', valid: 'Valid until', ref: 'Reference', billNo: 'Vendor bill no.',
@@ -177,7 +176,6 @@
       scan: 'Scan with any Thai banking app', baht: 'THB', original: 'Original', copy: 'Copy', void: 'VOID', on: 'For',
       paidBy: (m, d) => `Paid by ${m} on ${d}`,
       roles: { QT: ['Accepted by', 'Quoted by'], IV: ['Received by', 'Issued by'], RE: ['Paid by', 'Received by'], EX: ['Received by', 'Approved by'] },
-      prepared: 'Prepared by',
     },
   };
   const PAY_METHOD_EN = { cash: 'cash', transfer: 'bank transfer', cheque: 'cheque', card: 'card', other: 'other' };
@@ -257,25 +255,24 @@
     const method = doc.pay && (lang === 'en' ? PAY_METHOD_EN : PAY_METHOD)[doc.pay.method];
     const paid = doc.type === 'RE' && doc.pay ? t.paidBy(method || '', fmtDate(doc.pay.date)) : '';
 
-    // Signature lines: the other party on the left, the business on the right (with signature and stamp when asked).
+    // Footer: the other party on the left, the business on the right, the company stamp centred between.
+    // Each side has a signature line and a date line under "ในนาม …".
     const sign = opts.sign !== undefined ? opts.sign : !!s.signAuto;
     const [otherRole, ownRole] = t.roles[doc.type] || t.roles.IV;
     const otherName = doc.contact?.name || '';
-    const sig = (who, role, own) => {
-      const mark = own && sign && (business.signature || business.stamp);
-      return `<div class="pp-sig${own ? ' own' : ''}">
+    const side = (who, role, own) => {
+      const mark = own && sign;
+      return `<div class="pp-side${own ? ' own' : ''}">
         <div class="pp-for">${who ? `${t.on} ${esc(who)}` : '&nbsp;'}</div>
-        <div class="pp-sig-grid">
-          <div class="pp-sig-cell">
-            <div class="pp-mark">${mark && business.stamp ? `<img class="pp-stamp" src="${esc(business.stamp)}" alt="">` : ''}${mark && business.signature ? `<img class="pp-signature" src="${esc(business.signature)}" alt="">` : ''}</div>
-            <div class="pp-line"></div><div class="pp-small">${own && s.signer ? `${esc(s.signer)}${s.signerTitle ? ` · ${esc(s.signerTitle)}` : ''}<br>` : ''}${esc(role)}</div>
-          </div>
-          <div class="pp-sig-cell date"><div class="pp-mark pp-date">${mark ? esc(fmtDate(doc.date)) : ''}</div><div class="pp-line"></div><div class="pp-small">${t.date}</div></div>
+        <div class="pp-pair">
+          <div class="pp-cell"><div class="pp-mark">${mark && business.signature ? `<img class="pp-signature" src="${esc(business.signature)}" alt="">` : ''}</div>
+            <div class="pp-line"></div><div class="pp-role">${esc(role)}</div>${own && s.signer ? `<div class="pp-small pp-signer">(${esc(s.signer)})</div>${s.signerTitle ? `<div class="pp-small pp-signer">${esc(s.signerTitle)}</div>` : ''}` : ''}</div>
+          <div class="pp-cell"><div class="pp-mark pp-date">${mark && (business.signature || business.stamp) ? esc(fmtDate(doc.date)) : ''}</div>
+            <div class="pp-line"></div><div class="pp-role">${t.date}</div></div>
         </div></div>`;
     };
-    const footer = doc.type === 'EX'
-      ? sig('', L[lang === 'en' ? 'en' : 'th'].prepared, false) + sig(business.name, ownRole, true) + sig(otherName, otherRole, false)
-      : sig(otherName, otherRole, false) + sig(business.name, ownRole, true);
+    const seal = `<div class="pp-seal">${sign && business.stamp ? `<img class="pp-stamp" src="${esc(business.stamp)}" alt="">` : ''}</div>`;
+    const footer = side(otherName, otherRole, false) + seal + side(lang === 'en' && business.name_en ? business.name_en : business.name, ownRole, true);
 
     return `<article class="paper pp-lang-${lang}" style="--pp-accent:${esc(color)};--pp-soft:${tint(color, 0.09)};--pp-mid:${tint(color, 0.35)}">
       <div class="pp-corner"></div>${opts.page ? `<div class="pp-page">${esc(opts.page)}</div>` : ''}
@@ -314,7 +311,7 @@
         </table>
       </section>
       ${payBlock}
-      <footer class="pp-sign${doc.type === 'EX' ? ' three' : ''}">${footer}</footer>
+      <footer class="pp-sign">${footer}</footer>
     </article>`;
   }
 
