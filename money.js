@@ -527,6 +527,10 @@ function setTxnLabels(t, ids) {
   t.labels = ids;
   if (isCloud()) cloudCall('PUT', `/expenses/${t.id}/labels`, { labels: ids }); else saveMoney();
 }
+// Account › คู่ของฉัน › ผู้จ่ายเริ่มต้น: 'partner' when my partner pays for my expenses by default.
+// Kept in prefs, so it is per person (and per profile) and follows them to every device.
+function partnerPaysDefault() { return isCloud() && !!cloud.partner && money.prefs.payDefault === 'partner'; }
+
 function savePrefs() {
   if (isCloud()) cloudSavePrefs(); else saveMoney();
 }
@@ -1679,10 +1683,16 @@ function txnForm(t, preset = {}, opts = {}) {
   if (t && t.scope === 'shared') { d.amount = t.total; d.split = splitOf(t); }
   // A converted entry is edited in the currency on the slip; saving converts it again.
   if (t && t.fx) { d.amount = t.fx.amt; d.currency = t.fx.cur; }
+  // ผู้จ่ายเริ่มต้น (Account › คู่ของฉัน): when my partner pays for everything, a new expense
+  // starts as theirs, shared, with them covering it all. A preset (a slip, a + button) wins.
+  if (isNew && canShare && partnerPaysDefault() && !preset.payerId && preset.scope !== 'personal') {
+    d.scope = 'shared'; d.payerId = cloud.partner.id;
+    if (!preset.split) d.split = 'full';
+  }
   if (!d.payerId) d.payerId = me;
   if (!d.split) d.split = 'half';
-  // Who bears the cost under รับผิดชอบทั้งหมด: the payer, which is me for everything new.
-  const fullLabel = d.payerId === me ? 'รับผิดชอบทั้งหมด' : `${esc(partnerName())} รับผิดชอบทั้งหมด`;
+  // Who bears the cost under รับผิดชอบทั้งหมด: the payer.
+  const fullLabel = () => (d.payerId === me ? 'รับผิดชอบทั้งหมด' : `${esc(partnerName())} รับผิดชอบทั้งหมด`);
   if (d.scope === 'shared' && !canShare) d.scope = 'personal';
   const receipts = isCloud() && cloud.features.storage;
   // A new expense can be the payment of a bill still due (picked here or matched from a slip).
@@ -1733,8 +1743,10 @@ function txnForm(t, preset = {}, opts = {}) {
       ${pend.length ? `<div class="tr" id="tBillRow"><div class="tr-ico">${svgIcon('bell')}</div>
         <div class="tr-body"><label for="tBill">ตัดบิล</label><select id="tBill"></select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>` : ''}
       <div class="tr" id="tShareRows"><div class="tr-ico">${svgIcon('people')}</div>
-        <div class="tr-body col"><span class="tr-lab">ต้นทุน</span>
-          <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel}</button><button type="button" data-split="half">หาร 2</button></div>
+        <div class="tr-body col"><span class="tr-lab">ใครจ่าย</span>
+          <div class="seg" id="tPayer"><button type="button" data-payer="me">ฉัน</button><button type="button" data-payer="partner">${esc(partnerName())}</button></div>
+          <span class="tr-lab">ต้นทุน</span>
+          <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel()}</button><button type="button" data-split="half">หาร 2</button></div>
           <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div></div></div>
       <div class="tr" id="tWalletRow"><div class="tr-ico">${svgIcon('wallet')}</div>
         <div class="tr-body"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
@@ -1782,7 +1794,10 @@ function txnForm(t, preset = {}, opts = {}) {
   const myShare = (total) => (d.split === 'full' ? (d.payerId === me ? total : 0) : Math.round((total / 2) * 100) / 100);
   const updateShares = () => {
     if (!shared()) return;
+    document.querySelectorAll('#tPayer button').forEach((x) => x.classList.toggle('on', (x.dataset.payer === 'me') === (d.payerId === me)));
     document.querySelectorAll('#tSplit button').forEach((x) => x.classList.toggle('on', x.dataset.split === d.split));
+    const full = $('#tSplit [data-split="full"]');
+    if (full) full.textContent = fullLabel();
     $('#tMine').textContent = baht(myShare(num($('#tAmount').value) || 0));
   };
   const pkgOn = () => !!$('#tPkg') && $('#tPkg').checked;
@@ -1931,6 +1946,12 @@ function txnForm(t, preset = {}, opts = {}) {
       paintInst();
     });
   }
+  if ($('#tPayer')) $('#tPayer').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-payer]');
+    if (!b) return;
+    d.payerId = b.dataset.payer === 'me' ? me : cloud.partner.id;
+    renderType();
+  });
   $('#tSplit').addEventListener('click', (e) => {
     const b = e.target.closest('[data-split]');
     if (!b) return;

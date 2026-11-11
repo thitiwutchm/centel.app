@@ -506,7 +506,10 @@ function renderSettings() {
       setRow({ set: 'travel', ico: '✈️', color: '#00a3e0', name: 'โหมดนักเดินทาง', value: tr.on ? `${curFlag(tr.currency)} ${esc(tr.currency)}` : on(false) }),
     ])}
 
-    ${window.partnerLocRow ? setGroup('คู่ของฉัน', [partnerLocRow()]) : ''}
+    ${isCloud() && cloud.partner ? setGroup('คู่ของฉัน', [
+      setRow({ set: 'paydefault', ico: '💳', color: '#ff9f0a', name: 'ผู้จ่ายเริ่มต้น', value: partnerPaysDefault() ? `${esc(partnerName())} จ่ายให้` : 'ฉันจ่ายเอง' }),
+      window.partnerLocRow ? partnerLocRow() : '',
+    ]) : window.partnerLocRow ? setGroup('คู่ของฉัน', [partnerLocRow()]) : ''}
 
     ${setGroup('การแสดงผล', [
       setRow({ set: 'theme', ico: '🎨', color: '#ff7a45', name: 'ธีม', value: `<span class="set-sw tp-${theme.id}"><span class="tp-prev"></span></span>${theme.label}` }),
@@ -568,6 +571,13 @@ const SET_SHEETS = {
     </div>
     <p class="hint">เมื่อกด "จ่ายแล้ว" ที่บิล แอปจะบันทึกเป็นรายจ่ายในกระเป๋าเงินนี้ให้อัตโนมัติ เพื่อให้ยอดเงินและงบประมาณตรงกัน</p>`;
   }],
+  paydefault: ['ผู้จ่ายเริ่มต้น', () => {
+    const pp = partnerPaysDefault();
+    return `<div class="seg pay-seg">
+      <button type="button" data-paydef="me" class="${pp ? '' : 'on'}" aria-pressed="${!pp}">ฉันจ่ายเอง</button>
+      <button type="button" data-paydef="partner" class="${pp ? 'on' : ''}" aria-pressed="${pp}">${esc(partnerName())} จ่ายให้</button></div>
+    <p class="hint">${pp ? `รายจ่ายใหม่จะเริ่มที่ ${esc(partnerName())} เป็นคนจ่าย และ${esc(partnerName())} รับผิดชอบทั้งหมด ไม่หักจากกระเป๋าเงินของคุณ` : 'รายจ่ายใหม่จะเริ่มที่ ส่วนตัว จ่ายจากกระเป๋าเงินของคุณ'} · เปลี่ยนได้ทุกครั้งตอนเพิ่มรายการ · ตั้งแยกของแต่ละคน</p>`;
+  }],
   travel: ['โหมดนักเดินทาง', () => travelSettings().replace(/<div class="section-title">[^<]*<\/div>/, '')],
   theme: ['ธีม', () => `
     <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
@@ -608,6 +618,12 @@ function settingsSheet(key, again = false) {
   if (again) sheet.scrollTop = y;
   const bw = $('#billWallet');
   if (bw) bw.addEventListener('change', (e) => { money.prefs.billWallet = e.target.value; savePrefs(); toast('บันทึกแล้ว'); render(); });
+  sheet.querySelectorAll('[data-paydef]').forEach((b) => b.addEventListener('click', () => {
+    const v = b.dataset.paydef === 'partner' ? 'partner' : 'me';
+    if ((money.prefs.payDefault || 'me') === v) return;
+    money.prefs.payDefault = v;
+    savePrefs(); toast('บันทึกแล้ว'); render();
+  }));
   const rd = $('#remindDays');
   if (rd) rd.addEventListener('change', (e) => { state.settings.remindDays = Number(e.target.value); save(); toast('บันทึกแล้ว'); render(); });
   sheet.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
