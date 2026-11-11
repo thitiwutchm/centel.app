@@ -1994,3 +1994,6 @@ a.btn { text-decoration: none; text-align: center; box-sizing: border-box; }
 .pl-wx { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 .pl-wx .pl-wx-ico { font-size: 22px; line-height: 1; }
 .pl-wx b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pl-dist { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line, rgba(127,127,127,.18)); }
+.pl-dist b { font-variant-numeric: tabular-nums; }
+.pl-dist .muted { margin-left: auto; }

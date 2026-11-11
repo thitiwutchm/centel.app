@@ -226,6 +226,22 @@
     return `<div class="item pl-row">${inner}</div>`;
   }
 
+  // Straight-line distance between two places, in km.
+  function km(a, b) {
+    const r = (d) => (d * Math.PI) / 180;
+    const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lon - a.lon) / 2) ** 2;
+    return 12742 * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  function distRow(me, partner) {
+    if (!me || !partner || me.lat == null || partner.lat == null) return '';
+    const d = km(me, partner);
+    const text = d < 0.1 ? 'อยู่ที่เดียวกัน'
+      : d < 1 ? `ห่างกัน ${Math.round(d * 1000 / 10) * 10} ม.`
+        : d < 10 ? `ห่างกัน ${d.toFixed(1)} กม.`
+          : `ห่างกัน ${Math.round(d).toLocaleString('en-US')} กม.`;
+    return `<div class="pl-dist"><span>📏</span><b>${text}</b><span class="muted small">เส้นตรง</span></div>`;
+  }
+
   window.partnerLocCard = () => {
     if (!ready() || !pl.data) return '';
     const { me, partner } = pl.data;
@@ -235,6 +251,7 @@
       <div class="card list-card pl-card">
         ${personRow(cloud.partner, partner, 'partner')}
         ${personRow(cloud.user, me, 'me')}
+        ${distRow(me, partner)}
       </div>`;
   };
 

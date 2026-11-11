@@ -595,6 +595,7 @@ const I18N_EN = {
   'เปิดแชร์ตำแหน่งให้ {0} แล้ว': 'Sharing your location with {0}', 'ปิดแชร์ตำแหน่งแล้ว ลบตำแหน่งล่าสุดออกแล้ว': 'Location sharing off, latest location deleted',
   'ต้องอนุญาตให้ METANG ใช้ตำแหน่งก่อน': 'Allow METANG to use your location first', 'เลือก "อนุญาตตลอด" เพื่อให้อัปเดตเองแม้ปิดแอป': 'Choose "Always Allow" so it updates while the app is closed',
   'อัปเดตตำแหน่งไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not update location, try again',
+  'อยู่ที่เดียวกัน': 'In the same place', 'ห่างกัน {0} กม.': '{0} km apart', 'ห่างกัน {0} ม.': '{0} m apart', 'เส้นตรง': 'straight line',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.
