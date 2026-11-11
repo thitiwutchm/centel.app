@@ -1,7 +1,7 @@
 'use strict';
 
-/* Account › ตั้งค่าพิเศษ: a settings page kept out of the way. Tap the version line at the
-   bottom of Account 5 times, then enter the code. The code only keeps the page out of
+/* Account › ตั้งค่าพิเศษ: a settings page kept out of the way. In the iOS app, tap the เวอร์ชันล่าสุด row in
+   Account › เวอร์ชันแอป 5 times (on the web, the version line at the bottom of Account), then enter the code. The code only keeps the page out of
    everyday view; it is not a lock on anything.
    1. ปักหมุดตำแหน่ง: pin the place shared with the partner by hand. While pinned, live updates
       from the phone are not saved, and the partner sees "📌 ปักหมุด" on the person's profile (Account › บัญชีคู่ › tap the picture).
@@ -20,7 +20,10 @@
   /* ---------- Way in ---------- */
 
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.set-foot')) return;
+    // In the app: Account › เวอร์ชันแอป › เวอร์ชันล่าสุด. On the web (no such row): the version line.
+    const cap = window.Capacitor;
+    const app = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+    if (!e.target.closest(app ? '.au-latest' : '.set-foot')) return;
     const now = Date.now();
     sp.taps = now - sp.tapAt < 800 ? sp.taps + 1 : 1;
     sp.tapAt = now;

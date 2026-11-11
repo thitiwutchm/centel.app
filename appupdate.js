@@ -59,7 +59,7 @@
     const rows = `
       <div class="card list-card au-card">
         <div class="item"><div class="main"><div class="name">เวอร์ชันในเครื่องนี้</div></div><span class="set-val" translate="no">${installed ? esc(label(installed)) : up.checked ? '–' : '…'}</span></div>
-        <div class="item"><div class="main"><div class="name">เวอร์ชันล่าสุด</div></div><span class="set-val" translate="no">${latest ? esc(label(latest)) : up.checked ? '–' : '…'}</span></div>
+        <div class="item au-latest"><div class="main"><div class="name">เวอร์ชันล่าสุด</div></div><span class="set-val" translate="no">${latest ? esc(label(latest)) : up.checked ? '–' : '…'}</span></div>
       </div>`;
     if (up.newer) {
       return `${rows}
