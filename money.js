@@ -929,7 +929,7 @@ function renderHome() {
 
     ${homeCols.join('</div><div class="home-col">')}
     ${state.bills.length || money.txns.length ? '' : installTip()}
-    <button class="home-edit" data-action="home-order">${svgIcon('menu')}<span>จัดลำดับหน้าหลัก</span></button>
+    <button class="home-edit" data-action="home-order"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M8 4 4.5 7.5M8 4l3.5 3.5M16 20V4m0 16-3.5-3.5M16 20l3.5-3.5"/></svg><span>จัดลำดับหน้าหลัก</span></button>
     </div></div>
   `;
 }
@@ -938,15 +938,15 @@ function renderHome() {
    money.prefs.homeOrder = ['wallets', 'chat', …] (synced with the other prefs). Unknown ids are
    dropped and sections added later slot in at their default place, so old saved orders keep working. */
 const HOME_SECS = [
-  { id: 'wallets', label: 'กระเป๋าเงินของฉัน', icon: '👛', col: 1 },
-  { id: 'pkgs', label: 'แพ็กเกจ', icon: '🎟️', col: 1 },
-  { id: 'chat', label: 'แชท', icon: '💬', col: 1 },
-  { id: 'notes', label: 'สิ่งที่ต้องทำ', icon: '📝', col: 1 },
-  { id: 'couple', label: 'รายจ่ายร่วมกับคู่', icon: '🤝', col: 1 },
-  { id: 'partnerloc', label: 'ตอนนี้อยู่ที่ไหน', icon: '📍', col: 1 },
-  { id: 'bills', label: 'บิลที่ต้องจ่ายเดือนนี้', icon: '🧾', col: 1 },
-  { id: 'report', label: 'รายงานเดือนนี้', icon: '📈', col: 2 },
-  { id: 'recent', label: 'รายการล่าสุด', icon: '🕘', col: 2 },
+  { id: 'wallets', label: 'กระเป๋าเงินของฉัน', sub: 'ยอดคงเหลือแต่ละกระเป๋า', icon: '👛', color: '#ff7a45', col: 1 },
+  { id: 'pkgs', label: 'แพ็กเกจ', sub: 'แพ็กเกจที่ยังใช้ได้', icon: '🎟️', color: '#ff4d8d', col: 1 },
+  { id: 'chat', label: 'แชท', sub: 'ห้องแชทและผู้ช่วย', icon: '💬', color: '#2f6bff', col: 1 },
+  { id: 'notes', label: 'สิ่งที่ต้องทำ', sub: 'โน้ตเตือนความจำ', icon: '📝', color: '#ff9f0a', col: 1 },
+  { id: 'couple', label: 'รายจ่ายร่วมกับคู่', sub: 'ยอดร่วมเดือนนี้', icon: '🤝', color: '#e8a33b', col: 1 },
+  { id: 'partnerloc', label: 'ตอนนี้อยู่ที่ไหน', sub: 'ตำแหน่งและอากาศของคู่', icon: '📍', color: '#ff3b30', col: 1 },
+  { id: 'bills', label: 'บิลที่ต้องจ่ายเดือนนี้', sub: 'บิลที่ยังไม่จ่าย', icon: '🧾', color: '#00a37a', col: 1 },
+  { id: 'report', label: 'รายงานเดือนนี้', sub: 'กราฟใช้จ่ายและข้อมูลเชิงลึก', icon: '📈', color: '#7a5cff', col: 2 },
+  { id: 'recent', label: 'รายการล่าสุด', sub: '4 รายการล่าสุด', icon: '🕘', color: '#00a3e0', col: 2 },
 ];
 
 function homeOrder() {
@@ -968,46 +968,69 @@ function setHomeOrder(list) {
   savePrefs();
 }
 
+const HO_UP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14l5-5 5 5"/></svg>';
+const HO_DOWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>';
+const HO_GRIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+
 function homeOrderSheet() {
   const order = homeOrder();
   const sec = (id) => HOME_SECS.find((x) => x.id === id);
-  const custom = Array.isArray(money.prefs.homeOrder);
   openSheet(`
-    <div class="sheet-head"><span></span><h2>จัดลำดับหน้าหลัก</h2><button class="link-btn strong" data-action="close">เสร็จ</button></div>
-    <div class="list ho-list" id="hoList">${order.map((id, i) => `
-      <div class="item ho-row" data-sort="${id}">
-        <span class="ho-ico">${sec(id).icon}</span>
-        <div class="main"><div class="name">${esc(sec(id).label)}</div></div>
-        <button type="button" class="ho-btn" data-ho-move="-1" aria-label="เลื่อนขึ้น" ${i === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <button type="button" class="ho-btn" data-ho-move="1" aria-label="เลื่อนลง" ${i === order.length - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <span class="drag-h" aria-label="ลากเพื่อเรียง">${svgIcon('menu')}</span>
+    <div class="sheet-head"><span class="sheet-head-pad"></span><h2>จัดลำดับหน้าหลัก</h2><button class="link-btn strong" data-action="close">เสร็จ</button></div>
+    <p class="ho-intro">เลือกว่าอยากเห็นอะไรก่อนบนหน้าหลัก</p>
+    <div class="ho-list" id="hoList">${order.map((id) => `
+      <div class="ho-row" data-sort="${id}">
+        <span class="ho-ico" style="--c:${sec(id).color}">${sec(id).icon}</span>
+        <div class="main"><div class="name">${esc(sec(id).label)}</div><div class="sub">${esc(sec(id).sub)}</div></div>
+        <span class="ho-arrows">
+          <button type="button" data-ho-move="-1" aria-label="เลื่อนขึ้น">${HO_UP}</button>
+          <button type="button" data-ho-move="1" aria-label="เลื่อนลง">${HO_DOWN}</button>
+        </span>
+        <span class="drag-h" aria-label="ลากเพื่อเรียง">${HO_GRIP}</span>
       </div>`).join('')}
     </div>
-    ${custom ? '<button type="button" class="btn ghost" id="hoReset" style="margin-top:14px">คืนค่าลำดับเดิม</button>' : ''}
-    <p class="hint">กดลูกศรเพื่อเลื่อนขึ้นลง หรือลาก ☰ เพื่อเรียง ส่วนที่ยังไม่มีข้อมูลจะไม่แสดงบนหน้าหลัก${isCloud() ? ' ลำดับนี้ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+    <div class="ho-foot">
+      <button type="button" class="ho-reset" id="hoReset" ${Array.isArray(money.prefs.homeOrder) ? '' : 'hidden'}>คืนค่าลำดับเดิม</button>
+      <p class="ho-hint">กดลูกศรหรือลากที่จุดด้านขวาเพื่อย้าย ส่วนที่ยังไม่มีข้อมูลจะไม่แสดงบนหน้าหลัก${isCloud() ? ' ลำดับนี้ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+    </div>
   `);
   const list = $('#hoList');
+  const rows = () => [...list.querySelectorAll('.ho-row')];
+  // First row can't go up, last can't go down.
+  const marks = () => rows().forEach((r, i, a) => {
+    r.querySelector('[data-ho-move="-1"]').disabled = i === 0;
+    r.querySelector('[data-ho-move="1"]').disabled = i === a.length - 1;
+  });
   const commit = () => {
-    setHomeOrder([...list.querySelectorAll('.ho-row')].map((x) => x.dataset.sort));
+    setHomeOrder(rows().map((x) => x.dataset.sort));
+    $('#hoReset').hidden = !Array.isArray(money.prefs.homeOrder);
+    marks();
     if (ui.tab === 'home') render();
   };
+  marks();
   list.addEventListener('click', (e) => {
     const b = e.target.closest('[data-ho-move]');
-    if (!b) return;
-    const ids = homeOrder();
-    const i = ids.indexOf(b.closest('.ho-row').dataset.sort);
-    const j = i + Number(b.dataset.hoMove);
-    if (j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-    setHomeOrder(ids);
-    if (ui.tab === 'home') render();
-    const y = $('#sheet').scrollTop;
-    homeOrderSheet();
-    $('#sheet').scrollTop = y;
+    if (!b || b.disabled) return;
+    const row = b.closest('.ho-row');
+    const other = Number(b.dataset.hoMove) < 0 ? row.previousElementSibling : row.nextElementSibling;
+    if (!other) return;
+    // Swap with a short slide so the eye can follow where the row went (FLIP).
+    const before = new Map([row, other].map((x) => [x, x.getBoundingClientRect().top]));
+    if (Number(b.dataset.hoMove) < 0) list.insertBefore(row, other); else list.insertBefore(other, row);
+    [row, other].forEach((x) => {
+      const dy = before.get(x) - x.getBoundingClientRect().top;
+      x.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+    row.classList.remove('moved'); void row.offsetWidth; row.classList.add('moved');
+    commit();
   });
-  sortable(list, () => { commit(); const y = $('#sheet').scrollTop; homeOrderSheet(); $('#sheet').scrollTop = y; });
-  const r = $('#hoReset');
-  if (r) r.addEventListener('click', () => { setHomeOrder(null); if (ui.tab === 'home') render(); homeOrderSheet(); toast('คืนค่าแล้ว'); });
+  sortable(list, commit);
+  $('#hoReset').addEventListener('click', () => {
+    setHomeOrder(null);
+    if (ui.tab === 'home') render();
+    const y = $('#sheet').scrollTop; homeOrderSheet(); $('#sheet').scrollTop = y;
+    toast('คืนค่าแล้ว');
+  });
 }
 
 function homeReport(ym, S) {
