@@ -1,6 +1,6 @@
 // Bump CACHE when shipping changes so installed apps pick up the new files.
 // Keep APP_BUILD in app.js equal to it: the iOS app reloads when they differ.
-const CACHE = 'billplanner-v110';
+const CACHE = 'billplanner-v111';
 const ASSETS = [
   './',
   'index.html',

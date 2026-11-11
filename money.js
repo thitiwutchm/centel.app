@@ -862,6 +862,46 @@ function renderHome() {
   const recent = money.txns.filter((t) => t.date <= dateStr(new Date()) && t.type !== 'settle')
     .sort((a, b) => b.date.localeCompare(a.date) || added(b) - added(a)).slice(0, 4);
 
+  const secs = {
+    wallets: () => `
+    <div class="card list-card">
+      <div class="card-head"><b>กระเป๋าเงินของฉัน</b><button class="link-btn" data-action="wallets">ดูทั้งหมด</button></div>
+      ${wallets}
+    </div>`,
+    pkgs: () => pkgCard,
+    chat: () => chatCard(),
+    notes: () => notesCard(),
+    couple: () => coupleCard(),
+    partnerloc: () => (window.partnerLocCard ? partnerLocCard() : ''),
+    bills: () => (state.bills.length ? `
+    <div class="section-row"><span>บิลที่ต้องจ่ายเดือนนี้</span><button class="link-btn" data-goto="bills">ดูบิล</button></div>
+    <div class="card list-card">
+      <div class="card-head"><span class="muted">คงเหลือต้องจ่าย</span><b>${baht(billsLeft)}</b></div>
+      ${occ.length ? occ.slice(0, 3).map(occItem).join('') : '<div class="muted pad">🎉 จ่ายครบทุกบิลแล้วเดือนนี้</div>'}
+    </div>` : ''),
+    report: () => (money.txns.length ? `
+    <div class="section-row"><span>รายงานเดือนนี้</span><button class="link-btn" data-action="report" data-ym="${ym}">ดูรายงาน</button></div>
+    <div class="card" id="homeReport">${homeReport(ym, S)}</div>
+    ${insightCard(ym, S)}` : `
+    <div class="card empty-card">
+      <div class="e-ico">👛</div>
+      <b>เริ่มบันทึกรายรับรายจ่าย</b>
+      <div class="muted small">บันทึกทุกรายการเพื่อดูยอดเงินแต่ละกระเป๋า รายงานรายเดือน และตั้งงบประมาณ</div>
+      <button class="btn" data-action="add-tx" style="margin-top:14px">＋ เพิ่มรายการแรก</button>
+      ${state.bills.length || isCloud() ? '' : '<button class="btn ghost" data-action="sample">ลองใช้ข้อมูลตัวอย่าง</button>'}
+    </div>`),
+    recent: () => (money.txns.length ? `
+    <div class="section-row"><span>รายการล่าสุด</span><button class="link-btn" data-goto="txns">ดูทั้งหมด</button></div>
+    <div class="card list-card">${recent.map((t) => txItem(t, S)).join('') || '<div class="muted pad">ยังไม่มีรายการ</div>'}</div>` : ''),
+  };
+  // The person's order (Account › จัดลำดับหน้าหลัก). On a phone it is one list top to bottom;
+  // on a desktop each section keeps its usual column and the order applies within it.
+  const order = homeOrder();
+  const wide = window.matchMedia('(min-width: 1024px)').matches;
+  const homeCols = wide
+    ? [1, 2].map((c) => order.filter((id) => HOME_SECS.find((x) => x.id === id).col === c).map((id) => secs[id]()).join('\n'))
+    : [order.map((id) => secs[id]()).join('\n'), ''];
+
   view.innerHTML = `
     <div class="hero">
       <div class="hero-top">
@@ -887,46 +927,87 @@ function renderHome() {
     ${window.appUpdateCard ? appUpdateCard() : ''}
     ${window.photoSlipsCard ? photoSlipsCard() : ''}
 
-    <div class="card list-card">
-      <div class="card-head"><b>กระเป๋าเงินของฉัน</b><button class="link-btn" data-action="wallets">ดูทั้งหมด</button></div>
-      ${wallets}
-    </div>
-
-    ${pkgCard}
-
-    ${chatCard()}
-
-    ${notesCard()}
-
-    ${coupleCard()}
-
-    ${window.partnerLocCard ? partnerLocCard() : ''}
-
-    ${state.bills.length ? `
-    <div class="section-row"><span>บิลที่ต้องจ่ายเดือนนี้</span><button class="link-btn" data-goto="bills">ดูบิล</button></div>
-    <div class="card list-card">
-      <div class="card-head"><span class="muted">คงเหลือต้องจ่าย</span><b>${baht(billsLeft)}</b></div>
-      ${occ.length ? occ.slice(0, 3).map(occItem).join('') : '<div class="muted pad">🎉 จ่ายครบทุกบิลแล้วเดือนนี้</div>'}
-    </div>` : ''}
-
-    </div><div class="home-col">
-    ${money.txns.length ? `
-    <div class="section-row"><span>รายงานเดือนนี้</span><button class="link-btn" data-action="report" data-ym="${ym}">ดูรายงาน</button></div>
-    <div class="card" id="homeReport">${homeReport(ym, S)}</div>
-    ${insightCard(ym, S)}
-    <div class="section-row"><span>รายการล่าสุด</span><button class="link-btn" data-goto="txns">ดูทั้งหมด</button></div>
-    <div class="card list-card">${recent.map((t) => txItem(t, S)).join('') || '<div class="muted pad">ยังไม่มีรายการ</div>'}</div>
-    ` : `
-    <div class="card empty-card">
-      <div class="e-ico">👛</div>
-      <b>เริ่มบันทึกรายรับรายจ่าย</b>
-      <div class="muted small">บันทึกทุกรายการเพื่อดูยอดเงินแต่ละกระเป๋า รายงานรายเดือน และตั้งงบประมาณ</div>
-      <button class="btn" data-action="add-tx" style="margin-top:14px">＋ เพิ่มรายการแรก</button>
-      ${state.bills.length || isCloud() ? '' : '<button class="btn ghost" data-action="sample">ลองใช้ข้อมูลตัวอย่าง</button>'}
-    </div>`}
+    ${homeCols.join('</div><div class="home-col">')}
     ${state.bills.length || money.txns.length ? '' : installTip()}
+    <button class="home-edit" data-action="home-order">${svgIcon('menu')}<span>จัดลำดับหน้าหลัก</span></button>
     </div></div>
   `;
+}
+
+/* ---------- Home section order ----------
+   money.prefs.homeOrder = ['wallets', 'chat', …] (synced with the other prefs). Unknown ids are
+   dropped and sections added later slot in at their default place, so old saved orders keep working. */
+const HOME_SECS = [
+  { id: 'wallets', label: 'กระเป๋าเงินของฉัน', icon: '👛', col: 1 },
+  { id: 'pkgs', label: 'แพ็กเกจ', icon: '🎟️', col: 1 },
+  { id: 'chat', label: 'แชท', icon: '💬', col: 1 },
+  { id: 'notes', label: 'สิ่งที่ต้องทำ', icon: '📝', col: 1 },
+  { id: 'couple', label: 'รายจ่ายร่วมกับคู่', icon: '🤝', col: 1 },
+  { id: 'partnerloc', label: 'ตอนนี้อยู่ที่ไหน', icon: '📍', col: 1 },
+  { id: 'bills', label: 'บิลที่ต้องจ่ายเดือนนี้', icon: '🧾', col: 1 },
+  { id: 'report', label: 'รายงานเดือนนี้', icon: '📈', col: 2 },
+  { id: 'recent', label: 'รายการล่าสุด', icon: '🕘', col: 2 },
+];
+
+function homeOrder() {
+  const ids = HOME_SECS.map((x) => x.id);
+  const saved = Array.isArray(money.prefs.homeOrder) ? money.prefs.homeOrder.filter((id, i, a) => ids.includes(id) && a.indexOf(id) === i) : [];
+  const out = saved.slice();
+  ids.forEach((id, i) => {
+    if (out.includes(id)) return;
+    // Put a missing section right after the nearest section that comes before it by default.
+    const prev = ids.slice(0, i).reverse().find((p) => out.includes(p));
+    out.splice(prev ? out.indexOf(prev) + 1 : 0, 0, id);
+  });
+  return out;
+}
+
+function setHomeOrder(list) {
+  const def = HOME_SECS.map((x) => x.id);
+  money.prefs.homeOrder = list && list.join() !== def.join() ? list : null;
+  savePrefs();
+}
+
+function homeOrderSheet() {
+  const order = homeOrder();
+  const sec = (id) => HOME_SECS.find((x) => x.id === id);
+  const custom = Array.isArray(money.prefs.homeOrder);
+  openSheet(`
+    <div class="sheet-head"><span></span><h2>จัดลำดับหน้าหลัก</h2><button class="link-btn strong" data-action="close">เสร็จ</button></div>
+    <div class="list ho-list" id="hoList">${order.map((id, i) => `
+      <div class="item ho-row" data-sort="${id}">
+        <span class="ho-ico">${sec(id).icon}</span>
+        <div class="main"><div class="name">${esc(sec(id).label)}</div></div>
+        <button type="button" class="ho-btn" data-ho-move="-1" aria-label="เลื่อนขึ้น" ${i === 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="ho-btn" data-ho-move="1" aria-label="เลื่อนลง" ${i === order.length - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <span class="drag-h" aria-label="ลากเพื่อเรียง">${svgIcon('menu')}</span>
+      </div>`).join('')}
+    </div>
+    ${custom ? '<button type="button" class="btn ghost" id="hoReset" style="margin-top:14px">คืนค่าลำดับเดิม</button>' : ''}
+    <p class="hint">กดลูกศรเพื่อเลื่อนขึ้นลง หรือลาก ☰ เพื่อเรียง ส่วนที่ยังไม่มีข้อมูลจะไม่แสดงบนหน้าหลัก${isCloud() ? ' ลำดับนี้ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+  `);
+  const list = $('#hoList');
+  const commit = () => {
+    setHomeOrder([...list.querySelectorAll('.ho-row')].map((x) => x.dataset.sort));
+    if (ui.tab === 'home') render();
+  };
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ho-move]');
+    if (!b) return;
+    const ids = homeOrder();
+    const i = ids.indexOf(b.closest('.ho-row').dataset.sort);
+    const j = i + Number(b.dataset.hoMove);
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    setHomeOrder(ids);
+    if (ui.tab === 'home') render();
+    const y = $('#sheet').scrollTop;
+    homeOrderSheet();
+    $('#sheet').scrollTop = y;
+  });
+  sortable(list, () => { commit(); const y = $('#sheet').scrollTop; homeOrderSheet(); $('#sheet').scrollTop = y; });
+  const r = $('#hoReset');
+  if (r) r.addEventListener('click', () => { setHomeOrder(null); if (ui.tab === 'home') render(); homeOrderSheet(); toast('คืนค่าแล้ว'); });
 }
 
 function homeReport(ym, S) {
@@ -2700,6 +2781,7 @@ function moneyAction(action, el) {
     case 'tx-menu': txMenu(); break;
     case 'labels': labelsSheet(); break;
     case 'categories': catsSheet(); break;
+    case 'home-order': homeOrderSheet(); break;
     case 'add-cat': catForm(null, { type: ui.catType }); break;
     case 'add-label': labelForm(); break;
     case 'label-filter': labelFilterSheet(); break;
@@ -2714,3 +2796,6 @@ function moneyAction(action, el) {
   }
   return true;
 }
+
+// Home lays sections out in one list on a phone and two columns on a desktop; redo it when that changes.
+window.matchMedia('(min-width: 1024px)').addEventListener('change', () => { if (ui.tab === 'home') renderHome(); });
