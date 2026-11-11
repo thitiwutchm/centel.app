@@ -89,15 +89,36 @@
     return leafletP;
   }
 
-  // A short Thai name for a spot: "ชื่อสถานที่, เขต/อำเภอ, จังหวัด".
+  // The spot named like a live place from the phone: "ต.สุเทพ, อ.เมืองเชียงใหม่" (Bangkok:
+  // "แขวง…, เขต…"). OpenStreetMap's Nominatim first, then BigDataCloud (the page's own lookup).
+  const short = (v) => v.replace(/^ตำบล\s*/, 'ต.').replace(/^อำเภอ\s*/, 'อ.').replace(/^จังหวัด\s*/, '');
+  function thaiArea(names) {
+    const t = names.find((v) => v && /^(ตำบล|แขวง)/.test(v));
+    const d = names.find((v) => v && /^(อำเภอ|เขต)/.test(v));
+    return t || d ? [t, d].filter(Boolean).map(short).join(', ') : '';
+  }
   async function placeName(lat, lon) {
     try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&zoom=17&accept-language=th`);
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&zoom=14&accept-language=th`);
+      if (r.ok) {
+        const a = (await r.json()).address || {};
+        const n = thaiArea([a.city_district, a.suburb, a.quarter, a.village, a.town, a.municipality, a.county, a.city, a.district]);
+        if (n) return n;
+        if (a.country_code && a.country_code !== 'th') {
+          const n2 = [a.city || a.town || a.village || a.county, a.country].filter(Boolean).join(', ');
+          if (n2) return n2;
+        }
+      }
+    } catch (e) { /* try the next one */ }
+    try {
+      const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&localityLanguage=th`);
       if (!r.ok) return '';
-      const j = await r.json(), a = j.address || {};
-      const area = a.suburb || a.city_district || a.district || a.town || a.village || a.county || '';
-      const prov = a.state || a.province || a.city || '';
-      return [j.name || a.road || '', area, prov].filter((v, i, x) => v && x.indexOf(v) === i).slice(0, 3).join(', ');
+      const j = await r.json();
+      const adm = ((j.localityInfo && j.localityInfo.administrative) || []).map((x) => x.name);
+      const n = thaiArea([...adm, j.locality, j.city]);
+      if (n) return n;
+      const place = [...new Set([j.locality, j.city, j.principalSubdivision].filter(Boolean))].slice(0, 2).map(short).join(', ');
+      return j.countryCode && j.countryCode !== 'TH' && j.countryName ? [place, j.countryName].filter(Boolean).join(', ') : place;
     } catch (e) { return ''; }
   }
 
@@ -197,6 +218,8 @@
       const c = sp.center;
       if (!c) return;
       here.disabled = true;
+      // The name lookup may not have finished (or failed): ask again so the pin isn't just numbers.
+      if (!sp.name) { nameSeq++; sp.name = await placeName(c.lat, c.lon); }
       try {
         await P.pin({ lat: c.lat, lon: c.lon, place: sp.name || null });
         sp.q = '';
