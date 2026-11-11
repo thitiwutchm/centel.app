@@ -216,7 +216,7 @@
     const sub = !p || !p.sharing
       ? (who === 'me' ? 'ยังไม่ได้แชร์ตำแหน่งของคุณ' : `${esc(partnerName())} ยังไม่ได้เปิดแชร์ตำแหน่ง`)
       : !has ? 'รอตำแหน่งแรก…'
-        : `${words ? `<span>${esc(words)}</span> · ` : ''}<span>${ago(p.at)}</span>`;
+        : `${p.pinned ? '<span>📌 ปักหมุด</span> · ' : ''}${words ? `<span>${esc(words)}</span> · ` : ''}<span>${ago(p.at)}</span>`;
     const title = has ? `${name} · ${esc(placeName(p))}` : name;
     const right = wx ? `<div class="right pl-wx"><span class="pl-wx-ico">${ico}</span><b>${Math.round(wx.temp)}°</b></div>` : '';
     const inner = `${userAvatar(u || {}, 'avatar pl-av')}
@@ -267,7 +267,7 @@
       if (!p || !p.sharing || p.lat == null) return;
       const wx = p.wx ? `${wxLook(p.wx.code, p.wx.day)[0]} ${Math.round(p.wx.temp)}°C · ` : '';
       out.push({ who, lat: Number(p.lat), lon: Number(p.lon), me: who === 'me',
-        title: who === 'me' ? 'ฉัน' : partnerName(), subtitle: `${wx}${placeName(p)} · ${ago(p.at)}` });
+        title: who === 'me' ? 'ฉัน' : partnerName(), subtitle: `${p.pinned ? '📌 ปักหมุด · ' : ''}${wx}${placeName(p)} · ${ago(p.at)}` });
     };
     add(pl.data.partner, 'partner');
     add(pl.data.me, 'me');
@@ -324,6 +324,29 @@
       ${me.sharing && me.at ? `<p class="hint">ตำแหน่งล่าสุดของคุณ: ${esc(placeName(me))} · ${ago(me.at)}</p>` : ''}
       <p class="hint">${partner && partner.sharing ? `${esc(partnerName())} แชร์ตำแหน่งให้คุณอยู่` : `${esc(partnerName())} ยังไม่ได้เปิดแชร์ตำแหน่ง`}</p>
       <p class="hint">${esc(partnerName())} เห็นตำแหน่งล่าสุดของคุณและอุณหภูมิที่นั่นบนหน้าหลัก เซิร์ฟเวอร์เก็บเฉพาะตำแหน่งล่าสุด ไม่เก็บเส้นทางย้อนหลัง ปิดสวิตช์แล้วตำแหน่งจะถูกลบทันที · อากาศจาก Open-Meteo</p>`;
+  };
+
+  // For Account › ตั้งค่าพิเศษ (special.js): the pinned place.
+  window.partnerLocPin = {
+    me: () => (pl.data && pl.data.me) || null,
+    ready,
+    async pin(p) {
+      const r = await api('PUT', '/location/pin', p);
+      pl.data = { ...(pl.data || {}), me: r.me };
+      rerender();
+      return r.me;
+    },
+    async unpin() {
+      const r = await api('DELETE', '/location/pin');
+      pl.data = { ...(pl.data || {}), me: r.me };
+      // Send the live place again right away.
+      if (plugin && typeof plugin.now === 'function') plugin.now().catch(() => {});
+      else sendFromPage(false);
+      setTimeout(() => load(true), 4000);
+      rerender();
+      return r.me;
+    },
+    load: () => load(true),
   };
 
   window.partnerLocBind = () => {

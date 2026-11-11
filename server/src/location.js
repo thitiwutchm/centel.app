@@ -113,6 +113,7 @@ function view(row, self = false) {
     lat: row.lat, lon: row.lon, acc: row.acc ?? undefined, place: row.place || undefined,
     src: row.src || undefined, at: row.at,
   });
+  if (row.pinned) out.pinned = true;
   if (row.temp != null) out.wx = { temp: row.temp, feels: row.feels ?? undefined, code: row.wcode ?? undefined, day: row.is_day ?? undefined, at: row.wx_at };
   return out;
 }
@@ -121,7 +122,7 @@ async function savePlace(userId, p, src) {
   const r = await pool.query(
     `update user_locations set lat = $2, lon = $3, acc = $4, place = coalesce($5, case when lat is not null and abs(lat - $2) < 0.005 and abs(lon - $3) < 0.005 then place end),
        src = $6, at = now(), updated_at = now()
-     where user_id = $1 and sharing returning *`, [userId, p.lat, p.lon, p.acc, p.place, src]);
+     where user_id = $1 and sharing and not pinned returning *`, [userId, p.lat, p.lon, p.acc, p.place, src]);
   return r.rows[0] || null;
 }
 
@@ -148,7 +149,7 @@ router.put('/sharing', wrap(async (req, res) => {
       `insert into user_locations (user_id, sharing) values ($1, true)
        on conflict (user_id) do update set sharing = true, updated_at = now() returning *`, [req.user.id])
     : await pool.query(
-      `update user_locations set sharing = false, token_hash = null, lat = null, lon = null, acc = null, place = null,
+      `update user_locations set sharing = false, pinned = false, token_hash = null, lat = null, lon = null, acc = null, place = null,
          src = null, at = null, temp = null, feels = null, wcode = null, is_day = null, wx_lat = null, wx_lon = null, wx_at = null,
          updated_at = now()
        where user_id = $1 returning *`, [req.user.id]);
@@ -160,8 +161,34 @@ router.post('/', rateLimit(120, 60 * 60000), wrap(async (req, res) => {
   const p = readPlace(req.body);
   if (!p) throw bad('bad_place');
   const row = await savePlace(req.user.id, p, 'app');
-  if (!row) throw bad('not_sharing', 409);
+  if (!row) {
+    // Pinned: the live place is not saved, the pin stays.
+    const cur = await getRow(req.user.id);
+    if (cur && cur.sharing && cur.pinned) return res.json({ me: view(await withWeather(cur), true) });
+    throw bad('not_sharing', 409);
+  }
   res.json({ me: view(await withWeather(row), true) });
+}));
+
+// Pins my shared place by hand; the partner sees it as a pin. DELETE goes back to live updates.
+router.put('/pin', rateLimit(120, 60 * 60000), wrap(async (req, res) => {
+  const p = readPlace(req.body);
+  if (!p) throw bad('bad_place');
+  const r = await pool.query(
+    `update user_locations set pinned = true, lat = $2, lon = $3, acc = null, place = $4, src = 'pin', at = now(), updated_at = now()
+     where user_id = $1 and sharing returning *`, [req.user.id, p.lat, p.lon, p.place]);
+  if (!r.rows[0]) throw bad('not_sharing', 409);
+  res.json({ me: view(await withWeather(r.rows[0]), true) });
+}));
+
+router.delete('/pin', wrap(async (req, res) => {
+  // The pinned place is dropped, so it is never shown as a live one; the next live update fills it.
+  const r = await pool.query(
+    `update user_locations set pinned = false, lat = null, lon = null, acc = null, place = null, src = null, at = null,
+       temp = null, feels = null, wcode = null, is_day = null, wx_lat = null, wx_lon = null, wx_at = null, updated_at = now()
+     where user_id = $1 and pinned returning *`, [req.user.id]);
+  if (!r.rows[0]) return res.json({ me: view(await getRow(req.user.id), true) });
+  res.json({ me: view(r.rows[0] || null, true) });
 }));
 
 // A new key for the iOS app's background updates (the old one stops working).
@@ -184,6 +211,6 @@ pingRouter.post('/', rateLimit(600, 60 * 60000), wrap(async (req, res) => {
   if (!row || !row.sharing) return res.status(410).json({ error: 'stopped' });
   const p = readPlace(req.body);
   if (!p) throw bad('bad_place');
-  await savePlace(row.user_id, p, 'bg');
+  await savePlace(row.user_id, p, 'bg'); // a pinned place is left as it is
   res.json({ ok: true });
 }));
