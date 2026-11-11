@@ -4,7 +4,7 @@
    they have left (ยอดเงินรวม), and optionally each wallet. The switch is the pill under the
    balance on Home, or Account › คู่ของฉัน › แชร์เงินคงเหลือให้คู่. While it is on, this page
    sends its totals to /api/balance whenever they change (server/src/balance.js keeps only the
-   latest). The partner sees them in the Home card "เงินคงเหลือของ …". Loaded after app.js. */
+   latest). The partner sees them in Home's ร่วมกับ … card. Loaded after app.js. */
 
 (() => {
   const bs = { data: null, at: 0, busy: false, sent: '', timer: null };
@@ -100,22 +100,19 @@
       <span class="bs-dot"></span>${on ? `แชร์ให้ ${esc(partnerName())} อยู่` : `แชร์ให้ ${esc(partnerName())}`}</button>`;
   };
 
-  // My partner's balance, when they share it.
-  window.partnerBalCard = () => {
+  // My partner's balance, when they share it: rows inside the ร่วมกับ … card (cloud.js coupleCard).
+  window.partnerBalRows = () => {
     if (!ready() || !bs.data) return '';
     const p = bs.data.partner;
     if (!p || !p.sharing || p.total == null) return '';
     const hide = money.prefs.hideBalance;
     const amt = (n) => (hide ? '฿ ••••••' : sbaht(n));
     return `
-      <div class="section-row"><span>💰 เงินคงเหลือของ ${esc(partnerName())}</span><button class="link-btn" data-set-open="balshare">ตั้งค่า</button></div>
-      <div class="card list-card pb-card">
-        <div class="item pb-total">${userAvatar(cloud.partner, 'avatar pb-av')}
-          <div class="main"><div class="name">ยอดเงินรวม</div><div class="sub">อัปเดต ${ago(p.at)}</div></div>
-          <div class="right"><div class="amt">${amt(p.total)}</div></div></div>
-        ${(p.wallets || []).map((w) => `<div class="item pb-wallet"><span class="pb-ico">${esc(w.emoji || '👛')}</span>
-          <div class="main"><div class="name">${esc(w.name)}</div></div><div class="right"><div class="amt">${amt(w.balance)}</div></div></div>`).join('')}
-      </div>`;
+      <button class="item pb-total" data-set-open="balshare">${userAvatar(cloud.partner, 'avatar pb-av')}
+        <div class="main"><div class="name">เงินคงเหลือของ ${esc(partnerName())}</div><div class="sub">อัปเดต ${ago(p.at)}</div></div>
+        <div class="right"><div class="amt">${amt(p.total)}</div></div></button>
+      ${(p.wallets || []).map((w) => `<div class="item pb-wallet"><span class="pb-ico">${esc(w.emoji || '👛')}</span>
+        <div class="main"><div class="name">${esc(w.name)}</div></div><div class="right"><div class="amt">${amt(w.balance)}</div></div></div>`).join('')}`;
   };
 
   /* ---------- Account › คู่ของฉัน › แชร์เงินคงเหลือให้คู่ ---------- */
