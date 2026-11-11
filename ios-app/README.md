@@ -30,6 +30,14 @@ app picks it up on next launch, with no App Store update needed.
   processing) run the same check while the app is closed, keep the slips found in
   UserDefaults (`photoSlips.found`) and post a "พบสลิปใหม่" notification; AI reading waits
   for the app to open.
+- Partner location (`App/PartnerLocation.swift`, Account › แชร์ตำแหน่งกับคู่): with "Always"
+  location access, iOS wakes or relaunches the app on significant location changes (about every
+  500 m, cell/Wi-Fi, low battery). The place is named on the phone (CLGeocoder, Thai) and posted
+  to `/api/location/ping` with the app's own key from `/api/location/token`, kept in the Keychain
+  (after first unlock). The server answers 410 once sharing is off and the watcher stops.
+  `AppDelegate` calls `PartnerLocationAgent.shared.resume()` at launch so relaunches get the
+  place. No `location` background mode is needed for significant changes. The page side is
+  `partnerloc.js`; the server keeps only the latest place and the Open-Meteo weather there.
 - Swift Package Manager (no CocoaPods).
 
 ## Build on the Mac

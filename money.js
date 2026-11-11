@@ -900,6 +900,8 @@ function renderHome() {
 
     ${coupleCard()}
 
+    ${window.partnerLocCard ? partnerLocCard() : ''}
+
     ${state.bills.length ? `
     <div class="section-row"><span>บิลที่ต้องจ่ายเดือนนี้</span><button class="link-btn" data-goto="bills">ดูบิล</button></div>
     <div class="card list-card">

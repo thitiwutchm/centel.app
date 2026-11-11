@@ -577,6 +577,25 @@ const I18N_EN = {
   '{0} รายการ รวม {1}': '{0} transactions, {1} in total', 'ลบทุกงวดแล้ว': 'All installments deleted',
   'กรุณาใส่จำนวนงวด 2–120 เดือน': 'Enter 2–120 months', 'ยอดน้อยเกินไปสำหรับจำนวนงวดนี้': 'The amount is too small for that many months',
   'ผ่อน 0% {0} เดือน เดือนละ {1} ถึง {2}': '0% over {0} months, {1} a month until {2}',
+  // Partner location (partnerloc.js)
+  'คู่ของฉัน': 'My partner', 'แชร์ตำแหน่งกับคู่': 'Share location with partner', '📍 ตอนนี้อยู่ที่ไหน': '📍 Where we are now',
+  'แชร์ตำแหน่งของฉันให้ {0}': 'Share my location with {0}', 'ฉัน': 'Me', 'ยังไม่ได้แชร์ตำแหน่งของคุณ': 'You are not sharing your location',
+  '{0} ยังไม่ได้เปิดแชร์ตำแหน่ง': '{0} is not sharing their location', '{0} แชร์ตำแหน่งให้คุณอยู่': '{0} is sharing their location with you',
+  'รอตำแหน่งแรก…': 'Waiting for the first location…', 'เมื่อสักครู่': 'just now', '{0} นาทีที่แล้ว': '{0} min ago',
+  '{0} ชม.ที่แล้ว': '{0} h ago', '{0} วันที่แล้ว': '{0} days ago',
+  'ท้องฟ้าแจ่มใส': 'Clear', 'มีเมฆบางส่วน': 'Partly cloudy', 'เมฆมาก': 'Cloudy', 'มีหมอก': 'Fog', 'ฝนปรอย': 'Drizzle',
+  'ฝนตก': 'Rain', 'หิมะตก': 'Snow', 'ฝนตกเป็นช่วงๆ': 'Showers', 'พายุฝนฟ้าคะนอง': 'Thunderstorm',
+  '📍 อัปเดตตำแหน่งตอนนี้': '📍 Update location now', 'กำลังหาตำแหน่ง…': 'Finding location…',
+  'ตำแหน่งล่าสุดของคุณ: {0} · {1}': 'Your latest location: {0} · {1}',
+  'อัปเดตเองแม้ปิดแอป เมื่อคุณย้ายที่ไปราว 500 เมตรขึ้นไป (โหมดประหยัดแบตของ iOS) และทุกครั้งที่เปิดแอป': 'Updates on its own even when the app is closed, whenever you move about 500 m or more (iOS battery-saving mode), and every time you open the app',
+  'อัปเดตทุกครั้งที่เปิดแอป · ถ้าอยากให้อัปเดตเองแม้ปิดแอป ใช้แอป METANG บน iPhone': 'Updates each time you open the app · for updates while it is closed, use the METANG app on iPhone',
+  'ตอนนี้อัปเดตเฉพาะตอนเปิดแอป ถ้าอยากให้อัปเดตเองแม้ปิดแอป ไปที่ การตั้งค่า › METANG › ตำแหน่ง แล้วเลือก "ตลอดเวลา"': 'Only updates while the app is open. For updates when it is closed, go to Settings › METANG › Location and choose "Always"',
+  'METANG ยังไม่ได้รับสิทธิ์ใช้ตำแหน่ง เปิดได้ที่ การตั้งค่า › METANG › ตำแหน่ง › ตลอดเวลา': 'METANG may not use your location yet. Allow it in Settings › METANG › Location › Always',
+  '{0} เห็นตำแหน่งล่าสุดของคุณและอุณหภูมิที่นั่นบนหน้าหลัก เซิร์ฟเวอร์เก็บเฉพาะตำแหน่งล่าสุด ไม่เก็บเส้นทางย้อนหลัง ปิดสวิตช์แล้วตำแหน่งจะถูกลบทันที · อากาศจาก Open-Meteo': '{0} sees your latest location and the temperature there on Home. Only the latest location is kept, never a history, and it is deleted as soon as you switch this off · Weather by Open-Meteo',
+  'เปิดแชร์ตำแหน่งให้ {0} แล้ว': 'Sharing your location with {0}', 'ปิดแชร์ตำแหน่งแล้ว ลบตำแหน่งล่าสุดออกแล้ว': 'Location sharing off, latest location deleted',
+  'ต้องอนุญาตให้ METANG ใช้ตำแหน่งก่อน': 'Allow METANG to use your location first', 'เลือก "อนุญาตตลอด" เพื่อให้อัปเดตเองแม้ปิดแอป': 'Choose "Always Allow" so it updates while the app is closed',
+  'อัปเดตตำแหน่งไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not update location, try again',
+  'อยู่ที่เดียวกัน': 'In the same place', 'ห่างกัน {0} กม.': '{0} km apart', 'ห่างกัน {0} ม.': '{0} m apart', 'เส้นตรง': 'straight line',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.

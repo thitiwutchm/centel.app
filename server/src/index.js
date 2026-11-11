@@ -8,6 +8,7 @@ import { oauthRouter, wellKnown } from './oauth.js';
 import { mcpRouter, aiRouter } from './mcp.js';
 import { udidReply } from './udid.js';
 import accRoutes, { startAccJobs } from './acc/routes.js';
+import locationRoutes, { pingRouter as locationPing } from './location.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -32,6 +33,9 @@ app.use('/api/oauth', oauthRouter);
 app.use('/api/ai', loadUser, csrfGuard, aiRouter);
 // Accounting (account.centel.app): its own router so its public document links skip sign-in.
 app.use('/api/acc', loadUser, csrfGuard, accRoutes);
+// Partner location: the iOS app posts in the background with its own token, no cookie.
+app.use('/api/location/ping', locationPing);
+app.use('/api/location', loadUser, csrfGuard, locationRoutes);
 app.use('/api', loadUser, csrfGuard, routes);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 

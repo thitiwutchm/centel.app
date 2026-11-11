@@ -9,6 +9,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Slips from Photos: background checks must be registered before launch ends.
         PhotoSlipsBackground.register()
+        // Partner location: iOS relaunches the app for a significant location change; the
+        // watcher has to be started again for that place to be delivered.
+        PartnerLocationAgent.shared.resume()
         return true
     }
 
