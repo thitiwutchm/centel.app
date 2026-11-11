@@ -896,7 +896,7 @@ function renderHome() {
   };
   // The person's order (Account › จัดลำดับหน้าหลัก). On a phone it is one list top to bottom;
   // on a desktop each section keeps its usual column and the order applies within it.
-  const order = homeOrder();
+  const order = homeOrder().filter((id) => !homeHidden().includes(id));
   const wide = window.matchMedia('(min-width: 1024px)').matches;
   const homeCols = wide
     ? [1, 2].map((c) => order.filter((id) => HOME_SECS.find((x) => x.id === id).col === c).map((id) => secs[id]()).join('\n'))
@@ -968,36 +968,68 @@ function setHomeOrder(list) {
   savePrefs();
 }
 
+// Sections switched off with the eye in จัดลำดับหน้าหลัก (money.prefs.homeHidden, synced).
+function homeHidden() {
+  const ids = HOME_SECS.map((x) => x.id);
+  return Array.isArray(money.prefs.homeHidden) ? money.prefs.homeHidden.filter((id) => ids.includes(id)) : [];
+}
+function setHomeHidden(id, hide) {
+  const set = new Set(homeHidden());
+  if (hide) set.add(id); else set.delete(id);
+  money.prefs.homeHidden = set.size ? [...set] : null;
+  savePrefs();
+}
+
 const HO_GRIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 
 function homeOrderSheet() {
   const order = homeOrder();
+  const hidden = homeHidden();
   const sec = (id) => HOME_SECS.find((x) => x.id === id);
   openSheet(`
     <div class="sheet-head"><span class="sheet-head-pad"></span><h2>จัดลำดับหน้าหลัก</h2><button class="link-btn strong" data-action="close">เสร็จ</button></div>
     <p class="ho-intro">เลือกว่าอยากเห็นอะไรก่อนบนหน้าหลัก</p>
     <div class="ho-list" id="hoList">${order.map((id) => `
-      <div class="ho-row" data-sort="${id}">
+      <div class="ho-row${hidden.includes(id) ? ' off' : ''}" data-sort="${id}">
         <span class="ho-ico" style="--c:${sec(id).color}">${sec(id).icon}</span>
-        <div class="main"><div class="name">${esc(sec(id).label)}</div><div class="sub">${esc(sec(id).sub)}</div></div>
+        <div class="main"><div class="name">${esc(sec(id).label)}</div><div class="sub">${hidden.includes(id) ? 'ซ่อนจากหน้าหลัก' : esc(sec(id).sub)}</div></div>
+        <button type="button" class="ho-eye" data-ho-eye="${id}" aria-pressed="${hidden.includes(id)}" aria-label="${hidden.includes(id) ? 'แสดงบนหน้าหลัก' : 'ซ่อนจากหน้าหลัก'}">${svgIcon(hidden.includes(id) ? 'eyeOff' : 'eye')}</button>
         <span class="drag-h" aria-label="ลากเพื่อเรียง">${HO_GRIP}</span>
       </div>`).join('')}
     </div>
     <div class="ho-foot">
-      <button type="button" class="ho-reset" id="hoReset" ${Array.isArray(money.prefs.homeOrder) ? '' : 'hidden'}>คืนค่าลำดับเดิม</button>
-      <p class="ho-hint">กดค้างที่จุดด้านขวาแล้วลากเพื่อย้าย ส่วนที่ยังไม่มีข้อมูลจะไม่แสดงบนหน้าหลัก${isCloud() ? ' ลำดับนี้ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+      <button type="button" class="ho-reset" id="hoReset" ${Array.isArray(money.prefs.homeOrder) || hidden.length ? '' : 'hidden'}>คืนค่าลำดับเดิม</button>
+      <p class="ho-hint">กดรูปตาเพื่อซ่อนหรือแสดงส่วนนั้น กดค้างที่จุดด้านขวาแล้วลากเพื่อย้าย ส่วนที่ยังไม่มีข้อมูลจะไม่แสดงบนหน้าหลัก${isCloud() ? ' ลำดับนี้ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
     </div>
   `);
   const list = $('#hoList');
   const rows = () => [...list.querySelectorAll('.ho-row')];
   const commit = () => {
     setHomeOrder(rows().map((x) => x.dataset.sort));
-    $('#hoReset').hidden = !Array.isArray(money.prefs.homeOrder);
+    $('#hoReset').hidden = !Array.isArray(money.prefs.homeOrder) && !homeHidden().length;
     if (ui.tab === 'home') render();
   };
   sortable(list, commit);
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ho-eye]');
+    if (!b) return;
+    const id = b.dataset.hoEye;
+    const hide = !homeHidden().includes(id);
+    setHomeHidden(id, hide);
+    const row = b.closest('.ho-row');
+    const s = HOME_SECS.find((x) => x.id === id);
+    row.classList.toggle('off', hide);
+    row.querySelector('.sub').textContent = hide ? 'ซ่อนจากหน้าหลัก' : s.sub;
+    b.innerHTML = svgIcon(hide ? 'eyeOff' : 'eye');
+    b.setAttribute('aria-pressed', String(hide));
+    b.setAttribute('aria-label', hide ? 'แสดงบนหน้าหลัก' : 'ซ่อนจากหน้าหลัก');
+    $('#hoReset').hidden = !Array.isArray(money.prefs.homeOrder) && !homeHidden().length;
+    if (ui.tab === 'home') render();
+  });
   $('#hoReset').addEventListener('click', () => {
     setHomeOrder(null);
+    money.prefs.homeHidden = null;
+    savePrefs();
     if (ui.tab === 'home') render();
     const y = $('#sheet').scrollTop; homeOrderSheet(); $('#sheet').scrollTop = y;
     toast('คืนค่าแล้ว');
