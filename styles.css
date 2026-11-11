@@ -1099,6 +1099,26 @@ body::before {
 .cat-row.kid .ico { width: 34px; height: 34px; flex-basis: 34px; font-size: 17px; }
 .drag-h { display: grid; place-items: center; width: 44px; height: 44px; color: var(--muted); touch-action: none; cursor: grab; flex: 0 0 auto; }
 .dragging { position: relative; z-index: 5; box-shadow: 0 10px 30px rgba(0, 0, 0, .25); opacity: .96; }
+/* Home section order (จัดลำดับหน้าหลัก): one floating card per section, like iOS widget lists */
+.ho-intro { margin: -4px 4px 14px; font-size: 14px; color: var(--muted); text-align: center; }
+.ho-list { display: flex; flex-direction: column; gap: 8px; }
+.ho-row { display: flex; align-items: center; gap: 12px; padding: 10px 4px 10px 12px; border-radius: 18px; background: var(--card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04); -webkit-user-select: none; user-select: none; }
+.ho-row .main { flex: 1; min-width: 0; }
+.ho-row .name { font-weight: 600; font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ho-row .sub { font-size: 12.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ho-ico { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 13px; display: grid; place-items: center; font-size: 21px; line-height: 1;
+  background: color-mix(in srgb, var(--c) 16%, transparent); }
+.ho-row .drag-h { width: 48px; height: 48px; margin-left: -4px; }
+.ho-row .drag-h svg { width: 20px; height: 20px; fill: currentColor; stroke: none; opacity: .55; }
+.ho-row.dragging { box-shadow: 0 14px 34px rgba(0, 0, 0, .22); scale: 1.02; }
+.ho-foot { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 18px 0 6px; }
+.ho-reset { border: 0; border-radius: 20px; padding: 9px 18px; background: var(--accent-soft); color: var(--accent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.ho-reset[hidden] { display: none; }
+.ho-hint { margin: 0 12px; font-size: 12.5px; color: var(--muted); text-align: center; line-height: 1.5; }
+.home-edit { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 20px auto 8px; padding: 9px 16px; border: 0; border-radius: 20px;
+  background: rgba(255, 255, 255, .22); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); color: var(--on-bg); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.home-edit svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .cat-row.dragging { border-radius: 14px; background: var(--card); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 .cat-preview { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 4px 0 16px; }
 .cat-preview .ico.big { width: 64px; height: 64px; font-size: 32px; display: grid; place-items: center; }

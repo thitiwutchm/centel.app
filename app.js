@@ -511,6 +511,7 @@ function renderSettings() {
     ${setGroup('การแสดงผล', [
       setRow({ set: 'theme', ico: '🎨', color: '#ff7a45', name: 'ธีม', value: `<span class="set-sw tp-${theme.id}"><span class="tp-prev"></span></span>${theme.label}` }),
       window.appIconSettings ? setRow({ set: 'appicon', ico: '📱', color: '#ff4d8d', name: 'ไอคอนแอป' }) : '',
+      setRow({ action: 'home-order', ico: '↕️', color: '#00a37a', name: 'จัดลำดับหน้าหลัก' }),
       setRow({ set: 'lang', ico: '🌐', color: '#2f6bff', name: 'ภาษา · Language', value: LANG === 'en' ? 'English' : '<span translate="no">ไทย</span>' }),
     ])}
 
@@ -1644,7 +1645,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // The iOS app's web view has no service worker, so it learns about a new version here: when the
 // app comes back to the screen, the deployed sw.js says which version is live (its CACHE name);
 // if that is not the one this page loaded with, the page reloads (only with no sheet open).
-const APP_BUILD = 'billplanner-v110'; // keep equal to CACHE in sw.js
+const APP_BUILD = 'billplanner-v112'; // keep equal to CACHE in sw.js
 let buildChecked = 0;
 function checkNewBuild() {
   if (location.protocol === 'file:' || Date.now() - buildChecked < 30000) return;
