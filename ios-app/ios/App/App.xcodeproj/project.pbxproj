@@ -24,6 +24,7 @@
 		C3A7E3022F0B000100A1B2C3 /* AppIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */; };
 		C3A7E4022F0B000100A1B2C3 /* ShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */; };
 		C3A7E6022F0D000100A1B2C3 /* AppLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E6012F0D000100A1B2C3 /* AppLock.swift */; };
+		C3A7E7022F0E000100A1B2C3 /* PartnerLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E7012F0E000100A1B2C3 /* PartnerLocation.swift */; };
 		C3A7E5022F0C000100A1B2C3 /* PhotoSlips.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E5012F0C000100A1B2C3 /* PhotoSlips.swift */; };
 		C3A7E5042F0B000100A1B2C3 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3A7E5032F0B000100A1B2C3 /* ShareViewController.swift */; };
 		C3A7E5082F0B000100A1B2C3 /* CentelShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C3A7E5072F0B000100A1B2C3 /* CentelShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -51,6 +52,7 @@
 		C3A7E3012F0B000100A1B2C3 /* AppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcon.swift; sourceTree = "<group>"; };
 		C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInbox.swift; sourceTree = "<group>"; };
 		C3A7E6012F0D000100A1B2C3 /* AppLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLock.swift; sourceTree = "<group>"; };
+		C3A7E7012F0E000100A1B2C3 /* PartnerLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerLocation.swift; sourceTree = "<group>"; };
 		C3A7E5012F0C000100A1B2C3 /* PhotoSlips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSlips.swift; sourceTree = "<group>"; };
 		C3A7E5032F0B000100A1B2C3 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		C3A7E5052F0B000100A1B2C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -150,6 +152,7 @@
 				C3A7E4012F0B000100A1B2C3 /* ShareInbox.swift */,
 				C3A7E5012F0C000100A1B2C3 /* PhotoSlips.swift */,
 				C3A7E6012F0D000100A1B2C3 /* AppLock.swift */,
+				C3A7E7012F0E000100A1B2C3 /* PartnerLocation.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -331,6 +334,7 @@
 				C3A7E4022F0B000100A1B2C3 /* ShareInbox.swift in Sources */,
 				C3A7E5022F0C000100A1B2C3 /* PhotoSlips.swift in Sources */,
 				C3A7E6022F0D000100A1B2C3 /* AppLock.swift in Sources */,
+				C3A7E7022F0E000100A1B2C3 /* PartnerLocation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
