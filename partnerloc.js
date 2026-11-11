@@ -216,7 +216,7 @@
     const sub = !p || !p.sharing
       ? (who === 'me' ? 'ยังไม่ได้แชร์ตำแหน่งของคุณ' : `${esc(partnerName())} ยังไม่ได้เปิดแชร์ตำแหน่ง`)
       : !has ? 'รอตำแหน่งแรก…'
-        : `${p.pinned ? '<span>📌 ปักหมุด</span> · ' : ''}${words ? `<span>${esc(words)}</span> · ` : ''}<span>${ago(p.at)}</span>`;
+        : `${words ? `<span>${esc(words)}</span> · ` : ''}<span>${ago(p.at)}</span>`;
     const title = has ? `${name} · ${esc(placeName(p))}` : name;
     const right = wx ? `<div class="right pl-wx"><span class="pl-wx-ico">${ico}</span><b>${Math.round(wx.temp)}°</b></div>` : '';
     const inner = `${userAvatar(u || {}, 'avatar pl-av')}
@@ -267,7 +267,7 @@
       if (!p || !p.sharing || p.lat == null) return;
       const wx = p.wx ? `${wxLook(p.wx.code, p.wx.day)[0]} ${Math.round(p.wx.temp)}°C · ` : '';
       out.push({ who, lat: Number(p.lat), lon: Number(p.lon), me: who === 'me',
-        title: who === 'me' ? 'ฉัน' : partnerName(), subtitle: `${p.pinned ? '📌 ปักหมุด · ' : ''}${wx}${placeName(p)} · ${ago(p.at)}` });
+        title: who === 'me' ? 'ฉัน' : partnerName(), subtitle: `${wx}${placeName(p)} · ${ago(p.at)}` });
     };
     add(pl.data.partner, 'partner');
     add(pl.data.me, 'me');
@@ -294,6 +294,48 @@
     Promise.resolve().then(() => plugin.showMap({ points: pts, focus: focus >= 0 ? focus : undefined }))
       .catch(() => { location.href = href; });
   });
+
+  /* ---------- Profile (Account › บัญชีคู่ › tap the partner's picture) ---------- */
+  // The one place a pinned location is labelled 📌 ปักหมุด; the Home card and the map don't say.
+
+  async function profileSheet(who) {
+    if (!ready()) return;
+    if (!pl.data) { try { await load(true); } catch (e) { /* shown as not sharing */ } }
+    if (!pl.data) pl.data = { me: { sharing: false }, partner: { sharing: false } };
+    const me = who === 'me';
+    const u = (me ? cloud.user : cloud.partner) || {};
+    const p = me ? pl.data.me : pl.data.partner;
+    const other = me ? pl.data.partner : pl.data.me;
+    const name = me ? 'ฉัน' : partnerName();
+    const has = p && p.sharing && p.lat != null;
+    const wx = has && p.wx;
+    const [ico, words] = wx ? wxLook(wx.code, wx.day) : ['', ''];
+    const src = !has ? '' : p.pinned ? '📌 ปักหมุด · ตั้งเอง ไม่ใช่จากเครื่อง'
+      : p.src === 'bg' ? '📡 ตำแหน่งจากเครื่อง · อัปเดตเบื้องหลัง' : '📱 ตำแหน่งจากเครื่อง · ตอนเปิดแอป';
+    const dist = has && other && other.lat != null ? distRow(me ? p : other, me ? other : p) : '';
+    openSheet(`
+      <div class="sheet-head">${CLOSE_X}<h2>${esc(name)}</h2><span style="width:40px"></span></div>
+      <div class="pl-prof-head">${userAvatar(u, 'avatar pl-prof-av')}<div class="name">${esc(me ? (cloud.user.name || 'ฉัน') : partnerName())}</div></div>
+      ${!has ? `<p class="hint" style="text-align:center">${!p || !p.sharing ? 'ยังไม่ได้แชร์ตำแหน่ง' : 'รอตำแหน่งแรก…'}</p>` : `
+      <div class="card list-card pl-prof-card">
+        <div class="item"><span class="ho-ico" style="--c:#ff3b30">📍</span><div class="main"><div class="name">${esc(placeName(p))}</div><div class="sub">อัปเดต ${ago(p.at)}</div></div></div>
+        <div class="item${p.pinned ? ' pl-pinned' : ''}"><div class="main"><div class="name">${src}</div></div></div>
+        ${wx ? `<div class="item"><span class="ho-ico" style="--c:#ff9f0a">${ico}</span><div class="main"><div class="name">${Math.round(wx.temp)}°C${words ? ` · ${esc(words)}` : ''}</div>${wx.feels != null ? `<div class="sub">รู้สึกเหมือน ${Math.round(wx.feels)}°C</div>` : ''}</div></div>` : ''}
+        ${dist}
+        <a class="item pl-map-btn" href="${esc(mapUrl(p))}" target="_blank" rel="noopener" data-pl-map="${who}"><span class="pl-map-ico">🗺️</span><div class="main"><div class="name">ดูบนแผนที่</div></div>${svgIcon('chev', 'svg-i sm muted')}</a>
+      </div>`}`);
+  }
+
+  // Capture phase, so nothing under the picture handles the tap first.
+  const openProf = (e) => {
+    const b = e.target.closest('[data-pl-prof]');
+    if (!b) return;
+    if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault(); e.stopPropagation();
+    profileSheet(b.dataset.plProf);
+  };
+  document.addEventListener('click', openProf, true);
+  document.addEventListener('keydown', openProf, true);
 
   /* ---------- Account › แชร์ตำแหน่งกับคู่ ---------- */
 

@@ -934,7 +934,7 @@ function coupleSheet() {
   if (cloud.partner) {
     openSheet(`
       <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>บัญชีคู่</h2><span style="width:40px"></span></div>
-      <div class="card acct">${cloud.partner.avatar ? userAvatar(cloud.partner) : '<div class="avatar">💞</div>'}<div><b>${esc(partnerName())}</b><div class="muted small">${esc(cloud.partner.email)}</div></div></div>
+      <div class="card acct"><span class="pl-prof" role="button" tabindex="0" data-pl-prof="partner" aria-label="โปรไฟล์ ${esc(partnerName())}">${cloud.partner.avatar ? userAvatar(cloud.partner) : '<div class="avatar">💞</div>'}</span><div><b>${esc(partnerName())}</b><div class="muted small">${esc(cloud.partner.email)}</div></div></div>
       <p class="hint">${esc(partnerName())} เห็นเฉพาะรายจ่ายร่วมและงบร่วมของคุณทั้งสอง รายจ่ายส่วนตัวของแต่ละคนมองไม่เห็น</p>
     `);
     return;
