@@ -2023,3 +2023,12 @@ a.btn { text-decoration: none; text-align: center; box-sizing: border-box; }
 .ho-eye svg { width: 20px; height: 20px; }
 .ho-row.off .ho-ico, .ho-row.off .main { opacity: .45; }
 .ho-row.off .ho-eye { color: var(--accent); }
+
+/* Balance sharing (balshare.js): the pill under ยอดเงินรวม and the partner's card. */
+.hb-pills { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.glass-pill.bal-share { display: inline-flex; align-items: center; gap: 7px; padding: 0 14px; }
+.bal-share .bs-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .45; }
+.bal-share.on .bs-dot { background: #34c759; opacity: 1; box-shadow: 0 0 0 3px rgba(52, 199, 89, .3); }
+.pb-card .avatar.pb-av { width: 40px; height: 40px; flex: 0 0 40px; font-size: 18px; }
+.pb-card .pb-total .amt { font-size: 18px; font-weight: 800; }
+.pb-card .pb-ico { width: 40px; flex: 0 0 40px; text-align: center; font-size: 20px; }
