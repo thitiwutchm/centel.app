@@ -295,6 +295,48 @@
       .catch(() => { location.href = href; });
   });
 
+  /* ---------- Profile (Account › บัญชีคู่ › tap the partner's picture) ---------- */
+  // The one place a pinned location is labelled 📌 ปักหมุด; the Home card and the map don't say.
+
+  async function profileSheet(who) {
+    if (!ready()) return;
+    if (!pl.data) { try { await load(true); } catch (e) { /* shown as not sharing */ } }
+    if (!pl.data) pl.data = { me: { sharing: false }, partner: { sharing: false } };
+    const me = who === 'me';
+    const u = (me ? cloud.user : cloud.partner) || {};
+    const p = me ? pl.data.me : pl.data.partner;
+    const other = me ? pl.data.partner : pl.data.me;
+    const name = me ? 'ฉัน' : partnerName();
+    const has = p && p.sharing && p.lat != null;
+    const wx = has && p.wx;
+    const [ico, words] = wx ? wxLook(wx.code, wx.day) : ['', ''];
+    const src = !has ? '' : p.pinned ? '📌 ปักหมุด · ตั้งเอง ไม่ใช่จากเครื่อง'
+      : p.src === 'bg' ? '📡 ตำแหน่งจากเครื่อง · อัปเดตเบื้องหลัง' : '📱 ตำแหน่งจากเครื่อง · ตอนเปิดแอป';
+    const dist = has && other && other.lat != null ? distRow(me ? p : other, me ? other : p) : '';
+    openSheet(`
+      <div class="sheet-head">${CLOSE_X}<h2>${esc(name)}</h2><span style="width:40px"></span></div>
+      <div class="pl-prof-head">${userAvatar(u, 'avatar pl-prof-av')}<div class="name">${esc(me ? (cloud.user.name || 'ฉัน') : partnerName())}</div></div>
+      ${!has ? `<p class="hint" style="text-align:center">${!p || !p.sharing ? 'ยังไม่ได้แชร์ตำแหน่ง' : 'รอตำแหน่งแรก…'}</p>` : `
+      <div class="card list-card pl-prof-card">
+        <div class="item"><span class="ho-ico" style="--c:#ff3b30">📍</span><div class="main"><div class="name">${esc(placeName(p))}</div><div class="sub">อัปเดต ${ago(p.at)}</div></div></div>
+        <div class="item${p.pinned ? ' pl-pinned' : ''}"><div class="main"><div class="name">${src}</div></div></div>
+        ${wx ? `<div class="item"><span class="ho-ico" style="--c:#ff9f0a">${ico}</span><div class="main"><div class="name">${Math.round(wx.temp)}°C${words ? ` · ${esc(words)}` : ''}</div>${wx.feels != null ? `<div class="sub">รู้สึกเหมือน ${Math.round(wx.feels)}°C</div>` : ''}</div></div>` : ''}
+        ${dist}
+        <a class="item pl-map-btn" href="${esc(mapUrl(p))}" target="_blank" rel="noopener" data-pl-map="${who}"><span class="pl-map-ico">🗺️</span><div class="main"><div class="name">ดูบนแผนที่</div></div>${svgIcon('chev', 'svg-i sm muted')}</a>
+      </div>`}`);
+  }
+
+  // Capture phase, so nothing under the picture handles the tap first.
+  const openProf = (e) => {
+    const b = e.target.closest('[data-pl-prof]');
+    if (!b) return;
+    if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault(); e.stopPropagation();
+    profileSheet(b.dataset.plProf);
+  };
+  document.addEventListener('click', openProf, true);
+  document.addEventListener('keydown', openProf, true);
+
   /* ---------- Account › แชร์ตำแหน่งกับคู่ ---------- */
 
   window.partnerLocRow = () => (ready()
@@ -324,6 +366,29 @@
       ${me.sharing && me.at ? `<p class="hint">ตำแหน่งล่าสุดของคุณ: ${esc(placeName(me))} · ${ago(me.at)}</p>` : ''}
       <p class="hint">${partner && partner.sharing ? `${esc(partnerName())} แชร์ตำแหน่งให้คุณอยู่` : `${esc(partnerName())} ยังไม่ได้เปิดแชร์ตำแหน่ง`}</p>
       <p class="hint">${esc(partnerName())} เห็นตำแหน่งล่าสุดของคุณและอุณหภูมิที่นั่นบนหน้าหลัก เซิร์ฟเวอร์เก็บเฉพาะตำแหน่งล่าสุด ไม่เก็บเส้นทางย้อนหลัง ปิดสวิตช์แล้วตำแหน่งจะถูกลบทันที · อากาศจาก Open-Meteo</p>`;
+  };
+
+  // For Account › ตั้งค่าพิเศษ (special.js): the pinned place.
+  window.partnerLocPin = {
+    me: () => (pl.data && pl.data.me) || null,
+    ready,
+    async pin(p) {
+      const r = await api('PUT', '/location/pin', p);
+      pl.data = { ...(pl.data || {}), me: r.me };
+      rerender();
+      return r.me;
+    },
+    async unpin() {
+      const r = await api('DELETE', '/location/pin');
+      pl.data = { ...(pl.data || {}), me: r.me };
+      // Send the live place again right away.
+      if (plugin && typeof plugin.now === 'function') plugin.now().catch(() => {});
+      else sendFromPage(false);
+      setTimeout(() => load(true), 4000);
+      rerender();
+      return r.me;
+    },
+    load: () => load(true),
   };
 
   window.partnerLocBind = () => {

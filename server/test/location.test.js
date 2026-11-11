@@ -119,6 +119,23 @@ test('location through the API', { skip: !API && 'needs API_URL' }, async (t) =>
   assert.equal((await ping(token, { lat: 18.7, lon: 98.9 })).status, 410);
   assert.equal((await ping(t2, { lat: 18.7, lon: 98.9 })).status, 200);
 
+  // A pin: shown to the partner as a pin, and live updates don't move it.
+  const pin = await A('PUT', '/location/pin', { lat: 7.8804, lon: 98.3923, place: 'ภูเก็ต' });
+  assert.equal(pin.me.pinned, true);
+  assert.equal(pin.me.src, 'pin');
+  assert.deepEqual(await ping(t2, { lat: 18.7, lon: 98.9, place: 'เชียงใหม่' }), { status: 200, ok: true });
+  assert.equal((await A('POST', '/location', { lat: 13.7, lon: 100.5 })).me.place, 'ภูเก็ต');
+  seen = (await B('GET', '/location')).partner;
+  assert.equal(seen.place, 'ภูเก็ต');
+  assert.equal(seen.pinned, true);
+  assert.equal((await A('PUT', '/location/pin', { lat: 999, lon: 1 })).status, 400);
+  // Unpinned: the pin is dropped (never shown as live), then live updates come back.
+  assert.deepEqual((await A('DELETE', '/location/pin')).me, { sharing: true, app: true });
+  await ping(t2, { lat: 18.7, lon: 98.9, place: 'เชียงใหม่' });
+  seen = (await B('GET', '/location')).partner;
+  assert.equal(seen.place, 'เชียงใหม่');
+  assert.equal(seen.pinned, undefined);
+
   // Off: the place is forgotten and the app's key stops working.
   assert.deepEqual((await A('PUT', '/location/sharing', { on: false })).me, { sharing: false, app: false });
   assert.deepEqual((await B('GET', '/location')).partner, { sharing: false });
