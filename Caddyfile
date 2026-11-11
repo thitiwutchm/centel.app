@@ -56,6 +56,14 @@
 		}
 		rewrite @acctsite /account{path}
 
+		# invest.centel.app is the investment portfolio in /invest (invest/index.html), same
+		# sign-in and api. centel.app/invest/ serves it too.
+		@investsite {
+			host invest.centel.app
+			not path /invest/*
+		}
+		rewrite @investsite /invest{path}
+
 		# Always revalidate the shell and service worker so installed apps pick up updates.
 		@nocache path */ */index.html */sw.js */manifest.webmanifest
 		header @nocache Cache-Control "no-cache"

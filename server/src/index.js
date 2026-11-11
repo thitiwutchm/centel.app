@@ -10,6 +10,7 @@ import { udidReply } from './udid.js';
 import accRoutes, { startAccJobs } from './acc/routes.js';
 import locationRoutes, { pingRouter as locationPing } from './location.js';
 import balanceRoutes from './balance.js';
+import investRoutes from './invest.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -39,6 +40,8 @@ app.use('/api/location/ping', locationPing);
 app.use('/api/location', loadUser, csrfGuard, locationRoutes);
 // Balance sharing: my money left, shown to my partner when I turn it on.
 app.use('/api/balance', loadUser, csrfGuard, balanceRoutes);
+// Investment portfolio (invest.centel.app): trades, and SET / US stock prices.
+app.use('/api/invest', loadUser, csrfGuard, investRoutes);
 app.use('/api', loadUser, csrfGuard, routes);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 
