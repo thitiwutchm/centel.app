@@ -877,7 +877,6 @@ function renderHome() {
     notes: () => notesCard(),
     couple: () => coupleCard(),
     partnerloc: () => (window.partnerLocCard ? partnerLocCard() : ''),
-    partnerbal: () => (window.partnerBalCard ? partnerBalCard() : ''),
     bills: () => (state.bills.length ? `
     <div class="section-row"><span>บิลที่ต้องจ่ายเดือนนี้</span><button class="link-btn" data-goto="bills">ดูบิล</button></div>
     <div class="card list-card">
@@ -947,9 +946,8 @@ const HOME_SECS = [
   { id: 'pkgs', label: 'แพ็กเกจ', sub: 'แพ็กเกจที่ยังใช้ได้', icon: '🎟️', color: '#ff4d8d', col: 1 },
   { id: 'chat', label: 'แชท', sub: 'ห้องแชทและผู้ช่วย', icon: '💬', color: '#2f6bff', col: 1 },
   { id: 'notes', label: 'สิ่งที่ต้องทำ', sub: 'โน้ตเตือนความจำ', icon: '📝', color: '#ff9f0a', col: 1 },
-  { id: 'couple', label: 'รายจ่ายร่วมกับคู่', sub: 'ยอดร่วมเดือนนี้', icon: '🤝', color: '#e8a33b', col: 1 },
+  { id: 'couple', label: 'รายจ่ายร่วมกับคู่', sub: 'ยอดร่วมเดือนนี้ และเงินคงเหลือของคู่', icon: '🤝', color: '#e8a33b', col: 1 },
   { id: 'partnerloc', label: 'ตอนนี้อยู่ที่ไหน', sub: 'ตำแหน่งและอากาศของคู่', icon: '📍', color: '#ff3b30', col: 1 },
-  { id: 'partnerbal', label: 'เงินคงเหลือของคู่', sub: 'เมื่อคู่แชร์ยอดให้คุณ', icon: '💰', color: '#34c759', col: 1 },
   { id: 'bills', label: 'บิลที่ต้องจ่ายเดือนนี้', sub: 'บิลที่ยังไม่จ่าย', icon: '🧾', color: '#00a37a', col: 1 },
   { id: 'report', label: 'รายงานเดือนนี้', sub: 'กราฟใช้จ่ายและข้อมูลเชิงลึก', icon: '📈', color: '#7a5cff', col: 2 },
   { id: 'recent', label: 'รายการล่าสุด', sub: '4 รายการล่าสุด', icon: '🕘', color: '#00a3e0', col: 2 },

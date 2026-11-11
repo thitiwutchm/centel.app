@@ -391,6 +391,7 @@ function coupleCard() {
         <div class="main"><div class="name">รายจ่ายร่วมเดือนนี้ ${baht(total)}</div><div class="sub">ส่วนของฉัน ${baht(mine)}</div></div>
         ${svgIcon('chev', 'svg-i sm muted')}
       </button>
+      ${window.partnerBalRows ? partnerBalRows() : ''}
       <div class="cp-actions"><button class="btn pillbtn" data-action="add-shared">＋ รายจ่ายร่วม</button></div>
     </div>`;
 }

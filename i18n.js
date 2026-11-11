@@ -569,7 +569,7 @@ const I18N_EN = {
   'บันทึกการจ่ายบิลจาก': 'Record bill payments from', 'ผู้จ่ายเริ่มต้น': 'Default payer', 'ฉันจ่ายเอง': 'I pay',
   '{0} จ่ายให้': '{0} pays',
   'แชร์เงินคงเหลือให้คู่': 'Share balance with partner', 'แชร์ให้ {0}': 'Share with {0}', 'แชร์ให้ {0} อยู่': 'Shared with {0}',
-  '💰 เงินคงเหลือของ {0}': '💰 {0}’s balance', 'เงินคงเหลือของคู่': 'Partner’s balance', 'เมื่อคู่แชร์ยอดให้คุณ': 'When your partner shares it',
+  '💰 เงินคงเหลือของ {0}': '💰 {0}’s balance', 'เงินคงเหลือของ {0}': '{0}’s balance', 'ยอดร่วมเดือนนี้ และเงินคงเหลือของคู่': 'Shared this month and partner’s balance',
   'อัปเดต {0}': 'Updated {0}', 'แชร์เงินคงเหลือของฉันให้ {0}': 'Share my balance with {0}', 'แสดงแยกแต่ละกระเป๋า': 'Show each wallet',
   '{0} เห็นเงินคงเหลือของคุณแล้ว': '{0} can now see your balance', 'ปิดแชร์เงินคงเหลือแล้ว': 'Stopped sharing your balance',
   '{0} แชร์เงินคงเหลือให้คุณอยู่ ดูได้ที่หน้าหลัก': '{0} shares their balance with you. See it on Home',
