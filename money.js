@@ -968,8 +968,6 @@ function setHomeOrder(list) {
   savePrefs();
 }
 
-const HO_UP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14l5-5 5 5"/></svg>';
-const HO_DOWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>';
 const HO_GRIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 
 function homeOrderSheet() {
@@ -982,48 +980,21 @@ function homeOrderSheet() {
       <div class="ho-row" data-sort="${id}">
         <span class="ho-ico" style="--c:${sec(id).color}">${sec(id).icon}</span>
         <div class="main"><div class="name">${esc(sec(id).label)}</div><div class="sub">${esc(sec(id).sub)}</div></div>
-        <span class="ho-arrows">
-          <button type="button" data-ho-move="-1" aria-label="เลื่อนขึ้น">${HO_UP}</button>
-          <button type="button" data-ho-move="1" aria-label="เลื่อนลง">${HO_DOWN}</button>
-        </span>
         <span class="drag-h" aria-label="ลากเพื่อเรียง">${HO_GRIP}</span>
       </div>`).join('')}
     </div>
     <div class="ho-foot">
       <button type="button" class="ho-reset" id="hoReset" ${Array.isArray(money.prefs.homeOrder) ? '' : 'hidden'}>คืนค่าลำดับเดิม</button>
-      <p class="ho-hint">กดลูกศรหรือลากที่จุดด้านขวาเพื่อย้าย ส่วนที่ยังไม่มีข้อมูลจะไม่แสดงบนหน้าหลัก${isCloud() ? ' ลำดับนี้ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+      <p class="ho-hint">กดค้างที่จุดด้านขวาแล้วลากเพื่อย้าย ส่วนที่ยังไม่มีข้อมูลจะไม่แสดงบนหน้าหลัก${isCloud() ? ' ลำดับนี้ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
     </div>
   `);
   const list = $('#hoList');
   const rows = () => [...list.querySelectorAll('.ho-row')];
-  // First row can't go up, last can't go down.
-  const marks = () => rows().forEach((r, i, a) => {
-    r.querySelector('[data-ho-move="-1"]').disabled = i === 0;
-    r.querySelector('[data-ho-move="1"]').disabled = i === a.length - 1;
-  });
   const commit = () => {
     setHomeOrder(rows().map((x) => x.dataset.sort));
     $('#hoReset').hidden = !Array.isArray(money.prefs.homeOrder);
-    marks();
     if (ui.tab === 'home') render();
   };
-  marks();
-  list.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-ho-move]');
-    if (!b || b.disabled) return;
-    const row = b.closest('.ho-row');
-    const other = Number(b.dataset.hoMove) < 0 ? row.previousElementSibling : row.nextElementSibling;
-    if (!other) return;
-    // Swap with a short slide so the eye can follow where the row went (FLIP).
-    const before = new Map([row, other].map((x) => [x, x.getBoundingClientRect().top]));
-    if (Number(b.dataset.hoMove) < 0) list.insertBefore(row, other); else list.insertBefore(other, row);
-    [row, other].forEach((x) => {
-      const dy = before.get(x) - x.getBoundingClientRect().top;
-      x.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
-    });
-    row.classList.remove('moved'); void row.offsetWidth; row.classList.add('moved');
-    commit();
-  });
   sortable(list, commit);
   $('#hoReset').addEventListener('click', () => {
     setHomeOrder(null);
@@ -2560,8 +2531,10 @@ function sortable(box, onDone) {
         const r = o.getBoundingClientRect();
         const mid = r.top + r.height / 2;
         const before = o.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
-        if (before && y < mid) { list.insertBefore(el, o); break; }
-        if (!before && y > mid) { list.insertBefore(el, o.nextSibling); break; }
+        // Move the neighbour, not the dragged row: taking the row out of the page drops the
+        // pointer capture, and the drag would stop after one step.
+        if (before && y < mid) { list.insertBefore(o, el.nextSibling); break; }
+        if (!before && y > mid) { list.insertBefore(o, el); break; }
       }
       el.style.transform = '';
       const now = el.getBoundingClientRect().top;
