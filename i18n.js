@@ -566,7 +566,10 @@ const I18N_EN = {
   'กำลังเปิดโปรไฟล์…': 'Opening profile…', 'กำลังสร้างโปรไฟล์…': 'Creating profile…', 'พร้อมใช้งาน': 'Ready',
   // Account settings groups (renderSettings in app.js)
   'เงินและบิล': 'Money & bills', 'การแสดงผล': 'Appearance', 'ผู้ช่วย AI': 'AI assistant', 'ข้อมูล': 'Data',
-  'บันทึกการจ่ายบิลจาก': 'Record bill payments from', 'โหมดนักเดินทาง': 'Traveller mode', 'ไอคอนแอป': 'App icon',
+  'บันทึกการจ่ายบิลจาก': 'Record bill payments from', 'ผู้จ่ายเริ่มต้น': 'Default payer', 'ฉันจ่ายเอง': 'I pay',
+  '{0} จ่ายให้': '{0} pays',
+  'รายจ่ายใหม่จะเริ่มที่ {0} เป็นคนจ่าย และ{1} รับผิดชอบทั้งหมด ไม่หักจากกระเป๋าเงินของคุณ · เปลี่ยนได้ทุกครั้งตอนเพิ่มรายการ · ตั้งแยกของแต่ละคน': 'New expenses start as paid by {0}, with {1} covering it all, not taken from your wallets · You can change it each time · Each person sets their own',
+  'รายจ่ายใหม่จะเริ่มที่ ส่วนตัว จ่ายจากกระเป๋าเงินของคุณ · เปลี่ยนได้ทุกครั้งตอนเพิ่มรายการ · ตั้งแยกของแต่ละคน': 'New expenses start as Personal, paid from your wallets · You can change it each time · Each person sets their own', 'โหมดนักเดินทาง': 'Traveller mode', 'ไอคอนแอป': 'App icon',
   'เตือนบิลล่วงหน้า': 'Bill reminders', 'กลุ่ม LINE': 'LINE group', 'ผู้ช่วยในแชท (Mac)': 'Chat assistant (Mac)',
   'ผู้ช่วยในแชท': 'Chat assistant', 'เชื่อมกับ Claude / ChatGPT': 'Claude / ChatGPT',
   'ส่งออกข้อมูล (JSON)': 'Export data (JSON)', 'นำเข้าข้อมูล': 'Import data', 'ไม่บันทึก': "Don't record",
