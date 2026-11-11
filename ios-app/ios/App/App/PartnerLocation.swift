@@ -63,9 +63,10 @@ public class PartnerLocationPlugin: CAPPlugin, CAPBridgedPlugin {
     // { points: [{ lat, lon, title, subtitle, me }], focus? }: both of you on Apple's map,
     // drawn by MapKit on the phone (no server, no key). `focus` is the index to zoom to.
     @objc func showMap(_ call: CAPPluginCall) {
-        let raw = call.getArray("points") as? [[String: Any]] ?? []
+        let raw = (call.getArray("points") ?? []).compactMap { $0 as? JSObject }
+        let num: (JSValue?) -> Double? = { v in (v as? Double) ?? (v as? NSNumber)?.doubleValue ?? (v as? Int).map(Double.init) }
         let points: [PartnerMapPoint] = raw.compactMap { d in
-            guard let lat = d["lat"] as? Double, let lon = d["lon"] as? Double,
+            guard let lat = num(d["lat"]), let lon = num(d["lon"]),
                   CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: lat, longitude: lon)) else { return nil }
             return PartnerMapPoint(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
                                    title: d["title"] as? String ?? "", subtitle: d["subtitle"] as? String,

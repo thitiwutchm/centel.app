@@ -282,14 +282,17 @@
 
   document.addEventListener('click', (e) => {
     const a = e.target.closest('[data-pl-map]');
-    if (!a || !plugin) return;
+    // App builds before 1.3 have the plugin but no showMap: let the link open Apple Maps.
+    if (!a || !plugin || typeof plugin.showMap !== 'function') return;
     const pts = mapPoints();
     if (!pts.length) return;
     e.preventDefault();
     const focus = a.dataset.plMap === 'all' ? undefined : pts.findIndex((p) => p.who === a.dataset.plMap);
     const href = a.getAttribute('href');
     // App builds before the map was added don't have showMap: open Apple Maps then.
-    plugin.showMap({ points: pts, focus: focus >= 0 ? focus : undefined }).catch(() => { window.open(href, '_blank'); });
+    // If the map can't open, go to Apple Maps instead (the app hands maps.apple.com to iOS).
+    Promise.resolve().then(() => plugin.showMap({ points: pts, focus: focus >= 0 ? focus : undefined }))
+      .catch(() => { location.href = href; });
   });
 
   /* ---------- Account › แชร์ตำแหน่งกับคู่ ---------- */
