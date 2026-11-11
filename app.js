@@ -508,6 +508,7 @@ function renderSettings() {
 
     ${isCloud() && cloud.partner ? setGroup('คู่ของฉัน', [
       setRow({ set: 'paydefault', ico: '💳', color: '#ff9f0a', name: 'ผู้จ่ายเริ่มต้น', value: partnerPaysDefault() ? `${esc(partnerName())} จ่ายให้` : 'ฉันจ่ายเอง' }),
+      window.balShareRow ? balShareRow() : '',
       window.partnerLocRow ? partnerLocRow() : '',
     ]) : window.partnerLocRow ? setGroup('คู่ของฉัน', [partnerLocRow()]) : ''}
 
@@ -584,6 +585,7 @@ const SET_SHEETS = {
       <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
     <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>`],
   photoslips: ['ดึงสลิปจากรูปภาพ', () => (window.photoSlipsSettings ? photoSlipsSettings() : '')],
+  balshare: ['แชร์เงินคงเหลือให้คู่', () => (window.balShareSettings ? balShareSettings() : '')],
   partnerloc: ['แชร์ตำแหน่งกับคู่', () => (window.partnerLocSettings ? partnerLocSettings() : '')],
   applock: ['ล็อกแอป', () => (window.appLockSettings ? appLockSettings() : '')],
   appver: ['เวอร์ชันแอป', () => (window.appUpdateSettings ? appUpdateSettings() : '')],
@@ -639,6 +641,7 @@ function settingsSheet(key, again = false) {
   if (key === 'chat') chatSettingsBind();
   if (key === 'photoslips' && window.photoSlipsBind) photoSlipsBind();
   if (key === 'partnerloc' && window.partnerLocBind) partnerLocBind();
+  if (key === 'balshare' && window.balShareBind) balShareBind();
   if (key === 'applock' && window.appLockBind) appLockBind();
   if (key === 'appver' && window.appUpdateBind) appUpdateBind();
 }
@@ -1661,7 +1664,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // The iOS app's web view has no service worker, so it learns about a new version here: when the
 // app comes back to the screen, the deployed sw.js says which version is live (its CACHE name);
 // if that is not the one this page loaded with, the page reloads (only with no sheet open).
-const APP_BUILD = 'billplanner-v116'; // keep equal to CACHE in sw.js
+const APP_BUILD = 'billplanner-v117'; // keep equal to CACHE in sw.js
 let buildChecked = 0;
 function checkNewBuild() {
   if (location.protocol === 'file:' || Date.now() - buildChecked < 30000) return;
