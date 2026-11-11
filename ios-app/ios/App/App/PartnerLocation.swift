@@ -1,6 +1,7 @@
 import Capacitor
 import CoreLocation
 import Foundation
+import MapKit
 import Security
 import UIKit
 
@@ -23,6 +24,7 @@ public class PartnerLocationPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "now", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openSettings", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "showMap", returnType: CAPPluginReturnPromise),
     ]
 
     // -> { on, access, userId, precise }
@@ -55,6 +57,33 @@ public class PartnerLocationPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             PartnerLocationAgent.shared.sendNow()
             call.resolve(PartnerLocationAgent.shared.statusDict())
+        }
+    }
+
+    // { points: [{ lat, lon, title, subtitle, me }], focus? }: both of you on Apple's map,
+    // drawn by MapKit on the phone (no server, no key). `focus` is the index to zoom to.
+    @objc func showMap(_ call: CAPPluginCall) {
+        let raw = call.getArray("points") as? [[String: Any]] ?? []
+        let points: [PartnerMapPoint] = raw.compactMap { d in
+            guard let lat = d["lat"] as? Double, let lon = d["lon"] as? Double,
+                  CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: lat, longitude: lon)) else { return nil }
+            return PartnerMapPoint(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                                   title: d["title"] as? String ?? "", subtitle: d["subtitle"] as? String,
+                                   me: d["me"] as? Bool ?? false)
+        }
+        guard !points.isEmpty else { call.reject("no_points"); return }
+        let focus = call.getInt("focus")
+        DispatchQueue.main.async {
+            guard let vc = self.bridge?.viewController else { call.reject("no_view"); return }
+            let map = PartnerMapController(points: points, focus: focus)
+            let nav = UINavigationController(rootViewController: map)
+            nav.modalPresentationStyle = .pageSheet
+            if let sheet = nav.sheetPresentationController {
+                sheet.detents = [.large()]
+                sheet.prefersGrabberVisible = true
+            }
+            vc.present(nav, animated: true)
+            call.resolve()
         }
     }
 
@@ -305,4 +334,100 @@ final class PartnerLocationAgent: NSObject, CLLocationManagerDelegate {
     }
 
     static func deleteToken() { SecItemDelete(baseQuery() as CFDictionary) }
+}
+
+/* ---------- The map (MapKit, on the phone) ---------- */
+
+final class PartnerMapPoint: NSObject, MKAnnotation {
+    let coordinate: CLLocationCoordinate2D
+    let title: String?
+    let subtitle: String?
+    let me: Bool
+    init(coordinate: CLLocationCoordinate2D, title: String, subtitle: String?, me: Bool) {
+        self.coordinate = coordinate; self.title = title; self.subtitle = subtitle; self.me = me
+    }
+}
+
+final class PartnerMapController: UIViewController, MKMapViewDelegate {
+    private let points: [PartnerMapPoint]
+    private let focus: Int?
+    private let map = MKMapView()
+
+    init(points: [PartnerMapPoint], focus: Int?) {
+        self.points = points; self.focus = focus
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "ตอนนี้อยู่ที่ไหน"
+        navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in
+            self?.dismiss(animated: true)
+        })
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "เปิดใน Maps", primaryAction: UIAction { [weak self] _ in
+            self?.openInMaps()
+        })
+        map.delegate = self
+        map.translatesAutoresizingMaskIntoConstraints = false
+        map.pointOfInterestFilter = .excludingAll
+        map.showsCompass = true
+        map.showsScale = true
+        view.addSubview(map)
+        NSLayoutConstraint.activate([
+            map.topAnchor.constraint(equalTo: view.topAnchor),
+            map.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            map.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            map.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        map.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: "p")
+        map.addAnnotations(points)
+        if points.count > 1 {
+            let line = MKPolyline(coordinates: points.map { $0.coordinate }, count: points.count)
+            map.addOverlay(line)
+        }
+    }
+
+    private var placed = false
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard !placed, map.bounds.width > 0 else { return }
+        placed = true
+        if let i = focus, i >= 0, i < points.count {
+            map.setRegion(MKCoordinateRegion(center: points[i].coordinate, latitudinalMeters: 3000, longitudinalMeters: 3000), animated: false)
+            map.selectAnnotation(points[i], animated: false)
+        } else {
+            map.showAnnotations(points, animated: false)
+            if let p = points.first(where: { !$0.me }) ?? points.first { map.selectAnnotation(p, animated: false) }
+        }
+    }
+
+    func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+        guard let p = annotation as? PartnerMapPoint else { return nil }
+        let v = mapView.dequeueReusableAnnotationView(withIdentifier: "p", for: p) as! MKMarkerAnnotationView
+        v.markerTintColor = p.me ? .systemBlue : .systemPink
+        v.glyphImage = UIImage(systemName: p.me ? "person.fill" : "heart.fill")
+        v.canShowCallout = true
+        v.displayPriority = .required
+        return v
+    }
+
+    func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+        guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
+        let r = MKPolylineRenderer(polyline: line)
+        r.strokeColor = UIColor.systemPink.withAlphaComponent(0.6)
+        r.lineWidth = 2
+        r.lineDashPattern = [4, 6]
+        return r
+    }
+
+    // Both places in the Apple Maps app (for directions and the like).
+    private func openInMaps() {
+        let items = points.map { p -> MKMapItem in
+            let item = MKMapItem(placemark: MKPlacemark(coordinate: p.coordinate))
+            item.name = p.title
+            return item
+        }
+        MKMapItem.openMaps(with: items, launchOptions: nil)
+    }
 }

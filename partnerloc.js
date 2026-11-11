@@ -221,7 +221,7 @@
     const right = wx ? `<div class="right pl-wx"><span class="pl-wx-ico">${ico}</span><b>${Math.round(wx.temp)}°</b></div>` : '';
     const inner = `${userAvatar(u || {}, 'avatar pl-av')}
       <div class="main"><div class="name">${title}</div><div class="sub">${sub}</div></div>${right}`;
-    if (has) return `<a class="item pl-row" href="${esc(mapUrl(p))}" target="_blank" rel="noopener">${inner}</a>`;
+    if (has) return `<a class="item pl-row" href="${esc(mapUrl(p))}" target="_blank" rel="noopener" data-pl-map="${who}">${inner}</a>`;
     if (who === 'me') return `<button class="item pl-row" data-set-open="partnerloc">${inner}${svgIcon('chev', 'svg-i sm muted')}</button>`;
     return `<div class="item pl-row">${inner}</div>`;
   }
@@ -252,8 +252,45 @@
         ${personRow(cloud.partner, partner, 'partner')}
         ${personRow(cloud.user, me, 'me')}
         ${distRow(me, partner)}
+        ${mapPoints().length ? `<a class="item pl-map-btn" href="${esc(mapsLink())}" target="_blank" rel="noopener" data-pl-map="all">
+          <span class="pl-map-ico">🗺️</span><div class="main"><div class="name">ดูบนแผนที่</div></div>${svgIcon('chev', 'svg-i sm muted')}</a>` : ''}
       </div>`;
   };
+
+  /* ---------- Map ---------- */
+
+  // Places with coordinates, partner first. Drawn by the phone's own MapKit in the iOS app.
+  function mapPoints() {
+    if (!pl.data) return [];
+    const out = [];
+    const add = (p, who) => {
+      if (!p || !p.sharing || p.lat == null) return;
+      const wx = p.wx ? `${wxLook(p.wx.code, p.wx.day)[0]} ${Math.round(p.wx.temp)}°C · ` : '';
+      out.push({ who, lat: Number(p.lat), lon: Number(p.lon), me: who === 'me',
+        title: who === 'me' ? 'ฉัน' : partnerName(), subtitle: `${wx}${placeName(p)} · ${ago(p.at)}` });
+    };
+    add(pl.data.partner, 'partner');
+    add(pl.data.me, 'me');
+    return out;
+  }
+  // Without the app's map: Apple Maps with both places (a route between them), or the one there is.
+  function mapsLink() {
+    const pts = mapPoints();
+    if (pts.length > 1) return `https://maps.apple.com/?saddr=${pts[1].lat},${pts[1].lon}&daddr=${pts[0].lat},${pts[0].lon}`;
+    return pts[0] ? mapUrl({ ...pts[0], place: pts[0].title }) : '';
+  }
+
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-pl-map]');
+    if (!a || !plugin) return;
+    const pts = mapPoints();
+    if (!pts.length) return;
+    e.preventDefault();
+    const focus = a.dataset.plMap === 'all' ? undefined : pts.findIndex((p) => p.who === a.dataset.plMap);
+    const href = a.getAttribute('href');
+    // App builds before the map was added don't have showMap: open Apple Maps then.
+    plugin.showMap({ points: pts, focus: focus >= 0 ? focus : undefined }).catch(() => { window.open(href, '_blank'); });
+  });
 
   /* ---------- Account › แชร์ตำแหน่งกับคู่ ---------- */
 
