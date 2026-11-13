@@ -127,6 +127,25 @@ test('payment settings keep valid bank accounts and PromptPay IDs only', async (
   await A.put(P, { settings: { ...s, promptpay: { id: '0105566000001', qr: true } } });
 });
 
+test('payment channels keep account type, status and other channels; inactive ones stay private', async () => {
+  const cur = (await A.get(P)).business.settings;
+  await A.put(P, { settings: { ...cur, banks: [
+    { bank: 'ธนาคารกสิกรไทย', number: '123-4-56789-0', name: 'บริษัท ทดสอบ', acctType: 'current' },
+    { bank: 'ธนาคารไทยพาณิชย์', number: '987-6-54321-0', acctType: 'nope', active: false },
+    { kind: 'other', bank: 'ช่องทางรับชำระออนไลน์', name: 'Stripe' },
+    { kind: 'other' },
+  ] } });
+  const s = (await A.get(P)).business.settings;
+  assert.equal(s.banks.length, 3);
+  assert.equal(s.banks[0].acctType, 'current');
+  assert.equal(s.banks[1].acctType, 'savings');
+  assert.equal(s.banks[1].active, false);
+  assert.equal(s.banks[2].kind, 'other');
+  assert.ok(s.banks.every((b) => /^[a-z0-9]{6,16}$/.test(b.id)));
+  await A.put(P, { settings: { ...s, banks: s.banks } });
+  assert.deepEqual((await A.get(P)).business.settings.banks.map((b) => b.id), s.banks.map((b) => b.id));
+});
+
 test('signature, stamp, stock items and the sales summary', async () => {
   const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   await A.put(P, { signature: png, stamp: 'javascript:alert(1)', settings: { ...(await A.get(P)).business.settings, signAuto: true, signer: 'ก', lang: 'en' } });

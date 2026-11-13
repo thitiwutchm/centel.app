@@ -130,6 +130,7 @@
     EX: { open: 'รอจ่าย', paid: 'จ่ายแล้ว', void: 'ยกเลิก' },
   };
   const statusName = (type, s) => (STATUS[type] && STATUS[type][s]) || s;
+  const ACCT_TYPE = { th: { savings: 'ออมทรัพย์', current: 'กระแสรายวัน', fixed: 'ฝากประจำ' }, en: { savings: 'Savings', current: 'Current', fixed: 'Fixed deposit' } };
   const PAY_METHOD = { cash: 'เงินสด', transfer: 'โอนเงิน', cheque: 'เช็ค', card: 'บัตร', other: 'อื่น ๆ' };
 
   /* ---------- Printable document ---------- */
@@ -236,12 +237,15 @@
     const note = doc.notes || (s.notes && s.notes[doc.type]) || '';
     const billing = (doc.type === 'IV' || doc.type === 'QT') && doc.status !== 'void' && opts.pay !== false;
     const payInfo = billing && s.payment ? s.payment : '';
-    const banks = billing && Array.isArray(s.banks) ? s.banks.filter((b) => b && b.bank && b.number) : [];
+    // Active payment channels: bank accounts (bank + number) and other channels (e.g. a payment gateway).
+    const banks = billing && Array.isArray(s.banks) ? s.banks.filter((b) => b && b.active !== false && (b.kind === 'other' ? b.bank || b.name : b.bank && b.number)) : [];
     const pp = billing && doc.status !== 'paid' && s.promptpay && s.promptpay.id && s.promptpay.qr !== false && net > 0 ? s.promptpay : null;
     const qr = pp ? qrSvg(promptPayPayload(pp.id, net)) : '';
     const payBlock = banks.length || payInfo || pp ? `<section class="pp-pay">
         <div class="pp-pay-text"><div class="pp-label">${t.payTo}</div>
-          ${banks.map((b) => `<div class="pp-bank"><b>${esc(b.bank)}</b>${b.branch ? ` ${t.branch} ${esc(b.branch)}` : ''}<br><span class="pp-mono">${esc(b.number)}</span>${b.name ? ` · ${esc(b.name)}` : ''}</div>`).join('')}
+          ${banks.map((b) => (b.kind === 'other'
+            ? `<div class="pp-bank"><b>${esc(b.name || b.bank)}</b>${b.name && b.bank ? ` · ${esc(b.bank)}` : ''}${b.number ? `<br>${esc(b.number)}` : ''}</div>`
+            : `<div class="pp-bank"><b>${esc(b.bank)}</b>${b.branch ? ` ${t.branch} ${esc(b.branch)}` : ''}${b.acctType && ACCT_TYPE[lang] && ACCT_TYPE[lang][b.acctType] ? ` · ${ACCT_TYPE[lang][b.acctType]}` : ''}<br><span class="pp-mono">${esc(b.number)}</span>${b.name ? ` · ${esc(b.name)}` : ''}</div>`)).join('')}
           ${pp ? `<div class="pp-bank"><b>${t.promptpay}</b><br><span class="pp-mono">${esc(promptPayFmt(pp.id))}</span>${pp.name ? ` · ${esc(pp.name)}` : ''}</div>` : ''}
           ${payInfo ? `<div>${esc(payInfo).replace(/\n/g, '<br>')}</div>` : ''}
         </div>
