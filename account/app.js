@@ -13,6 +13,18 @@
     set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
   };
 
+  /* ---------- Day / Night theme ---------- */
+  // Stored per device as acc.theme ('day' | 'night'); until someone picks, the device setting decides.
+  // index.html and doc.html apply the stored choice in <head> so the page never flashes the other theme.
+  const darkMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+  const themeNow = () => { const t = store.get('acc.theme'); return t === 'day' || t === 'night' ? t : (darkMq && darkMq.matches ? 'night' : 'day'); };
+  function setTheme(t) {
+    store.set('acc.theme', t);
+    document.documentElement.dataset.theme = t === 'night' ? 'dark' : 'light';
+    const m = document.querySelector('meta[name=theme-color]');
+    if (m) m.content = t === 'night' ? '#0E0F11' : '#FFFFFF';
+  }
+
   /* ---------- API ---------- */
 
   const ERR = {
@@ -113,6 +125,8 @@
     reports: I('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
     settings: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
     plus: I('<path d="M12 5v14M5 12h14"/>'),
+    sun: I('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+    moon: I('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
     bank: I('<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>'),
     swap: I('<path d="M4 8h14l-3-3M20 16H6l3 3"/>'),
     user: I('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
@@ -301,16 +315,24 @@
         <div class="brand"><span class="brand-mark">${ICON.journal}</span><div>Centel Account<small>ระบบบัญชีออนไลน์</small></div></div>
         <button class="biz-switch" data-switch>${b.logo ? `<img src="${esc(b.logo)}" alt="">` : `<span class="ph">${esc(b.name.slice(0, 1))}</span>`}<span>${esc(b.name)}</span></button>
         <nav class="nav">${nav.map(([h, all]) => { const items = all.filter(([r]) => pageOk(r)); return items.length ? `<div class="nav-h">${h}</div>${items.map(([r, label, ic]) => `<a href="#/${r}" data-r="${r}">${ic}${label}</a>`).join('')}` : ''; }).join('')}</nav>
-        <div class="rail-foot">${esc(S.user?.email || '')}<br><button data-logout>ออกจากระบบ</button></div>
+        <div class="rail-foot"><div class="theme-sw" role="group" aria-label="ธีม"><button type="button" data-theme-set="day">${ICON.sun}กลางวัน</button><button type="button" data-theme-set="night">${ICON.moon}กลางคืน</button></div><br>${esc(S.user?.email || '')}<br><button data-logout>ออกจากระบบ</button></div>
       </aside>
       <div>
-        <div class="topbar"><button data-menu aria-label="เมนู">${ICON.menu}</button><b>${esc(b.name)}</b></div>
+        <div class="topbar"><button data-menu aria-label="เมนู">${ICON.menu}</button><b>${esc(b.name)}</b><button class="theme-tg" data-theme-tg aria-label="สลับธีมกลางวัน / กลางคืน"></button></div>
         <main class="main" id="main"></main>
       </div></div>`;
     $('[data-switch]').onclick = switchBusiness;
     $('[data-menu]').onclick = () => $('.shell').classList.toggle('menu');
     $('.rail').addEventListener('click', (e) => { if (e.target.closest('a')) $('.shell').classList.remove('menu'); });
     $('.shell').addEventListener('click', (e) => { if (e.target === $('.shell') || (e.target.closest('.main') && $('.shell').classList.contains('menu'))) $('.shell').classList.remove('menu'); });
+    const drawTheme = () => {
+      const t = themeNow();
+      $$('[data-theme-set]').forEach((x) => x.classList.toggle('on', x.dataset.themeSet === t));
+      $('[data-theme-tg]').innerHTML = t === 'night' ? ICON.sun : ICON.moon;
+    };
+    $$('[data-theme-set]').forEach((x) => { x.onclick = () => { setTheme(x.dataset.themeSet); drawTheme(); }; });
+    $('[data-theme-tg]').onclick = () => { setTheme(themeNow() === 'night' ? 'day' : 'night'); drawTheme(); };
+    drawTheme();
     $('[data-logout]').onclick = async () => { await api('POST', '/auth/logout').catch(() => {}); location.hash = ''; start(); };
   }
 
