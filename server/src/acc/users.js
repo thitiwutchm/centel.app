@@ -287,6 +287,9 @@ export async function guard(req) {
     case 'scan': if (!any('purchase')) deny(); return;
     case 'attachment': if (!any('purchase', 'accounting')) deny(); return;
     case 'integrations': if (!any('settings')) deny(); return;
+    case 'vat': // purchase tax documents go with purchase; monthly returns with accounting
+      if (!(id === 'purchases' ? any('purchase', 'accounting') : any('accounting'))) deny();
+      return;
     case 'reports': {
       if (!(REPORT_AREAS[id] || []).concat('accounting').some((a) => p[a] >= 1)) deny();
       return;
