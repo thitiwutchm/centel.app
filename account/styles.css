@@ -551,3 +551,22 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .form-rows > label > span, .form-rows > .fr > span { font-weight: 500; color: var(--ink-2); }
 .radios { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 @media (max-width: 560px) { .form-rows > label, .form-rows > .fr { grid-template-columns: 1fr; gap: 4px; } }
+
+/* VAT reports by document, purchase tax documents, monthly returns */
+.vat-filter { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 14px; }
+.vat-filter .field { margin: 0; }
+.vat-filter .row-in { display: flex; gap: 6px; }
+.vat-filter select, .vat-filter input[type=month] { width: auto; }
+.vat-head { text-align: center; margin: 4px 0 18px; font-size: 14px; line-height: 1.8; }
+.vat-head h2 { margin: 0 0 6px; font-size: 22px; color: var(--accent); }
+.vat-sums { display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: center; padding: 10px 0 16px; border-bottom: 1px solid var(--line-2); margin-bottom: 4px; font-size: 13px; }
+.vat-sums div { display: flex; flex-direction: column; align-items: center; }
+.vat-sums span { color: var(--muted); }
+.vat-sums b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.vat-tbl tr.void td { color: var(--muted); }
+.vat-rate { display: flex; justify-content: flex-end; gap: 18px; font-size: 12px; color: var(--muted); font-weight: 400; }
+.vat-count { padding: 10px 14px; font-size: 13px; color: var(--ink-2); border-bottom: 1px solid var(--line-2); }
+.vat-links { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: 14px; }
+@media print { #print .vat-head h2 { color: #000; } #print .vat-tbl .act, #print .vat-tbl th:last-child { display: none; } }
+.vat-tbl td:nth-child(5) { min-width: 200px; }
+.vat-tbl td:nth-child(7) { white-space: nowrap; }

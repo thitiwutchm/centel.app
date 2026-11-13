@@ -9,7 +9,7 @@ import { putReceipt, receiptUrl, storageEnabled } from '../storage.js';
 import {
   DEFAULT_ACCOUNTS, DEFAULT_PREFIX, DOC_TYPES, computeTotals, postingsFor, balanced, counterKey, docNumber,
 } from './ledger.js';
-import { report, REPORTS } from './reports.js';
+import { report, REPORTS, purchaseVatState, vatSales, vatPurchase, vatPp36 } from './reports.js';
 import { readPurchaseDoc } from './ai.js';
 import { CC_KINDS, DEFAULT_BASE, ccFetch, cleanBase, cleanKey, reportFor, sinceMonth, toDocBody, venueContact } from './capcourt.js';
 
@@ -698,6 +698,154 @@ biz.get('/reports/:name', wrap(async (req, res) => {
   if (!REPORTS.includes(req.params.name)) throw bad('not_found', 404);
   const out = await tx(req, (db) => report(db, req.biz, req.params.name, req.query));
   res.json(out);
+}));
+
+/* ---------- VAT: จัดการเอกสารภาษีซื้อ and เตรียมแบบภาษีรายเดือน ---------- */
+
+const isMonth = (s) => typeof s === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+const addMonths = (ym, n) => {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7);
+};
+const round2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
+
+// Every expense with its VAT state, for the purchase tax documents page.
+biz.get('/vat/purchases', wrap(async (req, res) => {
+  const q = req.query;
+  const where = ['business_id = $1', "type = 'EX'", "status <> 'void'"];
+  const p = [B(req)];
+  if (isDate(q.from)) { p.push(q.from); where.push(`date >= $${p.length}`); }
+  if (isDate(q.to)) { p.push(q.to); where.push(`date <= $${p.length}`); }
+  const rows = await tx(req, async (db) => (await db.query(
+    `select id, number, status, date, ref_no, ref_date, contact->>'name' as contact_name, contact->>'tax_id' as tax_id,
+            tax_invoice, vat_rate, vat_base, vat, total, vat_status, vat_month, attachment
+     from acc_docs where ${where.join(' and ')} order by date desc, number desc limit 3000`, p)).rows);
+  for (const d of rows) {
+    d.state = purchaseVatState(d);
+    d.claim_month = d.vat_month || d.date.slice(0, 7);
+    d.value = round2(d.total - d.vat);
+  }
+  if (storageEnabled) {
+    await Promise.all(rows.filter((d) => d.attachment && /\.(jpe?g|png|webp)$/.test(d.attachment)).map(async (d) => {
+      d.thumb = await receiptUrl(d.attachment).catch(() => null);
+    }));
+  }
+  res.json({ docs: rows });
+}));
+
+// Set the tax invoice status of one or more expenses:
+//   got / wait: only expenses with VAT on a tax invoice; month = the claim month (รอใช้สิทธิ์),
+//               from the document month up to six months after it.
+//   pp36 / none: expenses without a Thai tax invoice (a foreign service, or nothing to claim).
+biz.post('/vat/purchases', wrap(async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(isUuid).slice(0, 500) : [];
+  const status = ['got', 'wait', 'pp36', 'none'].includes(req.body?.status) ? req.body.status : null;
+  const month = req.body?.month == null || req.body.month === '' ? null : req.body.month;
+  if (!ids.length || !status) throw bad('bad_request');
+  if (month !== null && !isMonth(month)) throw bad('bad_month');
+  const out = await tx(req, async (db) => {
+    const docs = (await db.query(
+      "select id, date, tax_invoice, vat from acc_docs where business_id = $1 and type = 'EX' and status <> 'void' and id = any($2) for update",
+      [B(req), ids])).rows;
+    let updated = 0;
+    const skipped = [];
+    for (const d of docs) {
+      const hasVat = d.tax_invoice && Number(d.vat) > 0;
+      const own = d.date.slice(0, 7);
+      let vs = null;
+      let vm = null;
+      if (status === 'got' || status === 'wait') {
+        if (!hasVat) { skipped.push(d.id); continue; }
+        vs = status;
+        if (month && month !== own) {
+          if (month < own || month > addMonths(own, 6)) throw bad('claim_month_range');
+          vm = month;
+        }
+      } else {
+        if (hasVat) { skipped.push(d.id); continue; }
+        vs = status === 'pp36' ? 'pp36' : null;
+      }
+      await db.query('update acc_docs set vat_status = $2, vat_month = $3, updated_at = now() where id = $1', [d.id, vs, vm]);
+      updated += 1;
+    }
+    return { updated, skipped };
+  });
+  res.json({ ok: true, ...out });
+}));
+
+// The figures of a return, worked out from the documents of the month. ภ.พ.30 lines:
+// 1 sales, 2 at 0% or exempt, 4 taxable, 5 output VAT, 6 purchases claimed, 7 input VAT,
+// 8 payable / 9 overpaid this month, 10 overpaid carried in, 11 net payable / 12 net overpaid.
+async function returnFigures(db, biz, form, month) {
+  if (form === 'PP36') {
+    const p = await vatPp36(db, biz, { month });
+    return { base: p.totals.base, vat: p.totals.vat, count: p.totals.count };
+  }
+  const s = await vatSales(db, biz, { month });
+  const p = await vatPurchase(db, biz, { month });
+  const prev = (await db.query("select data from acc_vat_returns where business_id = $1 and form = 'PP30' and month = $2",
+    [biz.id, addMonths(month, -1)])).rows[0];
+  const carry = round2(prev?.data?.l12 || 0);
+  const l5 = s.totals.vat;
+  const l7 = p.totals.vat;
+  const net = round2(l5 - l7 - carry);
+  return {
+    l1: s.totals.value, l2: s.totals.zero, l3: 0, l4: s.totals.base, l5, l6: p.totals.base, l7,
+    l8: round2(Math.max(l5 - l7, 0)), l9: round2(Math.max(l7 - l5, 0)), l10: carry,
+    l11: round2(Math.max(net, 0)), l12: round2(Math.max(-net, 0)),
+    salesCount: s.totals.count, purchaseCount: p.totals.count, waiting: p.waiting,
+  };
+}
+// ภ.พ.30 is due on the 15th of the next month (23rd online); ภ.พ.36 on the 7th (15th online).
+const dueOf = (form, month) => {
+  const n = addMonths(month, 1);
+  return form === 'PP36' ? { paper: `${n}-07`, online: `${n}-15` } : { paper: `${n}-15`, online: `${n}-23` };
+};
+const returnOut = (r) => ({ ...r, due: dueOf(r.form, r.month) });
+
+biz.get('/vat/returns', wrap(async (req, res) => {
+  const rows = await tx(req, async (db) => (await db.query(
+    'select * from acc_vat_returns where business_id = $1 order by month desc, form', [B(req)])).rows);
+  res.json({ returns: rows.map(returnOut) });
+}));
+
+// Make a return for a month, or work its figures out again while it is still a draft.
+biz.post('/vat/returns', wrap(async (req, res) => {
+  const form = ['PP30', 'PP36'].includes(req.body?.form) ? req.body.form : null;
+  const month = isMonth(req.body?.month) ? req.body.month : null;
+  if (!form || !month) throw bad('bad_request');
+  if (form === 'PP30' && !req.biz.vat_registered) throw bad('not_vat_registered');
+  const row = await tx(req, async (db) => {
+    const cur = (await db.query('select * from acc_vat_returns where business_id = $1 and form = $2 and month = $3 for update', [B(req), form, month])).rows[0];
+    if (cur?.status === 'filed') throw bad('return_filed', 409);
+    const data = JSON.stringify(await returnFigures(db, req.biz, form, month));
+    if (cur) return (await db.query('update acc_vat_returns set data = $2, updated_at = now() where id = $1 returning *', [cur.id, data])).rows[0];
+    return (await db.query(
+      'insert into acc_vat_returns (business_id, form, month, data, created_by) values ($1, $2, $3, $4, app_uid()) returning *',
+      [B(req), form, month, data])).rows[0];
+  });
+  res.json({ return: returnOut(row) });
+}));
+
+// Mark a return as filed (its figures freeze) or take that back.
+biz.post('/vat/returns/:id/file', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const filed = req.body?.filed !== false;
+  const at = isDate(req.body?.filed_at) ? req.body.filed_at : bangkokToday();
+  const row = await tx(req, async (db) => (await db.query(
+    `update acc_vat_returns set status = $3, filed_at = $4, filed_ref = $5, updated_at = now()
+     where id = $1 and business_id = $2 returning *`,
+    [req.params.id, B(req), filed ? 'filed' : 'draft', filed ? at : null, filed ? str(req.body?.filed_ref, 100) : null])).rows[0]);
+  if (!row) throw bad('not_found', 404);
+  res.json({ return: returnOut(row) });
+}));
+
+biz.delete('/vat/returns/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const n = await tx(req, async (db) => (await db.query(
+    "delete from acc_vat_returns where id = $1 and business_id = $2 and status = 'draft'", [req.params.id, B(req)])).rowCount);
+  if (!n) throw bad('not_found', 404);
+  res.json({ ok: true });
 }));
 
 /* ---------- CapCourt Admin: monthly venue bills become invoices here ---------- */

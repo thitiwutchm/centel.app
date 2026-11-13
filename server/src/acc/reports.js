@@ -1,7 +1,7 @@
 // Accounting reports, read from the journal (acc_lines) and the documents (acc_docs).
 // `db` is an asUser client, so every query is already limited to the person's businesses.
 
-export const REPORTS = ['dashboard', 'trial', 'pnl', 'balance', 'ledger', 'vat_sales', 'vat_purchase', 'vat_summary', 'wht_pay', 'wht_recv', 'ar', 'ap', 'sales'];
+export const REPORTS = ['dashboard', 'trial', 'pnl', 'balance', 'ledger', 'vat_sales', 'vat_purchase', 'vat_summary', 'vat_pp36', 'wht_pay', 'wht_recv', 'ar', 'ap', 'sales'];
 
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const r2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
@@ -105,33 +105,107 @@ async function ledger(db, biz, q) {
   return { from, to, account: a, opening: r2(sign(a.type) * open), closing: r2(run), rows };
 }
 
+// ภาษีขายตามเอกสาร: every sales document whose tax point is in the month. That is an invoice
+// or receipt issued as a tax invoice, plus cash sales without VAT (0% or exempt), which still
+// count as sales on ภ.พ.30. A receipt made from a tax invoice is not listed again.
+// status: '' all, open รอชำระ, paid ชำระแล้ว, void ยกเลิก (void rows count as 0).
+export const VAT_SALE_STATUS = ['', 'open', 'paid', 'void'];
 async function vatSales(db, biz, q) {
   const m = monthOf(q.month);
-  const rows = (await db.query(
-    `select id, type, number, date, status, contact, vat_base, vat, total
-     from acc_docs where business_id = $1 and type in ('IV', 'RE') and tax_invoice and date between $2 and $3
-     order by date, number`, [biz.id, m.from, m.to])).rows.map((d) => {
+  const status = VAT_SALE_STATUS.includes(q.status) ? q.status || '' : '';
+  const all = (await db.query(
+    `select d.id, d.type, d.number, d.date, d.status, d.contact, d.vat_rate, d.vat_base, d.vat, d.total, d.tax_invoice,
+            r.number as ref_number, r.type as ref_type
+     from acc_docs d left join acc_docs r on r.id = d.ref_id
+     where d.business_id = $1 and d.date between $2 and $3
+       and ((d.type in ('IV', 'RE') and d.tax_invoice)
+         or (d.type = 'RE' and not d.tax_invoice and d.vat = 0 and not coalesce(r.type = 'IV' and r.tax_invoice, false)))
+     order by d.date, d.number`, [biz.id, m.from, m.to])).rows.map((d) => {
     const v = d.status === 'void';
-    return { id: d.id, type: d.type, number: d.number, date: d.date, void: v, name: d.contact?.name || '', tax_id: d.contact?.tax_id || '', branch: d.contact?.branch || '', base: v ? 0 : d.vat_base, vat: v ? 0 : d.vat };
+    const st = v ? 'void' : d.type === 'RE' ? 'paid' : d.status;
+    const value = r2(d.total - d.vat);
+    return {
+      id: d.id, type: d.type, number: d.number, date: d.date, status: st, void: v, tax_invoice: d.tax_invoice,
+      ref_no: d.ref_type === 'IV' || d.ref_type === 'QT' ? d.ref_number : '',
+      name: d.contact?.name || '', tax_id: d.contact?.tax_id || '', branch: d.contact?.branch || '',
+      rate: Number(d.vat) > 0 ? Number(d.vat_rate) : 0,
+      value: v ? 0 : value, base: v ? 0 : d.vat_base, zero: v ? 0 : r2(value - d.vat_base), vat: v ? 0 : d.vat,
+    };
   });
-  return { ...m, rows, totals: { base: r2(rows.reduce((s, x) => s + x.base, 0)), vat: r2(rows.reduce((s, x) => s + x.vat, 0)) } };
+  const rows = status ? all.filter((r) => r.status === status) : all;
+  return { ...m, status, rows, totals: vatTotals(all), shown: vatTotals(rows) };
+}
+function vatTotals(rows) {
+  const sum = (k) => r2(rows.reduce((s, x) => s + (x[k] || 0), 0));
+  return { count: rows.filter((r) => !r.void).length, value: sum('value'), base: sum('base'), zero: sum('zero'), vat: sum('vat') };
 }
 
+// The tax month an expense's input VAT is claimed in.
+const claimMonth = (d) => d.vat_month || String(d.date).slice(0, 7);
+// How an expense stands for VAT: got (claimable), wait (tax invoice not in hand yet),
+// none (no tax invoice / no VAT), pp36 (foreign service, VAT paid on ภ.พ.36).
+export function purchaseVatState(d) {
+  if (d.tax_invoice && Number(d.vat) > 0) return d.vat_status === 'wait' ? 'wait' : 'got';
+  return d.vat_status === 'pp36' ? 'pp36' : 'none';
+}
+
+// ภาษีซื้อตามเอกสาร: the expenses claimed in the month (by vat_month, else the document date).
+// status: '' all, got ใช้สิทธิ์ได้, wait รอใบกำกับภาษี, none ไม่มีภาษีซื้อ, pp36.
+// totals only count claimable input VAT, which is what ภ.พ.30 uses.
+export const VAT_PURCHASE_STATUS = ['', 'got', 'wait', 'none', 'pp36'];
 async function vatPurchase(db, biz, q) {
   const m = monthOf(q.month);
-  const rows = (await db.query(
-    `select id, number, date, ref_no, ref_date, contact, vat_base, vat
-     from acc_docs where business_id = $1 and type = 'EX' and tax_invoice and vat > 0 and status <> 'void' and date between $2 and $3
-     order by coalesce(ref_date, date), number`, [biz.id, m.from, m.to])).rows.map((d) => ({
-    id: d.id, number: d.number, date: d.ref_date || d.date, ref_no: d.ref_no || '', name: d.contact?.name || '', tax_id: d.contact?.tax_id || '', branch: d.contact?.branch || '', base: d.vat_base, vat: d.vat,
-  }));
-  return { ...m, rows, totals: { base: r2(rows.reduce((s, x) => s + x.base, 0)), vat: r2(rows.reduce((s, x) => s + x.vat, 0)) } };
+  const status = VAT_PURCHASE_STATUS.includes(q.status) ? q.status || '' : '';
+  const all = (await db.query(
+    `select id, number, date, status, ref_no, ref_date, contact, tax_invoice, vat_rate, vat_base, vat, total, vat_status, vat_month
+     from acc_docs where business_id = $1 and type = 'EX' and status <> 'void'
+       and coalesce(vat_month, to_char(date, 'YYYY-MM')) = $2
+     order by coalesce(ref_date, date), number`, [biz.id, m.month])).rows.map((d) => {
+    const state = purchaseVatState(d);
+    const value = r2(d.total - d.vat);
+    return {
+      id: d.id, number: d.number, date: d.ref_date || d.date, doc_date: d.date, ref_no: d.ref_no || '', state,
+      deferred: !!d.vat_month && d.vat_month !== String(d.date).slice(0, 7),
+      name: d.contact?.name || '', tax_id: d.contact?.tax_id || '', branch: d.contact?.branch || '',
+      rate: Number(d.vat) > 0 ? Number(d.vat_rate) : 0, value, base: d.vat_base, vat: d.vat,
+    };
+  });
+  const rows = status ? all.filter((r) => r.state === status) : all;
+  const got = all.filter((r) => r.state === 'got');
+  const sum = (list, k) => r2(list.reduce((s, x) => s + (x[k] || 0), 0));
+  return {
+    ...m, status, rows,
+    totals: { count: got.length, base: sum(got, 'base'), vat: sum(got, 'vat') },
+    shown: { count: rows.length, value: sum(rows, 'value'), base: sum(rows, 'base'), vat: sum(rows, 'vat') },
+    waiting: { count: all.filter((r) => r.state === 'wait').length, vat: sum(all.filter((r) => r.state === 'wait'), 'vat') },
+  };
 }
 
 async function vatSummary(db, biz, q) {
   const s = await vatSales(db, biz, q);
   const p = await vatPurchase(db, biz, q);
-  return { month: s.month, sales: s.totals, purchase: p.totals, payable: r2(s.totals.vat - p.totals.vat), salesCount: s.rows.length, purchaseCount: p.rows.length };
+  return {
+    month: s.month, sales: s.totals, purchase: p.totals, payable: r2(s.totals.vat - p.totals.vat),
+    salesCount: s.totals.count, purchaseCount: p.totals.count, waiting: p.waiting,
+  };
+}
+
+// ภ.พ.36: VAT the business pays itself on services bought from abroad (marked pp36),
+// 7% of what was paid, in the month it was paid (or the document month while unpaid).
+async function vatPp36(db, biz, q) {
+  const m = monthOf(q.month);
+  const rows = (await db.query(
+    `select id, number, date, status, ref_no, contact, total, vat, pay from acc_docs
+     where business_id = $1 and type = 'EX' and status <> 'void' and vat_status = 'pp36'
+       and coalesce((pay->>'date')::date, date) between $2 and $3
+     order by coalesce((pay->>'date')::date, date), number`, [biz.id, m.from, m.to])).rows.map((d) => {
+    const base = r2(d.total - d.vat);
+    return {
+      id: d.id, number: d.number, date: d.pay?.date || d.date, paid: d.status === 'paid', ref_no: d.ref_no || '',
+      name: d.contact?.name || '', tax_id: d.contact?.tax_id || '', base, vat: r2(base * 0.07),
+    };
+  });
+  return { ...m, rows, totals: { count: rows.length, base: r2(rows.reduce((s, x) => s + x.base, 0)), vat: r2(rows.reduce((s, x) => s + x.vat, 0)) } };
 }
 
 // Withholding tax this business took off its payments (ภ.ง.ด.3 people / ภ.ง.ด.53 companies).
@@ -229,6 +303,8 @@ async function openDocs(db, biz, type) {
   return { asOf: t, rows, buckets, total: r2(rows.reduce((s, x) => s + x.total, 0)) };
 }
 
+export { vatSales, vatPurchase, vatPp36 };
+
 async function dashboard(db, biz, q) {
   const m = monthOf(q.month);
   const p = await pnl(db, biz, { from: m.from, to: m.to });
@@ -278,6 +354,7 @@ export async function report(db, biz, name, q = {}) {
     case 'vat_sales': return vatSales(db, biz, q);
     case 'vat_purchase': return vatPurchase(db, biz, q);
     case 'vat_summary': return vatSummary(db, biz, q);
+    case 'vat_pp36': return vatPp36(db, biz, q);
     case 'wht_pay': return whtPay(db, biz, q);
     case 'wht_recv': return whtRecv(db, biz, q);
     case 'ar': return openDocs(db, biz, 'IV');

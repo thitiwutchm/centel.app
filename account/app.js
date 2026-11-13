@@ -106,6 +106,7 @@
     items: I('<path d="M21 8l-9-5-9 5 9 5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>'),
     accounts: I('<path d="M4 4h16v16H4zM4 9h16M9 9v11"/>'),
     journal: I('<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>'),
+    tax: I('<path d="M6 3h12v18H6z"/><path d="M9 15l6-6"/><circle cx="9.5" cy="9.5" r=".6"/><circle cx="14.5" cy="14.5" r=".6"/>'),
     reports: I('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
     settings: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
     plus: I('<path d="M12 5v14M5 12h14"/>'),
@@ -246,17 +247,24 @@
     ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home]]],
     ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
     ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex]]],
+    ['ภาษี', 'vat'],
     ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items]]],
     ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['channels', 'ช่องทางการเงิน', ICON.bank], ['settings', 'ตั้งค่า', ICON.settings]]],
   ];
 
+  // ภาษีมูลค่าเพิ่ม pages, shown in the menu for VAT-registered businesses only.
+  const NAV_VAT = [
+    ['vat/purchases', 'จัดการเอกสารภาษีซื้อ', ICON.tax], ['vat/returns', 'เตรียมแบบภาษีรายเดือน', ICON.tax],
+    ['report/vat_sales', 'ภาษีขายตามเอกสาร', ICON.reports], ['report/vat_purchase', 'ภาษีซื้อตามเอกสาร', ICON.reports],
+  ];
   function shell() {
     const b = biz();
+    const nav = NAV.map(([h, items]) => [h, items === 'vat' ? (b.vat_registered ? NAV_VAT : []) : items]).filter(([, items]) => items.length);
     app.innerHTML = `<div class="shell">
       <aside class="rail">
         <div class="brand"><span class="brand-mark">${ICON.journal}</span><div>Centel Account<small>ระบบบัญชีออนไลน์</small></div></div>
         <button class="biz-switch" data-switch>${b.logo ? `<img src="${esc(b.logo)}" alt="">` : `<span class="ph">${esc(b.name.slice(0, 1))}</span>`}<span>${esc(b.name)}</span></button>
-        <nav class="nav">${NAV.map(([h, items]) => `<div class="nav-h">${h}</div>${items.map(([r, label, ic]) => `<a href="#/${r}" data-r="${r}">${ic}${label}</a>`).join('')}`).join('')}</nav>
+        <nav class="nav">${nav.map(([h, items]) => `<div class="nav-h">${h}</div>${items.map(([r, label, ic]) => `<a href="#/${r}" data-r="${r}">${ic}${label}</a>`).join('')}`).join('')}</nav>
         <div class="rail-foot">${esc(S.user?.email || '')}<br><button data-logout>ออกจากระบบ</button></div>
       </aside>
       <div>
@@ -281,7 +289,9 @@
     if (!$('.shell')) shell();
     const { parts, q } = parseHash();
     const r = parts[0] || 'dashboard';
-    const key = r === 'docs' || r === 'new' ? `docs/${parts[1] || 'IV'}` : r === 'doc' || r === 'edit' ? null : r === 'report' ? 'reports' : r;
+    const key = r === 'docs' || r === 'new' ? `docs/${parts[1] || 'IV'}` : r === 'doc' || r === 'edit' ? null
+      : r === 'report' ? (NAV_VAT.some(([k]) => k === `report/${parts[1]}`) ? `report/${parts[1]}` : 'reports')
+        : r === 'vat' ? `vat/${parts[1] === 'returns' ? 'returns' : 'purchases'}` : r;
     for (const a of $$('.nav a')) a.classList.toggle('on', a.dataset.r === key);
     // A fresh element per page so listeners from the last page do not pile up.
     const old = $('#main');
@@ -302,6 +312,8 @@
       else if (r === 'reports') viewReports(main);
       else if (r === 'integrations') await viewIntegrations(main, parts[1]);
       else if (r === 'report') await viewReport(main, parts[1], q);
+      else if (r === 'vat' && parts[1] === 'returns') await viewVatReturns(main, q, parts[2]);
+      else if (r === 'vat') await viewVatPurchases(main, q);
       else if (r === 'settings') viewSettings(main);
       else if (r === 'channels') viewChannels(main);
       else main.innerHTML = '<div class="empty"><b>ไม่พบหน้านี้</b></div>';
@@ -1515,8 +1527,9 @@
 
   const REPORTS = {
     vat_summary: ['สรุปภาษีมูลค่าเพิ่ม (ภ.พ.30)', 'ภาษีขาย ภาษีซื้อ และยอดที่ต้องชำระของเดือน', 'month', 'tax'],
-    vat_sales: ['รายงานภาษีขาย', 'ใบกำกับภาษีที่ออกในเดือน', 'month', 'tax'],
-    vat_purchase: ['รายงานภาษีซื้อ', 'ใบกำกับภาษีที่ได้รับในเดือน', 'month', 'tax'],
+    vat_sales: ['รายงานภาษีขายตามเอกสาร', 'ใบกำกับภาษีและใบเสร็จขายของเดือน พร้อมเลขผู้เสียภาษี สาขา', 'month', 'tax'],
+    vat_purchase: ['รายงานภาษีซื้อตามเอกสาร', 'ค่าใช้จ่ายของเดือน แยกสถานะใบกำกับภาษี', 'month', 'tax'],
+    vat_pp36: ['รายงานภาษีซื้อ ภ.พ.36', 'บริการจากต่างประเทศที่ต้องนำส่งภาษีเอง', 'month', 'tax'],
     wht_pnd3: ['ภ.ง.ด.3', 'หัก ณ ที่จ่ายบุคคลธรรมดา', 'month', 'tax'],
     wht_pnd53: ['ภ.ง.ด.53', 'หัก ณ ที่จ่ายนิติบุคคล', 'month', 'tax'],
     wht_recv: ['ภาษีถูกหัก ณ ที่จ่าย', 'ที่ลูกค้าหักไว้ ใช้เครดิตภาษีปลายปี', 'range', 'tax'],
@@ -1532,11 +1545,12 @@
   function viewReports(main) {
     const groups = [['sales', 'ขาย'], ['tax', 'ภาษี'], ['fs', 'งบการเงิน'], ['books', 'สมุดบัญชีและติดตามหนี้']];
     main.innerHTML = `<div class="page-h"><div><h1>รายงาน</h1><div class="sub">ดาวน์โหลดเป็น Excel หรือพิมพ์ได้ทุกรายงาน</div></div></div>
-      ${groups.map(([g, h]) => `<div class="rep-h">${h}</div><div class="rep-grid">${Object.entries(REPORTS).filter(([, r]) => r[3] === g && (g !== 'tax' || biz().vat_registered || !r[0].includes('ภาษีมูลค่าเพิ่ม') && !r[0].includes('ภาษีขาย') && !r[0].includes('ภาษีซื้อ'))).map(([k, r]) => `<a class="card" href="#/report/${k}"><b>${r[0]}</b><small>${r[1]}</small></a>`).join('')}</div>`).join('')}`;
+      ${groups.map(([g, h]) => `<div class="rep-h">${h}</div><div class="rep-grid">${g === 'tax' && biz().vat_registered ? '<a class="card" href="#/vat/purchases"><b>จัดการเอกสารภาษีซื้อ</b><small>สถานะใบกำกับภาษี รอใบกำกับ รอใช้สิทธิ์</small></a><a class="card" href="#/vat/returns"><b>เตรียมแบบภาษีรายเดือน</b><small>ภ.พ.30 และ ภ.พ.36 จากเอกสารของเดือน</small></a>' : ''}${Object.entries(REPORTS).filter(([, r]) => r[3] === g && (g !== 'tax' || biz().vat_registered || !r[0].includes('ภาษีมูลค่าเพิ่ม') && !r[0].includes('ภาษีขาย') && !r[0].includes('ภาษีซื้อ'))).map(([k, r]) => `<a class="card" href="#/report/${k}"><b>${r[0]}</b><small>${r[1]}</small></a>`).join('')}</div>`).join('')}`;
   }
 
   async function viewReport(main, name, q) {
     if (name === 'sales') return viewSales(main, q);
+    if (name === 'vat_sales' || name === 'vat_purchase' || name === 'vat_pp36') return viewVatReport(main, name, q);
     const R = REPORTS[name];
     if (!R) { main.innerHTML = '<div class="empty"><b>ไม่พบรายงาน</b></div>'; return; }
     const [title, , mode] = R;
@@ -1571,6 +1585,326 @@
     $('[data-csv]', main).onclick = () => excel(`${title}-${mode === 'month' ? month : to}`, csvRows, title);
     $('[data-print]', main).onclick = () => printHtml(`<div class="print-report"><h2 style="margin:0">${esc(title)}</h2><div>${esc(biz().name)}${biz().tax_id ? ` · เลขประจำตัวผู้เสียภาษี ${esc(T.taxIdFmt(biz().tax_id))}` : ''}</div><div style="margin-bottom:10px">${esc(periodText)}</div>${extra}<table>${$('[data-tbl]', main).innerHTML}</table></div>`);
     main.querySelector('tbody').onclick = (e) => { const tr = e.target.closest('[data-doc]'); if (tr) location.hash = `#/doc/${tr.dataset.doc}`; };
+  }
+
+  /* ---------- VAT: reports by document, purchase tax documents, monthly returns ---------- */
+
+  const TH_MONTH_NAMES = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  const taxMonthText = (ym) => `${TH_MONTH_NAMES[Number(ym.slice(5, 7)) - 1]} ปี ${Number(ym.slice(0, 4)) + 543}`;
+  const shiftMonth = (ym, n) => { const d = new Date(`${ym}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+  // How an expense stands for input VAT.
+  const VAT_ST = {
+    got: ['ได้รับใบกำกับภาษีแล้ว', 'good'], wait: ['รอใบกำกับภาษี', 'warn'],
+    none: ['ไม่มีใบกำกับภาษี', ''], pp36: ['บริการต่างประเทศ (ภ.พ.36)', 'info'],
+  };
+  const SALE_ST = { '': 'แสดงทั้งหมด', open: 'รอชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิก' };
+  const BUY_ST = { '': 'แสดงทั้งหมด', got: 'ใช้สิทธิ์ภาษีซื้อเดือนนี้', wait: 'รอใบกำกับภาษี', none: 'ไม่มีใบกำกับภาษี', pp36: 'บริการต่างประเทศ (ภ.พ.36)' };
+  const VAT_TITLE = { vat_sales: 'รายงานภาษีขายตามเอกสาร', vat_purchase: 'รายงานภาษีซื้อตามเอกสาร', vat_pp36: 'รายงานภาษีซื้อ ภ.พ.36' };
+
+  // The business lines printed under a tax report's title.
+  function taxpayerLines(ym) {
+    const b = biz();
+    return [
+      `เดือนภาษี ${taxMonthText(ym)}`,
+      `ชื่อผู้ประกอบการ ${b.name}${b.tax_id ? ` เลขประจำตัวผู้เสียภาษีอากร ${T.taxIdFmt(b.tax_id)}` : ''} (${T.branchFmt(b.branch || '00000')})`,
+      ...(b.address ? [`ชื่อสถานประกอบการ ${String(b.address).replace(/\s*\n\s*/g, ' ')}`] : []),
+    ];
+  }
+
+  async function viewVatReport(main, name, q) {
+    const now = ymNow();
+    const month = /^\d{4}-\d{2}$/.test(q.get('month') || '') ? q.get('month') : now;
+    const isSale = name === 'vat_sales';
+    const isPp36 = name === 'vat_pp36';
+    const ST = isSale ? SALE_ST : BUY_ST;
+    const status = !isPp36 && Object.keys(ST).includes(q.get('s') || '') ? q.get('s') || '' : '';
+    const d = await get(`/reports/${name}?month=${month}${status ? `&status=${status}` : ''}`);
+    const title = VAT_TITLE[name];
+    const preset = month === now ? 'cur' : month === shiftMonth(now, -1) ? 'last' : 'pick';
+    const n = (v) => `<td class="num">${money(v)}</td>`;
+    const rateLine = (r) => `<div class="vat-rate"><span>${r.rate}%</span><span>${money(r.rate ? r.base : r.value)}</span></div>`;
+    let cols; let body; let foot; let raw;
+    if (isPp36) {
+      cols = ['ลำดับ', 'วันที่จ่าย', 'เลขที่เอกสาร', 'เลขที่อ้างอิง', 'ผู้ให้บริการ', 'จำนวนเงินที่จ่าย', 'ภาษี 7%'];
+      body = d.rows.map((r, i) => `<tr class="click" data-doc="${r.id}"><td>${i + 1}</td><td class="nowrap">${T.slashDate(r.date)}</td><td><span class="doc-no">${esc(r.number)}</span>${r.paid ? '' : ' <span class="chip warn">ยังไม่จ่าย</span>'}</td><td>${esc(r.ref_no)}</td><td>${esc(r.name)}</td>${n(r.base)}${n(r.vat)}</tr>`).join('');
+      foot = `<tr><td colspan="5">รวม ${d.totals.count} รายการ</td>${n(d.totals.base)}${n(d.totals.vat)}</tr>`;
+      raw = [cols, ...d.rows.map((r, i) => [i + 1, T.slashDate(r.date), r.number, r.ref_no, r.name, r.base, r.vat]), ['', '', '', '', 'รวม', d.totals.base, d.totals.vat]];
+    } else if (isSale) {
+      cols = ['ลำดับ', 'วันที่', 'เลขที่เอกสาร', 'เอกสารอ้างอิง', 'ชื่อลูกค้า', 'เลขผู้เสียภาษี', 'สาขา', 'มูลค่า', 'ภาษีมูลค่าเพิ่ม', ''];
+      body = d.rows.map((r, i) => `<tr class="click${r.void ? ' void' : ''}" data-doc="${r.id}"><td>${i + 1}</td><td class="nowrap">${T.slashDate(r.date)}</td>
+        <td class="nowrap"><span class="dot ${r.void ? 'bad' : r.status === 'paid' ? 'good' : 'warn'}"></span><span class="doc-no">${esc(r.number)}</span>${r.void ? ' <span class="chip bad">ยกเลิก</span>' : ''}</td>
+        <td>${esc(r.ref_no)}</td><td>${esc(r.name)}</td><td class="mono nowrap">${esc(T.taxIdFmt(r.tax_id))}</td><td>${esc(T.branchFmt(r.branch))}</td>
+        <td class="num">${money(r.value)}${r.void ? '' : rateLine(r)}</td>${n(r.vat)}<td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`).join('');
+      foot = `<tr><td colspan="7">รวม ${d.shown.count} เอกสาร</td>${n(d.shown.value)}${n(d.shown.vat)}<td></td></tr>`;
+      raw = [cols.slice(0, 9).concat(['อัตราภาษี', 'ฐานภาษี 7%', 'อัตรา 0 / ยกเว้น', 'สถานะ']),
+        ...d.rows.map((r, i) => [i + 1, T.slashDate(r.date), r.number, r.ref_no, r.name, r.tax_id, T.branchFmt(r.branch), r.value, r.vat, r.void ? '' : `${r.rate}%`, r.base, r.zero, SALE_ST[r.status] || r.status]),
+        ['', '', '', '', 'รวม', '', '', d.shown.value, d.shown.vat, '', d.shown.base, d.shown.zero, '']];
+    } else {
+      cols = ['ลำดับ', 'วันที่', 'เลขที่เอกสาร', 'เลขที่ใบกำกับภาษี', 'ชื่อผู้จำหน่าย', 'เลขผู้เสียภาษี', 'สาขา', 'มูลค่า', 'ภาษีมูลค่าเพิ่ม', 'สถานะ', ''];
+      body = d.rows.map((r, i) => `<tr class="click" data-doc="${r.id}"><td>${i + 1}</td><td class="nowrap">${T.slashDate(r.date)}</td>
+        <td class="nowrap"><span class="doc-no">${esc(r.number)}</span>${r.deferred ? `<div class="muted" style="font-size:12px">ยกมาจาก ${esc(T.thMonth(r.doc_date.slice(0, 7)))}</div>` : ''}</td>
+        <td>${esc(r.ref_no)}</td><td>${esc(r.name)}</td><td class="mono nowrap">${esc(T.taxIdFmt(r.tax_id))}</td><td>${esc(T.branchFmt(r.branch))}</td>
+        <td class="num">${money(r.value)}${r.vat ? rateLine(r) : ''}</td>${n(r.vat)}<td><span class="chip ${VAT_ST[r.state][1]}">${esc(VAT_ST[r.state][0])}</span></td>
+        <td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`).join('');
+      foot = `<tr><td colspan="7">รวม ${d.shown.count} เอกสาร</td>${n(d.shown.value)}${n(d.shown.vat)}<td colspan="2"></td></tr>`;
+      raw = [cols.slice(0, 10), ...d.rows.map((r, i) => [i + 1, T.slashDate(r.date), r.number, r.ref_no, r.name, r.tax_id, T.branchFmt(r.branch), r.value, r.vat, VAT_ST[r.state][0]]),
+        ['', '', '', '', 'รวม', '', '', d.shown.value, d.shown.vat, '']];
+    }
+    const sums = isPp36 ? [['ภาษีที่ต้องนำส่ง ภ.พ.36', d.totals.vat]]
+      : isSale ? [['ยอดขายทั้งหมด', d.totals.value], ['ยอดขายที่ต้องเสียภาษี', d.totals.base], ['อัตรา 0 / ได้รับยกเว้น', d.totals.zero], ['ภาษีขาย', d.totals.vat]]
+        : [['ยอดซื้อที่ใช้สิทธิ์', d.totals.base], ['ภาษีซื้อที่ใช้สิทธิ์', d.totals.vat], ['เอกสารที่ใช้สิทธิ์', `${d.totals.count} ใบ`]];
+    const note = !isSale && !isPp36 && d.waiting.count
+      ? `<div class="note-box warn" style="margin:0 0 14px">มีเอกสารรอใบกำกับภาษี ${d.waiting.count} ใบ (ภาษี ${money(d.waiting.vat)} บาท) ยังไม่นับเป็นภาษีซื้อ · <a href="#/vat/purchases?s=wait">จัดการเอกสารภาษีซื้อ</a></div>` : '';
+    const lines = taxpayerLines(month);
+    const table = `<table class="tbl vat-tbl" data-tbl><thead><tr>${cols.map((c, i) => `<th class="${['มูลค่า', 'ภาษีมูลค่าเพิ่ม', 'จำนวนเงินที่จ่าย', 'ภาษี 7%'].includes(c) ? 'num' : ''}">${c}</th>`).join('')}</tr></thead>
+      <tbody>${body || `<tr><td colspan="${cols.length}"><div class="empty"><b>ไม่มีเอกสารในเดือนนี้</b>${isSale ? 'ใบแจ้งหนี้ที่เป็นใบกำกับภาษี และใบเสร็จรับเงินของเดือนจะแสดงที่นี่' : isPp36 ? 'ตั้งค่าใช้จ่ายเป็น “บริการต่างประเทศ (ภ.พ.36)” ได้ที่หน้าจัดการเอกสารภาษีซื้อ' : 'ค่าใช้จ่ายของเดือนจะแสดงที่นี่'}</div></td></tr>`}</tbody>
+      ${d.rows.length ? `<tfoot>${foot}</tfoot>` : ''}</table>`;
+    const head = `<div class="vat-head"><h2>${esc(title)}</h2>${lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+    const sumBox = `<div class="vat-sums">${sums.map(([k, v]) => `<div><span>${k}</span><b>${typeof v === 'number' ? money(v) : esc(v)}</b></div>`).join('')}</div>`;
+    main.innerHTML = `<div class="page-h"><div><a href="#/reports" class="muted" style="text-decoration:none">← รายงาน</a><h1>${esc(title)}</h1><div class="sub">${esc(biz().name)} · เดือนภาษี ${esc(T.thMonth(month))}</div></div>
+      <div class="actions"><button class="btn primary" data-xls>ดาวน์โหลดเป็น Excel</button><button class="btn dark" data-print>${ICON.print}พิมพ์</button></div></div>
+      <div class="card vat-filter">
+        <label class="field"><span>ช่วงเวลา</span><span class="row-in"><select data-c="r">${[['cur', 'เดือนปัจจุบัน'], ['last', 'เดือนก่อน'], ['pick', 'เลือกเดือน']].map(([v, l]) => `<option value="${v}" ${v === preset ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <input type="month" value="${month}" data-c="month"></span></label>
+        ${isPp36 ? '' : `<label class="field"><span>สถานะ</span><select data-c="s">${Object.entries(ST).map(([v, l]) => `<option value="${v}" ${v === status ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`}
+        <span style="flex:1"></span>
+        ${isSale ? '' : '<a class="btn ghost" href="#/vat/purchases">จัดการเอกสารภาษีซื้อ</a>'}<a class="btn ghost" href="#/vat/returns">เตรียมแบบภาษีรายเดือน</a>
+      </div>
+      ${note}
+      <div class="card card-pad">${head}${sumBox}<div class="tbl-wrap">${table}</div></div>`;
+    const go = (patch) => {
+      const p = new URLSearchParams({ month, ...(status ? { s: status } : {}), ...patch });
+      if (!p.get('s')) p.delete('s');
+      location.hash = `#/report/${name}?${p}`;
+    };
+    main.addEventListener('change', (e) => {
+      const c = e.target.dataset.c; if (!c) return;
+      if (c === 'r') { if (e.target.value === 'cur') go({ month: now }); else if (e.target.value === 'last') go({ month: shiftMonth(now, -1) }); else $('[data-c=month]', main).showPicker?.(); return; }
+      if (c === 'month' && /^\d{4}-\d{2}$/.test(e.target.value)) go({ month: e.target.value });
+      if (c === 's') go({ s: e.target.value });
+    });
+    $('[data-xls]', main).onclick = () => excel(`${title}-${month}`, [[title], ...lines.map((l) => [l]), [], raw[0], ...raw.slice(1), [], ...sums], title.replace('รายงาน', ''));
+    $('[data-print]', main).onclick = () => printHtml(`<div class="print-report">${head}${table}</div>`);
+    main.querySelector('tbody').onclick = (e) => {
+      const tr = e.target.closest('[data-doc]'); if (!tr) return;
+      const more = e.target.closest('[data-more]');
+      if (!more) { location.hash = `#/doc/${tr.dataset.doc}`; return; }
+      const items = [['ดูเอกสาร', () => { location.hash = `#/doc/${tr.dataset.doc}`; }], ['ดาวน์โหลด PDF', async () => { try { toast('กำลังสร้าง PDF…'); await downloadDocs([tr.dataset.doc], printPrefs()); } catch (err) { fail(err); } }]];
+      if (!isSale) items.push(['เปลี่ยนสถานะใบกำกับภาษี', () => { location.hash = `#/vat/purchases?m=${month}`; }]);
+      popMenu(more, items);
+    };
+  }
+
+  // จัดการเอกสารภาษีซื้อ: every expense with the status of its tax invoice and the month it is claimed in.
+  async function viewVatPurchases(main, q) {
+    const now = ymNow();
+    const m = /^\d{4}-\d{2}$/.test(q.get('m') || '') ? q.get('m') : '';
+    const period = m ? 'pick' : q.get('p') || 'all';
+    const ranges = {
+      all: null, month: monthRange(now), last: monthRange(shiftMonth(now, -1)),
+      year: [`${now.slice(0, 4)}-01-01`, `${now.slice(0, 4)}-12-31`], pick: m ? monthRange(m) : null,
+    };
+    const range = ranges[period];
+    const { docs } = await get(`/vat/purchases${range ? `?from=${range[0]}&to=${range[1]}` : ''}`);
+    const FILTER = { '': 'ทั้งหมด', wait: 'รอใบกำกับภาษี', got: 'ได้รับแล้ว', defer: 'รอใช้สิทธิ์', none: 'ไม่มีใบกำกับภาษี', pp36: 'ภ.พ.36' };
+    let status = Object.keys(FILTER).includes(q.get('s') || '') ? q.get('s') || '' : '';
+    let rate = '';
+    let shown = 50;
+    const sel = new Set();
+    const deferred = (d) => d.claim_month !== d.date.slice(0, 7);
+    main.innerHTML = `<div class="page-h"><div><h1>จัดการเอกสารภาษีซื้อ</h1><div class="sub">สถานะใบกำกับภาษีของค่าใช้จ่าย และเดือนที่ใช้สิทธิ์ภาษีซื้อ</div></div>
+      <div class="actions"><button class="btn" data-xls>ดาวน์โหลด Excel</button><a class="btn" href="#/report/vat_purchase">รายงานภาษีซื้อ</a><a class="btn primary" href="#/new/EX">${ICON.plus}บันทึกค่าใช้จ่าย</a></div></div>
+      <div class="card">
+        <div class="filters">
+          <input type="search" placeholder="ค้นหา เลขที่เอกสาร ชื่อผู้จำหน่าย เลขที่ใบกำกับภาษี" data-q style="flex:1;max-width:none;min-width:200px">
+          <select data-p>${[['all', 'ทุกช่วงเวลา'], ['month', 'เดือนนี้'], ['last', 'เดือนก่อน'], ['year', 'ปีนี้'], ...(m ? [['pick', T.thMonth(m)]] : [])].map(([v, l]) => `<option value="${v}" ${v === period ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <select data-rate><option value="">อัตรา VAT ทั้งหมด</option><option value="7">อัตรา VAT 7%</option><option value="0">ไม่มี VAT</option></select>
+        </div>
+        <div class="filters"><div class="seg" data-s>${Object.entries(FILTER).map(([v, l]) => `<button data-v="${v}" class="${v === status ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+        <div class="bulk" data-bulk hidden><b data-bn></b><button class="btn sm" data-set="got">ได้รับใบกำกับภาษีแล้ว</button><button class="btn sm" data-set="wait">รอใบกำกับภาษี</button><button class="btn sm" data-set="defer">ใช้สิทธิ์เดือนอื่น</button><button class="btn sm" data-set="pp36">ภ.พ.36</button><button class="btn sm ghost" data-bc>ล้างที่เลือก</button></div>
+        <div class="vat-count" data-count></div>
+        <div class="tbl-wrap"><table class="tbl doc-tbl ex"><thead><tr>
+          <th class="ck"><input type="checkbox" data-all aria-label="เลือกทั้งหมด"></th><th></th><th>วันที่เอกสาร</th><th>เลขที่เอกสาร</th><th>ชื่อผู้จำหน่าย</th>
+          <th class="num">มูลค่า / ภาษีมูลค่าเพิ่ม</th><th>สถานะใบกำกับภาษี</th><th>ใช้สิทธิ์เดือน</th><th></th></tr></thead>
+        <tbody data-body></tbody></table></div>
+        <div class="pager" data-more-wrap></div>
+      </div>`;
+    const filtered = () => {
+      const s = $('[data-q]', main).value.trim().toLowerCase();
+      return docs.filter((d) => (!status || (status === 'defer' ? deferred(d) : d.state === status))
+        && (!rate || (rate === '7' ? d.vat > 0 : !(d.vat > 0)))
+        && (!s || d.number.toLowerCase().includes(s) || (d.contact_name || '').toLowerCase().includes(s) || (d.ref_no || '').toLowerCase().includes(s) || (d.tax_id || '').includes(s)));
+    };
+    const stCell = (d) => {
+      const hasVat = d.state === 'got' || d.state === 'wait';
+      const opts = hasVat ? [['wait', 'รอใบกำกับภาษี'], ['got', 'ได้รับใบกำกับภาษีแล้ว'], ['defer', 'ใช้สิทธิ์เดือนอื่น…']] : [['none', 'ไม่มีใบกำกับภาษี'], ['pp36', 'บริการต่างประเทศ (ภ.พ.36)']];
+      return `<label class="st ${VAT_ST[d.state][1]} pick"><select data-st="${d.id}" aria-label="สถานะใบกำกับภาษี">${opts.map(([v, l]) => `<option value="${v}" ${v === d.state ? 'selected' : ''}>${l}</option>`).join('')}</select>${CHEV}</label>`;
+    };
+    const draw = () => {
+      const rows = filtered();
+      const view = rows.slice(0, shown);
+      $('[data-count]', main).innerHTML = `รายการทั้งหมด <b>${rows.length}</b> รายการ · ภาษีซื้อ ${money(rows.reduce((a, d) => a + (d.state === 'got' ? d.vat : 0), 0))} บาท${rows.some((d) => d.state === 'wait') ? ` · รอใบกำกับภาษี ${money(rows.reduce((a, d) => a + (d.state === 'wait' ? d.vat : 0), 0))} บาท` : ''}`;
+      $('[data-body]', main).innerHTML = view.length ? view.map((d) => `<tr class="click${sel.has(d.id) ? ' sel' : ''}" data-id="${d.id}">
+        <td class="ck"><input type="checkbox" data-ck ${sel.has(d.id) ? 'checked' : ''} aria-label="เลือก"></td>
+        <td class="th-cell"><div class="thumb">${d.thumb ? `<img src="${esc(d.thumb)}" alt="" loading="lazy">` : d.attachment ? '<span>PDF</span>' : ICON.ex}</div></td>
+        <td class="nowrap">${T.thDate(d.date)}</td>
+        <td class="nowrap"><span class="dot ${statusTone(d.status, 'EX')}"></span><span class="doc-no">${esc(d.number)}</span>${d.ref_no ? `<div class="muted" style="font-size:12px">ใบกำกับ ${esc(d.ref_no)}</div>` : ''}</td>
+        <td>${esc(d.contact_name || '')}${d.tax_id ? `<div class="muted mono" style="font-size:12px">${esc(T.taxIdFmt(d.tax_id))}</div>` : ''}</td>
+        <td class="num"><b>${money(d.value)}</b><div class="muted" style="font-size:12px">${d.vat > 0 ? money(d.vat) : d.state === 'pp36' ? `ภ.พ.36 ${money(Math.round(d.value * 7) / 100)}` : '–'}</div></td>
+        <td>${stCell(d)}</td>
+        <td class="nowrap">${d.state === 'got' || d.state === 'wait' ? `${esc(T.thMonth(d.claim_month))}${deferred(d) ? ' <span class="chip info">รอใช้สิทธิ์</span>' : ''}` : '<span class="muted">–</span>'}</td>
+        <td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`).join('')
+        : '<tr><td colspan="9"><div class="empty"><b>ไม่มีเอกสาร</b>ลองเปลี่ยนช่วงเวลาหรือสถานะ</div></td></tr>';
+      $('[data-more-wrap]', main).innerHTML = rows.length > shown ? `<button class="btn sm" data-showmore>แสดงเพิ่ม (${rows.length - shown})</button>` : '';
+      $('[data-all]', main).checked = view.length > 0 && view.every((d) => sel.has(d.id));
+      $('[data-bulk]', main).hidden = !sel.size;
+      $('[data-bn]', main).textContent = `เลือก ${sel.size} รายการ`;
+    };
+    draw();
+    // Ask for the claim month: the document's month up to six months later.
+    const pickMonth = async (list) => {
+      const own = list.map((d) => d.date.slice(0, 7)).sort().pop();
+      const first = list.map((d) => d.date.slice(0, 7)).sort()[0];
+      const max = shiftMonth(first, 6);
+      return dialog({
+        title: 'ใช้สิทธิ์ภาษีซื้อเดือนอื่น', ok: 'บันทึก',
+        body: `<p style="margin:0 0 12px">เลือกเดือนภาษีที่จะนำภาษีซื้อไปหัก (ใช้สิทธิ์ได้ภายใน 6 เดือนนับจากเดือนที่ออกใบกำกับภาษี)</p>
+          <label class="field"><span>ใช้สิทธิ์ในเดือนภาษี</span><input type="month" name="month" min="${own}" max="${max}" value="${list.length === 1 ? list[0].claim_month : shiftMonth(own, 1) > max ? own : shiftMonth(own, 1)}"></label>`,
+        onOk: (el) => { const v = $('[name=month]', el).value; if (!v || v < own || v > max) { toast(`เลือกเดือน ${T.thMonth(own)} ถึง ${T.thMonth(max)}`, true); return false; } return v; },
+      });
+    };
+    const setStatus = async (list, v) => {
+      if (!list.length) return;
+      let body = { ids: list.map((d) => d.id), status: v };
+      if (v === 'defer') {
+        const month = await pickMonth(list.filter((d) => d.state === 'got' || d.state === 'wait'));
+        if (!month) { draw(); return; }
+        body = { ...body, status: 'got', month };
+      } else if (v === 'wait') body.month = list.length === 1 ? list[0].vat_month : null;
+      const r = await post('/vat/purchases', body);
+      for (const d of list) {
+        if (r.skipped.includes(d.id)) continue;
+        if (body.status === 'got' || body.status === 'wait') { d.state = body.status; d.vat_month = body.month || null; d.claim_month = body.month || d.date.slice(0, 7); } else d.state = body.status;
+      }
+      toast(r.skipped.length ? `เปลี่ยนแล้ว ${r.updated} รายการ · ข้าม ${r.skipped.length} รายการที่ใช้สถานะนี้ไม่ได้` : `เปลี่ยนสถานะแล้ว ${r.updated} รายการ`);
+      draw();
+    };
+    $('[data-q]', main).oninput = () => { shown = 50; draw(); };
+    $('[data-rate]', main).onchange = (e) => { rate = e.target.value; draw(); };
+    $('[data-p]', main).onchange = (e) => { location.hash = `#/vat/purchases?p=${e.target.value}${status ? `&s=${status}` : ''}`; };
+    $('[data-s]', main).onclick = (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      status = b.dataset.v; shown = 50;
+      $$('[data-s] button', main).forEach((x) => x.classList.toggle('on', x === b));
+      draw();
+    };
+    $('[data-all]', main).onchange = (e) => { filtered().slice(0, shown).forEach((d) => (e.target.checked ? sel.add(d.id) : sel.delete(d.id))); draw(); };
+    $('[data-bc]', main).onclick = () => { sel.clear(); draw(); };
+    $('[data-bulk]', main).onclick = async (e) => {
+      const b = e.target.closest('[data-set]'); if (!b) return;
+      try { await setStatus(docs.filter((d) => sel.has(d.id)), b.dataset.set); sel.clear(); draw(); } catch (err) { fail(err); }
+    };
+    $('[data-more-wrap]', main).onclick = (e) => { if (e.target.closest('[data-showmore]')) { shown += 50; draw(); } };
+    $('[data-xls]', main).onclick = () => excel(`เอกสารภาษีซื้อ-${T.today()}`, [
+      ['วันที่เอกสาร', 'เลขที่เอกสาร', 'เลขที่ใบกำกับภาษี', 'ชื่อผู้จำหน่าย', 'เลขผู้เสียภาษี', 'มูลค่า', 'ภาษีมูลค่าเพิ่ม', 'สถานะใบกำกับภาษี', 'ใช้สิทธิ์เดือน'],
+      ...filtered().map((d) => [d.date, d.number, d.ref_no || '', d.contact_name || '', d.tax_id || '', d.value, d.vat, VAT_ST[d.state][0], d.state === 'got' || d.state === 'wait' ? d.claim_month : '']),
+    ], 'เอกสารภาษีซื้อ');
+    const body = $('[data-body]', main);
+    body.addEventListener('change', async (e) => {
+      const ck = e.target.closest('[data-ck]');
+      if (ck) { const id = ck.closest('[data-id]').dataset.id; if (ck.checked) sel.add(id); else sel.delete(id); draw(); return; }
+      const st = e.target.closest('[data-st]'); if (!st) return;
+      try { await setStatus([docs.find((x) => x.id === st.dataset.st)], st.value); } catch (err) { fail(err); draw(); }
+    });
+    body.addEventListener('click', (e) => {
+      if (e.target.closest('.ck, .st')) return;
+      const tr = e.target.closest('[data-id]'); if (!tr) return;
+      const d = docs.find((x) => x.id === tr.dataset.id);
+      const more = e.target.closest('[data-more]');
+      if (!more) { location.hash = `#/doc/${d.id}`; return; }
+      const items = [['ดูเอกสาร', () => { location.hash = `#/doc/${d.id}`; }], ['แก้ไข', () => { location.hash = `#/edit/${d.id}`; }]];
+      if (d.attachment) items.push(['ดูไฟล์บิล', async () => { try { const { url } = await get(`/attachment?key=${encodeURIComponent(d.attachment)}`); window.open(url, '_blank', 'noopener'); } catch (err) { fail(err); } }]);
+      if (d.state === 'got' || d.state === 'wait') items.push(null, ['ใช้สิทธิ์เดือนอื่น…', () => setStatus([d], 'defer').catch(fail)]);
+      if (deferred(d)) items.push(['ใช้สิทธิ์เดือนของเอกสาร', () => setStatus([d], 'got').catch(fail)]);
+      popMenu(more, items);
+    });
+  }
+
+  // เตรียมแบบภาษีรายเดือน: ภ.พ.30 and ภ.พ.36 worked out from the documents, marked filed when sent to the RD.
+  const PP30_LINES = [
+    ['l1', '1. ยอดขายในเดือนนี้'], ['l2', '2. ลบ ยอดขายที่เสียภาษีในอัตราร้อยละ 0 และที่ได้รับยกเว้น'], ['l4', '4. ยอดขายที่ต้องเสียภาษี'],
+    ['l5', '5. ภาษีขายเดือนนี้'], ['l6', '6. ยอดซื้อที่มีสิทธิ์นำภาษีซื้อมาหักในการคำนวณภาษีเดือนนี้'], ['l7', '7. ภาษีซื้อเดือนนี้'],
+    ['l8', '8. ภาษีที่ต้องชำระเดือนนี้ (5 มากกว่า 7)'], ['l9', '9. ภาษีที่ชำระเกินเดือนนี้ (5 น้อยกว่า 7)'], ['l10', '10. ภาษีที่ชำระเกินยกมา'],
+    ['l11', '11. ภาษีสุทธิที่ต้องชำระ'], ['l12', '12. ภาษีสุทธิที่ชำระเกิน'],
+  ];
+  const FORM_NAME = { PP30: 'ภ.พ.30', PP36: 'ภ.พ.36' };
+  async function newReturn(form) {
+    const month = await dialog({
+      title: `เตรียมแบบ ${FORM_NAME[form]}`, ok: 'สร้าง',
+      body: `<label class="field"><span>เดือนภาษี</span><input type="month" name="month" value="${shiftMonth(ymNow(), -1)}" max="${ymNow()}"></label>
+        <p class="muted" style="margin:10px 0 0;font-size:13px">${form === 'PP30' ? 'คำนวณจากรายงานภาษีขายและภาษีซื้อตามเอกสารของเดือนนั้น พร้อมภาษีชำระเกินยกมาจากเดือนก่อน' : 'คำนวณจากค่าใช้จ่ายที่ตั้งเป็นบริการต่างประเทศ (ภ.พ.36) ที่จ่ายในเดือนนั้น'}</p>`,
+      onOk: (el) => $('[name=month]', el).value || false,
+    });
+    if (!month) return;
+    const r = await post('/vat/returns', { form, month });
+    location.hash = `#/vat/returns/${r.return.id}`;
+  }
+  async function viewVatReturns(main, q, id) {
+    const { returns } = await get('/vat/returns');
+    if (id) return viewVatReturn(main, returns.find((r) => r.id === id));
+    const tab = ['PP30', 'PP36'].includes(q.get('f')) ? q.get('f') : '';
+    const list = returns.filter((r) => !tab || r.form === tab);
+    const net = (r) => (r.form === 'PP36' ? r.data.vat : r.data.l11 ? r.data.l11 : -r.data.l12);
+    main.innerHTML = `<div class="page-h"><div><h1>เตรียมแบบภาษีรายเดือน</h1><div class="sub">ภ.พ.30 ภาษีมูลค่าเพิ่ม และ ภ.พ.36 บริการจากต่างประเทศ</div></div>
+      <div class="actions"><button class="btn primary" data-new>${ICON.plus}สร้างใหม่ ${CHEV}</button></div></div>
+      <div class="seg" style="margin-bottom:14px" data-tab>${[['', 'แสดงทั้งหมด'], ['PP30', 'ภ.พ.30'], ['PP36', 'ภ.พ.36']].map(([v, l]) => `<button data-v="${v}" class="${v === tab ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>วันที่ชำระภาษี</th><th>เดือนที่ยื่นแบบภาษี</th><th>แบบฟอร์มภาษี</th><th class="num">มูลค่าภาษีขาย</th><th class="num">มูลค่าภาษีซื้อ</th><th class="num">ต้องชำระ / ชำระเกิน</th><th>สถานะ</th></tr></thead>
+        <tbody data-body>${list.length ? list.map((r) => `<tr class="click" data-id="${r.id}"><td class="nowrap">${r.status === 'filed' ? T.thDate(r.filed_at) : `ภายใน ${T.thDate(r.due.online)}`}</td>
+          <td>${esc(T.thMonth(r.month))}</td><td><b>${FORM_NAME[r.form]}</b></td>
+          <td class="num">${r.form === 'PP30' ? money(r.data.l5) : '–'}</td><td class="num">${r.form === 'PP30' ? money(r.data.l7) : money(r.data.vat)}</td>
+          <td class="num" style="color:${net(r) < 0 ? 'var(--good)' : 'inherit'}">${net(r) < 0 ? `เกิน ${money(-net(r))}` : money(net(r))}</td>
+          <td>${r.status === 'filed' ? '<span class="chip good">ยื่นแล้ว</span>' : '<span class="chip warn">ร่าง</span>'}</td></tr>`).join('')
+    : `<tr><td colspan="7"><div class="empty"><b>ยังไม่มีแบบภาษี</b>กดปุ่ม ‘สร้างใหม่’ เพื่อเตรียมแบบยื่น ภ.พ.30 หรือ ภ.พ.36</div></td></tr>`}</tbody></table></div></div>`;
+    $('[data-new]', main).onclick = (e) => popMenu(e.currentTarget, [['ภ.พ.30 ภาษีมูลค่าเพิ่ม', () => newReturn('PP30').catch(fail)], ['ภ.พ.36 บริการจากต่างประเทศ', () => newReturn('PP36').catch(fail)]]);
+    $('[data-tab]', main).onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) location.hash = `#/vat/returns${b.dataset.v ? `?f=${b.dataset.v}` : ''}`; };
+    $('[data-body]', main).onclick = (e) => { const tr = e.target.closest('[data-id]'); if (tr) location.hash = `#/vat/returns/${tr.dataset.id}`; };
+  }
+  function viewVatReturn(main, r) {
+    if (!r) { main.innerHTML = '<div class="empty"><b>ไม่พบแบบภาษี</b></div>'; return; }
+    const pp30 = r.form === 'PP30';
+    const draft = r.status === 'draft';
+    const rows = pp30 ? PP30_LINES.map(([k, l]) => [l, r.data[k] || 0, k])
+      : [['ค่าบริการที่จ่ายให้ผู้ประกอบการต่างประเทศ', r.data.base, 'base'], ['ภาษีมูลค่าเพิ่มที่ต้องนำส่ง (7%)', r.data.vat, 'vat'], ['จำนวนรายการ', r.data.count, 'count']];
+    const strong = ['l5', 'l7', 'l11', 'l12', 'vat'];
+    const title = `แบบ ${FORM_NAME[r.form]} เดือนภาษี ${T.thMonth(r.month)}`;
+    const lines = taxpayerLines(r.month);
+    const table = `<table class="tbl" data-tbl><thead><tr><th>รายการ</th><th class="num">จำนวนเงิน (บาท)</th></tr></thead><tbody>${rows.map(([l, v, k]) => `<tr${strong.includes(k) ? ' style="font-weight:700"' : ''}><td>${esc(l)}</td><td class="num">${k === 'count' ? v : money(v)}</td></tr>`).join('')}</tbody></table>`;
+    const waiting = pp30 && r.data.waiting?.count ? `<div class="note-box warn" style="margin-bottom:14px">มีค่าใช้จ่ายรอใบกำกับภาษี ${r.data.waiting.count} ใบ (ภาษี ${money(r.data.waiting.vat)} บาท) ยังไม่รวมในภาษีซื้อ · <a href="#/vat/purchases?m=${r.month}&s=wait">ดูเอกสาร</a></div>` : '';
+    main.innerHTML = `<div class="page-h"><div><a href="#/vat/returns" class="muted" style="text-decoration:none">← เตรียมแบบภาษีรายเดือน</a><h1>${esc(title)}</h1>
+        <div class="sub">${draft ? `ร่าง · ยื่นภายใน ${T.thDate(r.due.paper)} (ยื่นออนไลน์ภายใน ${T.thDate(r.due.online)})` : `ยื่นแล้ว ${T.thDate(r.filed_at)}${r.filed_ref ? ` · ${esc(r.filed_ref)}` : ''}`}</div></div>
+      <div class="actions">${draft ? '<button class="btn" data-refresh>คำนวณใหม่</button><button class="btn" data-del>ลบร่าง</button><button class="btn primary" data-file>บันทึกว่ายื่นแล้ว</button>' : '<button class="btn" data-unfile>กลับเป็นร่าง</button>'}
+        <button class="btn" data-xls>ดาวน์โหลด Excel</button><button class="btn dark" data-print>${ICON.print}พิมพ์</button></div></div>
+      ${waiting}
+      <div class="card card-pad"><div class="vat-head"><h2>${esc(title)}</h2>${lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>
+        <div class="tbl-wrap">${table}</div>
+        <div class="vat-links">${pp30 ? `<a href="#/report/vat_sales?month=${r.month}">รายงานภาษีขาย (${r.data.salesCount} ใบ)</a><a href="#/report/vat_purchase?month=${r.month}">รายงานภาษีซื้อ (${r.data.purchaseCount} ใบ)</a>` : `<a href="#/report/vat_pp36?month=${r.month}">รายงานภาษีซื้อ ภ.พ.36</a>`}
+          <a href="https://efiling.rd.go.th/" target="_blank" rel="noopener">ยื่นแบบออนไลน์ที่ efiling.rd.go.th ↗</a></div>
+        <p class="muted" style="font-size:13px;margin:12px 0 0">${draft ? 'ร่างจะคำนวณจากเอกสารล่าสุดเมื่อกด “คำนวณใหม่” เมื่อบันทึกว่ายื่นแล้ว ตัวเลขจะคงที่' : 'แบบที่ยื่นแล้วจะไม่เปลี่ยนตามเอกสาร ถ้าต้องแก้ ให้กลับเป็นร่างแล้วคำนวณใหม่'}${pp30 ? ' · ยอดอัตรา 0 และยอดที่ได้รับยกเว้นรวมอยู่ในข้อ 2 ให้แยกข้อ 3 ตอนยื่นถ้ามี' : ''}</p></div>`;
+    const act = (sel, fn) => { const b = $(sel, main); if (b) b.onclick = () => fn().catch(fail); };
+    act('[data-refresh]', async () => { await post('/vat/returns', { form: r.form, month: r.month }); toast('คำนวณใหม่แล้ว'); render(); });
+    act('[data-del]', async () => { if (await confirmBox('ลบร่างแบบภาษี', `ลบ ${esc(title)}`)) { await api('DELETE', A(`/vat/returns/${r.id}`)); location.hash = '#/vat/returns'; } });
+    act('[data-file]', async () => {
+      const ok = await dialog({
+        title: 'บันทึกว่ายื่นแบบแล้ว', ok: 'บันทึก',
+        body: `<div class="grid g2"><label class="field"><span>วันที่ยื่น / ชำระภาษี</span><input type="date" name="filed_at" value="${T.today()}"></label>
+          <label class="field"><span>เลขที่อ้างอิง (ถ้ามี)</span><input type="text" name="filed_ref" placeholder="เลขที่ใบเสร็จกรมสรรพากร"></label></div>`,
+        onOk: async (el) => { await post(`/vat/returns/${r.id}/file`, formData(el)); return true; },
+      });
+      if (ok) { toast('บันทึกแล้ว'); render(); }
+    });
+    act('[data-unfile]', async () => { await post(`/vat/returns/${r.id}/file`, { filed: false }); render(); });
+    $('[data-xls]', main).onclick = () => excel(`${FORM_NAME[r.form]}-${r.month}`, [[title], ...lines.map((l) => [l]), [], ['รายการ', 'จำนวนเงิน'], ...rows.map(([l, v]) => [l, v])], FORM_NAME[r.form]);
+    $('[data-print]', main).onclick = () => printHtml(`<div class="print-report"><div class="vat-head"><h2>${esc(title)}</h2>${lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>${table}</div>`);
   }
 
   /* ---------- Sales summary ---------- */
@@ -1642,16 +1976,6 @@
     const m = (v) => money(v);
     const n = (v) => `<td class="num">${m(v)}</td>`;
     const docRow = (id) => (id ? ` class="click" data-doc="${id}"` : '');
-    if (name === 'vat_sales' || name === 'vat_purchase') {
-      const s = name === 'vat_sales';
-      const cols = ['ลำดับ', 'วันที่', 'เลขที่', s ? 'ชื่อผู้ซื้อ' : 'ชื่อผู้ขาย', 'เลขประจำตัวผู้เสียภาษี', 'สาขา', 'มูลค่าสินค้า/บริการ', 'ภาษีมูลค่าเพิ่ม'];
-      return {
-        head: `<tr>${cols.map((c, i) => `<th${i >= 6 ? ' class="num"' : ''}>${c}</th>`).join('')}</tr>`,
-        body: d.rows.map((r, i) => `<tr${docRow(r.id)}><td>${i + 1}</td><td>${T.slashDate(r.date)}</td><td class="mono">${esc(s ? r.number : r.ref_no || r.number)}</td><td>${esc(r.name)}${r.void ? ' <span class="chip bad">ยกเลิก</span>' : ''}</td><td class="mono">${esc(T.taxIdFmt(r.tax_id))}</td><td>${esc(T.branchFmt(r.branch))}</td>${n(r.base)}${n(r.vat)}</tr>`).join(''),
-        foot: `<tr><td colspan="6">รวม</td>${n(d.totals.base)}${n(d.totals.vat)}</tr>`,
-        rows: [cols, ...d.rows.map((r, i) => [i + 1, T.slashDate(r.date), s ? r.number : r.ref_no || r.number, r.name + (r.void ? ' (ยกเลิก)' : ''), r.tax_id, T.branchFmt(r.branch), r.base, r.vat]), ['', '', '', 'รวม', '', '', d.totals.base, d.totals.vat]],
-      };
-    }
     if (name === 'vat_summary') {
       const rows = [['ยอดขาย (ฐานภาษี)', d.sales.base], ['ภาษีขาย', d.sales.vat], ['ยอดซื้อ (ฐานภาษี)', d.purchase.base], ['ภาษีซื้อ', d.purchase.vat], [d.payable >= 0 ? 'ภาษีที่ต้องชำระ' : 'ภาษีที่ชำระเกิน', Math.abs(d.payable)]];
       return {
