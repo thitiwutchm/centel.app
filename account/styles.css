@@ -109,7 +109,7 @@ a { color: inherit; }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field > span { font-size: 12px; color: var(--ink-2); font-weight: 500; }
 .field small { color: var(--muted); font-size: 12px; }
-input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], input[type=month], input[type=search], select, textarea {
+input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], input[type=month], input[type=search], input[type=tel], select, textarea {
   height: 38px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); width: 100%; min-width: 0; outline: none;
 }
 textarea { height: auto; min-height: 76px; padding: 9px 11px; resize: vertical; }
@@ -551,6 +551,52 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .form-rows > label > span, .form-rows > .fr > span { font-weight: 500; color: var(--ink-2); }
 .radios { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 @media (max-width: 560px) { .form-rows > label, .form-rows > .fr { grid-template-columns: 1fr; gap: 4px; } }
+/* ---------- Users (ผู้ใช้งานในระบบ / ข้อมูลส่วนตัว) ---------- */
+.perm-badges { display: inline-flex; gap: 5px; align-items: center; vertical-align: middle; }
+.perm-b { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--c); color: #fff; flex: none; }
+.perm-b svg { width: 14px; height: 14px; }
+.perm-b.ro { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
+.perm-legend { font-size: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 12px; }
+.users-tbl td { vertical-align: middle; }
+.u-cell { display: flex; gap: 10px; align-items: center; }
+.u-ic { width: 30px; height: 30px; border-radius: 50%; background: var(--line-2); color: var(--ink-2); display: grid; place-items: center; flex: none; }
+.u-ic svg { width: 17px; height: 17px; }
+.u-ic.pend { background: var(--warn-soft); color: var(--warn); }
+.u-ok { color: var(--good); font-size: 12px; margin-top: 2px; }
+.chip.crown { margin-left: 6px; }
+.perm-pick { display: grid; gap: 8px; margin-top: 6px; }
+.perm-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.perm-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.perm-t small { color: var(--muted); font-size: 12px; }
+.perm-row select { width: auto; min-width: 140px; }
+.perm-tbl td { vertical-align: middle; }
+.perm-mine { margin-top: 8px; }
+.perm-mine summary { display: inline-block; font-size: 13px; margin-bottom: 8px; }
+.invite-link { display: flex; gap: 8px; }
+.invite-link input { flex: 1; font-size: 13px; }
+.form-rows { display: grid; gap: 12px; }
+.frow { display: grid; grid-template-columns: 170px 1fr; gap: 12px; align-items: start; }
+.frow > span { padding-top: 9px; color: var(--ink-2); }
+.frow-v { display: flex; gap: 10px; align-items: center; }
+.frow-v input { flex: 1; }
+input:disabled { background: var(--panel-2); color: var(--ink-2); }
+.sig-box { height: 140px; border-radius: 12px 12px 0 0; border: 1px solid var(--line); background: var(--panel-2); display: grid; place-items: center; overflow: hidden; cursor: pointer; }
+.sig-box img { max-width: 92%; max-height: 124px; object-fit: contain; }
+.sig-box:has(.btn) { border-style: dashed; border-radius: 12px; }
+.sig-file { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; margin-bottom: 6px; font-size: 13px; overflow: hidden; }
+.sig-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sig-file .icon-btn { border: 0; font-size: 20px; }
+.invite-banner { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); margin-bottom: 16px; font-size: 14px; }
+.invite-banner img { width: 36px; height: 36px; object-fit: contain; border-radius: 6px; }
+.invite-banner small { display: block; color: var(--ink-2); margin-top: 2px; }
+.invite-banner.bad { background: var(--bad-soft); color: var(--bad); }
+.inv-row { display: flex; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+@media (max-width: 640px) {
+  .frow { grid-template-columns: 1fr; gap: 4px; }
+  .frow > span { padding-top: 0; }
+  .perm-row { flex-wrap: wrap; }
+  .perm-row select { width: 100%; }
+}
 
 /* VAT reports by document, purchase tax documents, monthly returns */
 .vat-filter { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 14px; }

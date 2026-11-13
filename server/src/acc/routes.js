@@ -11,6 +11,7 @@ import {
 } from './ledger.js';
 import { report, REPORTS, purchaseVatState, vatSales, vatPurchase, vatPp36 } from './reports.js';
 import { readPurchaseDoc } from './ai.js';
+import { mountUsers, guard, permsOf, inviteInfo, issuerOf } from './users.js';
 import { CC_KINDS, DEFAULT_BASE, ccFetch, cleanBase, cleanKey, reportFor, sinceMonth, toDocBody, venueContact } from './capcourt.js';
 
 const router = express.Router();
@@ -38,7 +39,20 @@ router.get('/public/:token', rateLimit(300, 60 * 60000), wrap(async (req, res) =
   if (!d) throw bad('not_found', 404);
   const b = (await pool.query('select * from acc_businesses where id = $1', [d.business_id])).rows[0];
   const ref = d.ref_id ? (await pool.query('select type, number, date from acc_docs where id = $1', [d.ref_id])).rows[0] : null;
-  res.set('Cache-Control', 'no-store').json({ doc: publicDoc(d, ref), business: publicBusiness(b) });
+  const business = publicBusiness(b);
+  // The person who issued the document signs it with their own signature when they have one.
+  if (b.settings?.signAuto) {
+    const sig = (await issuerOf(d.created_by))?.signature;
+    if (sig) business.signature = sig;
+  }
+  res.set('Cache-Control', 'no-store').json({ doc: publicDoc(d, ref), business });
+}));
+
+// What an invite link is for, shown on the sign-in page before the person signs in.
+router.get('/invite-info/:token', rateLimit(120, 60 * 60000), wrap(async (req, res) => {
+  const info = await inviteInfo(String(req.params.token));
+  if (!info) throw bad('invite_gone', 404);
+  res.set('Cache-Control', 'no-store').json(info);
 }));
 
 router.use(requireUser);
@@ -74,13 +88,15 @@ const biz = express.Router({ mergeParams: true });
 router.use('/b/:biz', wrap(async (req, _res, next) => {
   if (!isUuid(req.params.biz)) throw bad('not_found', 404);
   const row = await tx(req, async (db) => (await db.query(
-    `select b.*, m.role from acc_businesses b join acc_members m on m.business_id = b.id and m.user_id = app_uid()
+    `select b.*, m.role, m.perms from acc_businesses b join acc_members m on m.business_id = b.id and m.user_id = app_uid()
      where b.id = $1`, [req.params.biz])).rows[0]);
   if (!row) throw bad('not_found', 404);
+  row.perms = permsOf(row.role, row.perms);
   req.biz = row;
-  if (req.method !== 'GET' && row.role === 'viewer') throw bad('forbidden', 403);
+  await guard(req);
   next();
 }), biz);
+mountUsers(router, biz, { wrap, rateLimit });
 
 const B = (req) => req.biz.id;
 
@@ -142,8 +158,8 @@ biz.get('/', wrap(async (req, res) => {
     contacts: (await db.query('select * from acc_contacts where business_id = $1 order by name', [B(req)])).rows,
     items: (await db.query('select * from acc_items where business_id = $1 order by name', [B(req)])).rows,
   }));
-  const { role, ...business } = req.biz;
-  res.json({ business, role, ...out, ai: !!process.env.ANTHROPIC_API_KEY || !!process.env.ANTHROPIC_AUTH_TOKEN, storage: storageEnabled });
+  const { role, perms, ...business } = req.biz;
+  res.json({ business, role, perms, ...out, ai: !!process.env.ANTHROPIC_API_KEY || !!process.env.ANTHROPIC_AUTH_TOKEN, storage: storageEnabled });
 }));
 
 biz.put('/', wrap(async (req, res) => {
@@ -477,6 +493,7 @@ biz.get('/docs', wrap(async (req, res) => {
   const where = ['business_id = $1'];
   const p = [B(req)];
   if (DOC_TYPES.includes(q.type)) { p.push(q.type); where.push(`type = $${p.length}`); }
+  if (req.docTypes && req.docTypes.length < DOC_TYPES.length) { p.push(req.docTypes); where.push(`type = any($${p.length})`); }
   if (isDate(q.from)) { p.push(q.from); where.push(`date >= $${p.length}`); }
   if (isDate(q.to)) { p.push(q.to); where.push(`date <= $${p.length}`); }
   if (typeof q.status === 'string' && /^[a-z]{2,10}$/.test(q.status)) { p.push(q.status); where.push(`status = $${p.length}`); }
@@ -508,6 +525,7 @@ biz.get('/docs/:id', wrap(async (req, res) => {
        where e.doc_id = $1 order by e.date, l.debit desc, l.account`, [doc.id])).rows;
     return { doc, ref, children, journal };
   });
+  out.issuer = await issuerOf(out.doc.created_by);
   res.json(out);
 }));
 

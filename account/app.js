@@ -24,7 +24,10 @@
     bad_pay_account: 'เลือกบัญชีเงินสดหรือธนาคาร', negative_total: 'ยอดรวมติดลบไม่ได้', confirm_name: 'พิมพ์ชื่อกิจการให้ตรงเพื่อยืนยัน',
     capcourt_key: 'รหัสเชื่อมต่อ CapCourt ไม่ถูกต้องหรือถูกยกเลิก', capcourt_down: 'ติดต่อ CapCourt ไม่ได้ ลองใหม่อีกครั้ง', bad_url: 'ที่อยู่ต้องขึ้นต้นด้วย https://',
     too_large: 'ไฟล์ใหญ่เกินไป', forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', not_found: 'ไม่พบข้อมูล', too_many_requests: 'ลองใหม่อีกครั้งในอีกสักครู่',
-    google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่', ref_void: 'เอกสารต้นทางถูกยกเลิกแล้ว', bad_code: 'รหัสบัญชีไม่ถูกต้อง',
+    google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่', bad_role: 'กรุณาเลือกตำแหน่ง', already_member: 'อีเมลนี้เป็นผู้ใช้งานในกิจการนี้อยู่แล้ว',
+    too_many_users: 'เพิ่มผู้ใช้งานได้สูงสุด 50 คนต่อกิจการ', primary_owner: 'เจ้าของหลักของกิจการแก้ไขหรือลบไม่ได้', self_demote: 'เปลี่ยนตำแหน่งของตัวเองไม่ได้ ให้เจ้าของคนอื่นเปลี่ยนให้',
+    self_disable: 'ระงับบัญชีของตัวเองไม่ได้', invite_gone: 'คำเชิญนี้หมดอายุหรือถูกใช้ไปแล้ว ขอให้เจ้าของกิจการส่งคำเชิญใหม่',
+    invite_other_email: 'คำเชิญนี้ส่งถึงอีเมลอื่น ออกจากระบบแล้วเข้าสู่ระบบด้วยอีเมลที่ได้รับเชิญ', bad_image: 'ไฟล์รูปไม่ถูกต้อง', ref_void: 'เอกสารต้นทางถูกยกเลิกแล้ว', bad_code: 'รหัสบัญชีไม่ถูกต้อง',
   };
   async function api(method, path, body) {
     const res = await fetch('/api' + path, {
@@ -112,6 +115,8 @@
     plus: I('<path d="M12 5v14M5 12h14"/>'),
     bank: I('<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>'),
     swap: I('<path d="M4 8h14l-3-3M20 16H6l3 3"/>'),
+    user: I('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+    users: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M19 8v6M16 11h6"/>'),
     print: I('<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/>'),
     link: I('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
@@ -141,7 +146,7 @@
     } catch { /* Google sign-in not available here */ }
   }
 
-  function renderAuth() {
+  function renderAuth(invite) {
     let mode = 'login';
     app.innerHTML = `<div class="auth">
       <div class="auth-art">
@@ -172,6 +177,21 @@
       </form></div></div>`;
     const f = $('form', app);
     loadGoogle($('[data-google]', f));
+    // Opened from an invite link: say who invited them and to which email.
+    if (invite) {
+      api('GET', `/acc/invite-info/${invite}`).then((i) => {
+        const box = document.createElement('div');
+        box.className = 'invite-banner';
+        box.innerHTML = `${i.logo ? `<img src="${esc(i.logo)}" alt="">` : ''}<div><b>${esc(i.business)}</b> เชิญคุณเข้าร่วมเป็น <b>${esc(i.role_name)}</b><small>เข้าสู่ระบบหรือสมัครด้วย ${esc(i.email)}</small></div>`;
+        f.prepend(box);
+        $('[name=email]', f).value = i.email;
+      }, () => {
+        const box = document.createElement('div');
+        box.className = 'invite-banner bad';
+        box.textContent = 'ลิงก์คำเชิญนี้หมดอายุหรือถูกใช้ไปแล้ว ขอให้เจ้าของกิจการส่งคำเชิญใหม่';
+        f.prepend(box);
+      });
+    }
     $('[data-switch]', f).onclick = () => {
       mode = mode === 'login' ? 'register' : 'login';
       $('[data-name]', f).hidden = mode === 'login';
@@ -212,7 +232,7 @@
       ok: 'สร้างกิจการ', cancel: first ? '' : 'ยกเลิก',
       onOk: async (el) => (await api('POST', '/acc/businesses', formData(el))).id,
     });
-    if (id) { S.bizId = id; store.set('acc.biz', id); await start(); location.hash = '#/dashboard'; }
+    if (id) { S.bizId = id; store.set('acc.biz', id); location.hash = '#/'; await start(); }
     else if (first) newBusiness(true);
   }
 
@@ -223,7 +243,7 @@
         <button data-new>${ICON.plus}<span>เพิ่มกิจการใหม่</span></button></div>`,
       onOpen: (el, close) => el.addEventListener('click', async (e) => {
         const b = e.target.closest('[data-b]');
-        if (b) { close(); S.bizId = b.dataset.b; store.set('acc.biz', S.bizId); await loadBoot(); location.hash = '#/dashboard'; render(); }
+        if (b) { close(); S.bizId = b.dataset.b; store.set('acc.biz', S.bizId); await loadBoot(); app.innerHTML = ''; goHome(); }
         if (e.target.closest('[data-new]')) { close(); newBusiness(false); }
       }),
     });
@@ -250,21 +270,37 @@
     ['ภาษี', 'vat'],
     ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items]]],
     ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['channels', 'ช่องทางการเงิน', ICON.bank], ['settings', 'ตั้งค่า', ICON.settings]]],
+    ['ผู้ใช้งาน', [['profile', 'ข้อมูลส่วนตัว', ICON.user], ['users', 'ผู้ใช้งานในระบบ', ICON.users]]],
   ];
+  // What each page needs (see server/src/acc/users.js): area → 1 view.
+  const perms = () => S.boot?.perms || { sales: 2, purchase: 2, accounting: 2, settings: 2 };
+  const can = (area, lvl = 1) => perms()[area] >= lvl;
+  const PAGE_AREA = {
+    dashboard: ['accounting'], 'docs/QT': ['sales', 'accounting'], 'docs/IV': ['sales', 'accounting'], 'docs/RE': ['sales', 'accounting'],
+    'docs/EX': ['purchase', 'accounting'], contacts: ['sales', 'purchase', 'accounting'], items: ['sales', 'purchase', 'accounting'],
+    journal: ['accounting'], accounts: ['accounting'], reports: ['accounting'],
+    'vat/purchases': ['purchase', 'accounting'], 'vat/returns': ['accounting'], 'report/vat_sales': ['accounting'], 'report/vat_purchase': ['accounting'], integrations: ['settings'], channels: ['settings'], settings: ['settings'],
+  };
+  const pageOk = (r) => !PAGE_AREA[r] || PAGE_AREA[r].some((a) => can(a));
+  // Where someone lands: the dashboard, or their first page when the dashboard is not theirs.
+  const goHome = () => { if (location.hash === '#/') render(); else location.hash = '#/'; };
+  const homeRoute = () => navGroups().flatMap(([, items]) => items.map(([r]) => r)).find(pageOk) || 'profile';
 
   // ภาษีมูลค่าเพิ่ม pages, shown in the menu for VAT-registered businesses only.
   const NAV_VAT = [
     ['vat/purchases', 'จัดการเอกสารภาษีซื้อ', ICON.tax], ['vat/returns', 'เตรียมแบบภาษีรายเดือน', ICON.tax],
     ['report/vat_sales', 'ภาษีขายตามเอกสาร', ICON.reports], ['report/vat_purchase', 'ภาษีซื้อตามเอกสาร', ICON.reports],
   ];
+  // The menu groups, with the VAT pages put in for VAT-registered businesses.
+  const navGroups = () => NAV.map(([h, items]) => [h, items === 'vat' ? (biz().vat_registered ? NAV_VAT : []) : items]);
   function shell() {
     const b = biz();
-    const nav = NAV.map(([h, items]) => [h, items === 'vat' ? (b.vat_registered ? NAV_VAT : []) : items]).filter(([, items]) => items.length);
+    const nav = navGroups();
     app.innerHTML = `<div class="shell">
       <aside class="rail">
         <div class="brand"><span class="brand-mark">${ICON.journal}</span><div>Centel Account<small>ระบบบัญชีออนไลน์</small></div></div>
         <button class="biz-switch" data-switch>${b.logo ? `<img src="${esc(b.logo)}" alt="">` : `<span class="ph">${esc(b.name.slice(0, 1))}</span>`}<span>${esc(b.name)}</span></button>
-        <nav class="nav">${nav.map(([h, items]) => `<div class="nav-h">${h}</div>${items.map(([r, label, ic]) => `<a href="#/${r}" data-r="${r}">${ic}${label}</a>`).join('')}`).join('')}</nav>
+        <nav class="nav">${nav.map(([h, all]) => { const items = all.filter(([r]) => pageOk(r)); return items.length ? `<div class="nav-h">${h}</div>${items.map(([r, label, ic]) => `<a href="#/${r}" data-r="${r}">${ic}${label}</a>`).join('')}` : ''; }).join('')}</nav>
         <div class="rail-foot">${esc(S.user?.email || '')}<br><button data-logout>ออกจากระบบ</button></div>
       </aside>
       <div>
@@ -288,7 +324,8 @@
     if (!S.boot) return;
     if (!$('.shell')) shell();
     const { parts, q } = parseHash();
-    const r = parts[0] || 'dashboard';
+    if (!parts[0] || parts[0] === 'invite') { location.replace(`#/${homeRoute()}`); return; }
+    const r = parts[0];
     const key = r === 'docs' || r === 'new' ? `docs/${parts[1] || 'IV'}` : r === 'doc' || r === 'edit' ? null
       : r === 'report' ? (NAV_VAT.some(([k]) => k === `report/${parts[1]}`) ? `report/${parts[1]}` : 'reports')
         : r === 'vat' ? `vat/${parts[1] === 'returns' ? 'returns' : 'purchases'}` : r;
@@ -300,6 +337,7 @@
     main.innerHTML = '<div class="empty">กำลังโหลด…</div>';
     window.scrollTo(0, 0);
     try {
+      if (key && !pageOk(key)) { main.innerHTML = `<div class="empty"><b>ไม่มีสิทธิ์เข้าถึงหน้านี้</b>ตำแหน่งของคุณในกิจการนี้ไม่ได้รับสิทธิ์ ติดต่อเจ้าของกิจการเพื่อขอสิทธิ์เพิ่ม<a class="btn" style="margin-top:12px" href="#/${homeRoute()}">กลับหน้าแรก</a></div>`; return; }
       if (r === 'dashboard') await viewDashboard(main, q);
       else if (r === 'docs') await viewDocs(main, parts[1] || 'IV', q);
       else if (r === 'new') await viewEditor(main, parts[1], null, q);
@@ -316,6 +354,9 @@
       else if (r === 'vat') await viewVatPurchases(main, q);
       else if (r === 'settings') viewSettings(main);
       else if (r === 'channels') viewChannels(main);
+      else if (r === 'profile') await viewProfile(main);
+      else if (r === 'users' && parts[1] === 'new') await viewInvite(main);
+      else if (r === 'users') await viewUsers(main);
       else main.innerHTML = '<div class="empty"><b>ไม่พบหน้านี้</b></div>';
     } catch (e) {
       if (e.status === 401) return start();
@@ -404,8 +445,7 @@
   const CHEV = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
 
   // How documents print and download: original / copies, payment details, signature + stamp, language.
-  function printPrefs() {
-    const b = biz();
+  function printPrefs(b = biz()) {
     const s = b.settings || {};
     let p = {};
     try { p = JSON.parse(store.get(`acc.print.${S.bizId}`) || '{}') || {}; } catch { /* ignore */ }
@@ -420,12 +460,15 @@
   async function downloadDocs(ids, opts) {
     const docs = [];
     for (const id of ids) {
-      const { doc, ref } = await get(`/docs/${id}`);
-      docs.push({ ...doc, ref });
+      const { doc, ref, issuer } = await get(`/docs/${id}`);
+      docs.push({ ...doc, ref, issuer });
     }
-    const html = docs.map((d) => T.renderSet(d, biz(), opts)).join('');
+    const html = docs.map((d) => T.renderSet(d, signedBy(d.issuer), opts)).join('');
     await T.downloadPdf(html, docs.length === 1 ? `${docs[0].number}.pdf` : `เอกสาร-${T.today()}.pdf`);
   }
+
+  // The business as printed on a document: the issuer's own signature (ข้อมูลส่วนตัว) when they have one.
+  const signedBy = (issuer) => (issuer?.signature ? { ...biz(), signature: issuer.signature } : biz());
 
   async function payExpense(doc) {
     return dialog({
@@ -1229,8 +1272,8 @@
   /* ---------- Document view ---------- */
 
   async function viewDoc(main, id) {
-    const { doc, ref, children, journal } = await get(`/docs/${id}`);
-    const b = biz();
+    const { doc, ref, children, journal, issuer } = await get(`/docs/${id}`);
+    const b = signedBy(issuer);
     const printable = { ...doc, ref };
     const t = doc.type;
     const live = doc.status !== 'void';
@@ -1249,7 +1292,7 @@
 
     const canSign = !!(b.signature || b.stamp);
     const billing = t === 'QT' || t === 'IV';
-    const P = printPrefs();
+    const P = printPrefs(b);
     main.innerHTML = `<div class="page-h"><div><h1><span class="mono">${esc(doc.number)}</span></h1><div class="sub">${esc(T.docTitle(doc)[0])} · ${statusChip(t, doc.status)}</div></div>
       <div class="actions">${acts.join('')}<button class="btn" data-act="pdf">ดาวน์โหลด PDF</button><button class="btn dark" data-act="print">${ICON.print}พิมพ์</button></div></div>
       <div class="view">
@@ -2067,7 +2110,7 @@
   function viewSettings(main) {
     const b = biz(); const s = b.settings || {};
     const P = s.prefixes || {};
-    main.innerHTML = `<div class="page-h"><div><h1>ตั้งค่า</h1><div class="sub">ข้อมูลกิจการและรูปแบบเอกสาร</div></div><div class="actions"><button class="btn primary" data-save>บันทึก</button></div></div>
+    main.innerHTML = `<div class="page-h"><div><h1>ตั้งค่า</h1><div class="sub">ข้อมูลกิจการและรูปแบบเอกสาร${can('settings', 2) ? '' : ' · ดูอย่างเดียว'}</div></div><div class="actions">${can('settings', 2) ? '<button class="btn primary" data-save>บันทึก</button>' : ''}</div></div>
       <div class="grid" style="max-width:860px">
         <div class="card card-pad"><h2>ข้อมูลกิจการ</h2>
           <div class="logo-pick" style="margin-bottom:14px"><div class="lp" data-lp>${b.logo ? `<img src="${esc(b.logo)}" alt="">` : 'โลโก้'}</div>
@@ -2150,7 +2193,7 @@
       if (logo.length > 380000) logo = c.toDataURL('image/jpeg', 0.85);
       $('[data-lp]', main).innerHTML = `<img src="${logo}" alt="">`;
     };
-    $('[data-save]', main).onclick = async (e) => {
+    if ($('[data-save]', main)) $('[data-save]', main).onclick = async (e) => {
       const d = formData(main);
       const settings = { ...s, prefixes: {}, notes: { ...(s.notes || {}) } };
       $$('[data-prefix]', main).forEach((i) => { settings.prefixes[i.dataset.prefix] = i.value; });
@@ -2408,14 +2451,291 @@
 
   /* ---------- Start ---------- */
 
-  async function start() {
+  /* ---------- Users: profile, users of the business, invites ---------- */
+
+  // The four areas a position reaches (server/src/acc/users.js), with their badge colour.
+  const AREAS = [
+    ['sales', 'รายรับ', 'ใบเสนอราคา ใบแจ้งหนี้ ใบเสร็จรับเงิน', '#2F7BEA', '<path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/>'],
+    ['purchase', 'รายจ่าย', 'ค่าใช้จ่าย สแกนบิล จ่ายเงิน', '#1F9D6B', '<path d="M12 4v16M17 8H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H6"/>'],
+    ['accounting', 'บัญชีและรายงาน', 'หน้าหลัก สมุดรายวัน ผังบัญชี รายงานภาษีและงบการเงิน', '#E5484D', '<path d="M7 9h10M7 15h10"/>'],
+    ['settings', 'ตั้งค่ากิจการ', 'ข้อมูลกิจการ รูปแบบเอกสาร การเชื่อมต่อระบบ', '#3EA8E0', '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z"/>'],
+  ];
+  const LEVEL = ['ไม่มีสิทธิ์', 'ดูอย่างเดียว', 'ดูและแก้ไข'];
+  const areaBadges = (p) => `<span class="perm-badges">${AREAS.filter(([k]) => p[k] > 0).map(([k, name, , color, path]) => `<span class="perm-b${p[k] === 1 ? ' ro' : ''}" style="--c:${color}" title="${esc(name)}: ${LEVEL[p[k]]}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${path}</svg></span>`).join('') || '<span class="muted">—</span>'}</span>`;
+  // Emails and names are masked on the list until "แสดงข้อมูล" is on (someone may be looking at the screen).
+  const maskEmail = (e) => { const [u, d] = String(e || '').split('@'); return d ? `${u.slice(0, 1)}${'*'.repeat(Math.max(3, u.length - 1))}@${d}` : esc(e || ''); };
+  const maskName = (n) => String(n || '').split(' ').filter(Boolean).map((w) => `${[...w][0]}${'*'.repeat(Math.max(2, [...w].length - 1))}`).join(' ');
+  const permTable = (p) => `<table class="tbl perm-tbl"><tbody>${AREAS.map(([k, name, desc]) => `<tr><td><b>${esc(name)}</b><div class="muted" style="font-size:12px">${esc(desc)}</div></td><td class="nowrap">${p[k] === 2 ? '<span class="chip good">ดูและแก้ไข</span>' : p[k] === 1 ? '<span class="chip info">ดูอย่างเดียว</span>' : '<span class="chip">ไม่มีสิทธิ์</span>'}</td></tr>`).join('')}</tbody></table>`;
+  const permPickers = (p, locked) => `<div class="perm-pick">${AREAS.map(([k, name, desc, color, path]) => `<label class="perm-row"><span class="perm-b" style="--c:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${path}</svg></span>
+    <span class="perm-t"><b>${esc(name)}</b><small>${esc(desc)}</small></span>
+    <select data-perm="${k}" ${locked ? 'disabled' : ''}>${LEVEL.map((l, i) => `<option value="${i}" ${p[k] === i ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`).join('')}</div>`;
+  const readPerms = (el) => Object.fromEntries($$('[data-perm]', el).map((x) => [x.dataset.perm, Number(x.value)]));
+
+  function rolesDialog(roles) {
+    return dialog({
+      title: 'รายละเอียดแต่ละตำแหน่ง', wide: true, ok: '', cancel: 'ปิด',
+      body: `<p class="muted" style="margin-top:0">สิทธิ์เริ่มต้นของแต่ละตำแหน่ง ปรับเพิ่มหรือลดให้แต่ละคนได้ตอนเชิญหรือแก้ไขภายหลัง เฉพาะเจ้าของกิจการเท่านั้นที่เพิ่มและจัดการผู้ใช้งานได้</p>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>ตำแหน่ง</th>${AREAS.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr></thead>
+        <tbody>${roles.map((r) => `<tr><td class="nowrap"><b>${esc(r.name)}</b></td>${AREAS.map(([k]) => `<td class="nowrap">${r.perms[k] === 2 ? '<span class="chip good">แก้ไข</span>' : r.perms[k] === 1 ? '<span class="chip info">ดู</span>' : '<span class="muted">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`,
+    });
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text).then(() => toast('คัดลอกลิงก์แล้ว'), () => prompt('คัดลอกลิงก์นี้', text));
+    prompt('คัดลอกลิงก์นี้', text);
+    return Promise.resolve();
+  }
+
+  // After an invite: the link to send, by email (their mail app), LINE or copy.
+  function inviteSent(email, roleName, link) {
+    const b = biz();
+    const subject = `เชิญเข้าร่วม ${b.name} บน Centel Account`;
+    const body = `สวัสดีครับ/ค่ะ\n\nคุณได้รับเชิญให้เข้าใช้งานระบบบัญชีของ ${b.name} ในตำแหน่ง ${roleName}\n\nกดลิงก์นี้แล้วเข้าสู่ระบบหรือสมัครด้วยอีเมล ${email}\n${link}\n\nลิงก์ใช้ได้ 14 วัน`;
+    return dialog({
+      title: 'สร้างคำเชิญแล้ว', ok: '', cancel: 'เสร็จสิ้น',
+      body: `<p style="margin-top:0">ส่งลิงก์นี้ให้ <b>${esc(email)}</b> เพื่อเข้าร่วมเป็น <b>${esc(roleName)}</b> ลิงก์ใช้ได้กับอีเมลนี้เท่านั้น และหมดอายุใน 14 วัน</p>
+        <div class="invite-link"><input type="text" readonly value="${esc(link)}" data-link><button class="btn" data-copy>คัดลอก</button></div>
+        <div class="actions" style="margin-top:12px">
+          <a class="btn primary" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}">ส่งทางอีเมล</a>
+          <a class="btn" target="_blank" rel="noopener" href="https://line.me/R/share?text=${encodeURIComponent(`${subject}\n${link}`)}">ส่งทาง LINE</a></div>
+        <p class="muted" style="font-size:12px;margin-bottom:0">ถ้าคนนี้เข้าสู่ระบบ Centel ด้วยอีเมลเดียวกันอยู่แล้ว จะเห็นคำเชิญเองทันทีโดยไม่ต้องกดลิงก์</p>`,
+      onOpen: (el) => {
+        $('[data-copy]', el).onclick = () => copyText(link);
+        $('[data-link]', el).onfocus = (e) => e.target.select();
+      },
+    });
+  }
+
+  async function viewUsers(main) {
+    const d = await get('/members');
+    let show = false;
+    const draw = () => {
+      const rows = [
+        ...d.members.map((m) => `<tr data-u="${m.user_id}">
+          <td><div class="u-cell"><span class="u-ic">${ICON.user}</span><div><div>${show ? esc(m.email) : maskEmail(m.email)}${m.me ? ' <span class="chip">คุณ</span>' : ''}</div><div class="muted" style="font-size:12px">${esc(show ? m.name : maskName(m.name))}</div></div></div></td>
+          <td>${esc(m.role_name)}${m.primary ? ' <span class="chip info crown">♛ เจ้าของหลัก</span>' : ''}${m.custom ? ' <span class="muted" style="font-size:12px">(ปรับสิทธิ์)</span>' : ''}</td>
+          <td class="nowrap">${m.disabled ? '<span class="chip bad">ระงับการใช้งาน</span>' : 'ปกติ'}<div class="u-ok">✓ ยืนยันแล้ว</div></td>
+          <td>${areaBadges(m.perms)}</td>
+          <td class="act">${(d.can_manage && !m.primary) || (m.me && !m.primary) ? `<button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button>` : ''}</td></tr>`),
+        ...d.invites.map((i) => `<tr data-inv="${i.id}">
+          <td><div class="u-cell"><span class="u-ic pend">${ICON.user}</span><div><div>${show ? esc(i.email) : maskEmail(i.email)}</div><div class="muted" style="font-size:12px">ส่งคำเชิญ ${T.thDate(String(i.created_at).slice(0, 10))}</div></div></div></td>
+          <td>${esc(i.role_name)}</td>
+          <td class="nowrap">${i.expired ? '<span class="chip bad">คำเชิญหมดอายุ</span>' : '<span class="chip warn">รอตอบรับคำเชิญ</span>'}</td>
+          <td>${areaBadges(i.perms)}</td>
+          <td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`),
+      ];
+      main.innerHTML = `<div class="page-h"><div><h1>ผู้ใช้งานในระบบ</h1><div class="sub">ผู้ใช้งานใน${esc(biz().name)} · ${d.members.length} คน${d.invites.length ? ` · รอตอบรับ ${d.invites.length}` : ''}</div></div>
+        <div class="actions"><button class="btn ghost" data-show>${show ? 'ซ่อนข้อมูล' : 'แสดงข้อมูล'}</button><button class="btn ghost" data-roles>รายละเอียดแต่ละตำแหน่ง</button>${d.can_manage ? `<a class="btn primary" href="#/users/new">${ICON.plus}เพิ่มผู้ใช้งาน</a>` : ''}</div></div>
+        <div class="card"><div class="tbl-wrap"><table class="tbl users-tbl"><thead><tr><th>อีเมลที่ใช้งานในระบบ / ชื่อนามสกุล</th><th>ตำแหน่ง</th><th>สถานะ</th><th>สิทธิ์การเข้าถึง</th><th></th></tr></thead>
+        <tbody>${rows.join('')}</tbody></table></div></div>
+        <p class="muted perm-legend">${AREAS.map(([k, n]) => `<span class="nowrap">${areaBadges({ [k]: 2 })} ${esc(n)}</span>`).join('')}<span class="nowrap">สีจาง = ดูอย่างเดียว</span></p>`;
+    };
+    draw();
+    const reload = async () => { Object.assign(d, await get('/members')); draw(); };
+    main.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-show]')) { show = !show; draw(); return; }
+      if (e.target.closest('[data-roles]')) { rolesDialog(d.roles); return; }
+      const more = e.target.closest('[data-more]');
+      if (!more) return;
+      const tr = more.closest('tr');
+      const m = d.members.find((x) => x.user_id === tr.dataset.u);
+      const inv = d.invites.find((x) => x.id === tr.dataset.inv);
+      const items = [];
+      if (inv) {
+        items.push(['สร้างลิงก์เชิญใหม่', async () => { try { const r = await post(`/invites/${inv.id}/link`); await reload(); inviteSent(inv.email, inv.role_name, r.link); } catch (err) { fail(err); } }]);
+        items.push(null, ['ยกเลิกคำเชิญ', async () => {
+          if (!await confirmBox('ยกเลิกคำเชิญ', `ลิงก์ที่ส่งให้ ${esc(inv.email)} จะใช้ไม่ได้อีก`)) return;
+          try { await api('DELETE', A(`/invites/${inv.id}`)); await reload(); toast('ยกเลิกคำเชิญแล้ว'); } catch (err) { fail(err); }
+        }, { danger: true }]);
+      } else if (m && d.can_manage && !m.me) {
+        items.push(['แก้ไขตำแหน่งและสิทธิ์', () => editMember(m, d.roles).then((ok) => ok && reload())]);
+        items.push([m.disabled ? 'เปิดใช้งานอีกครั้ง' : 'ระงับการใช้งาน', async () => {
+          if (!m.disabled && !await confirmBox('ระงับการใช้งาน', `${esc(m.email)} จะเข้ากิจการนี้ไม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง`, 'ระงับ')) return;
+          try { await put(`/members/${m.user_id}`, { role: m.role, perms: m.perms, disabled: !m.disabled }); await reload(); } catch (err) { fail(err); }
+        }]);
+        items.push(null, ['ลบออกจากกิจการ', async () => {
+          if (!await confirmBox('ลบผู้ใช้งาน', `ลบ ${esc(m.email)} ออกจาก${esc(biz().name)} เอกสารที่คนนี้สร้างไว้ยังอยู่ครบ`, 'ลบ')) return;
+          try { await api('DELETE', A(`/members/${m.user_id}`)); await reload(); toast('ลบผู้ใช้งานแล้ว'); } catch (err) { fail(err); }
+        }, { danger: true }]);
+      } else if (m && m.me) {
+        items.push(['ออกจากกิจการนี้', () => leaveBusiness()]);
+      }
+      if (items.length) popMenu(more, items);
+    });
+  }
+
+  async function editMember(m, roles) {
+    return dialog({
+      title: 'แก้ไขตำแหน่งและสิทธิ์',
+      body: `<p class="muted" style="margin-top:0">${esc(m.email)}${m.name ? ` · ${esc(m.name)}` : ''}</p>
+        <label class="field"><span>ตำแหน่ง</span><select data-role>${roles.map((r) => `<option value="${r.key}" ${r.key === m.role ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
+        <div class="field" style="margin-top:14px"><span>สิทธิ์การเข้าถึง</span><div data-pp>${permPickers(m.perms, m.role === 'owner')}</div></div>`,
+      onOpen: (el) => {
+        $('[data-role]', el).onchange = (e) => { const r = roles.find((x) => x.key === e.target.value); $('[data-pp]', el).innerHTML = permPickers(r.perms, r.key === 'owner'); };
+      },
+      onOk: async (el) => {
+        await put(`/members/${m.user_id}`, { role: $('[data-role]', el).value, perms: readPerms(el) });
+        toast('บันทึกแล้ว');
+        return true;
+      },
+    });
+  }
+
+  async function leaveBusiness() {
+    if (!await confirmBox('ออกจากกิจการ', `คุณจะเข้า${esc(biz().name)}ไม่ได้อีกจนกว่าเจ้าของจะเชิญใหม่`, 'ออกจากกิจการ')) return;
     try {
-      const r = await api('GET', '/acc/businesses');
-      S.user = r.user; S.businesses = r.businesses;
+      const me = (await get('/members')).members.find((x) => x.me);
+      await api('DELETE', A(`/members/${me.user_id}`));
+      store.set('acc.biz', '');
+      location.hash = '#/';
+      start();
+    } catch (err) { fail(err); }
+  }
+
+  async function viewInvite(main) {
+    const d = await get('/members');
+    if (!d.can_manage) { main.innerHTML = '<div class="empty"><b>เฉพาะเจ้าของกิจการเท่านั้นที่เพิ่มผู้ใช้งานได้</b></div>'; return; }
+    main.innerHTML = `<div class="page-h"><div><a href="#/users" class="muted" style="text-decoration:none;font-size:13px">‹ หน้าผู้ใช้งานในกิจการทั้งหมด</a><h1>เพิ่มผู้ใช้งาน</h1></div>
+      <div class="actions"><a class="btn" href="#/users">ยกเลิก</a><button class="btn primary" data-send>ส่งคำเชิญผู้ใช้งาน</button></div></div>
+      <div class="card card-pad" style="max-width:760px"><h2>เชิญผู้ใช้งานในระบบใหม่</h2>
+        <p class="muted" style="margin-top:0">ระบุอีเมลและเลือกตำแหน่งเพื่อเชิญและเพิ่มผู้ใช้งาน</p>
+        <div class="grid g2">
+          <label class="field span2"><span>อีเมลผู้ใช้งาน</span><input type="email" data-email autocomplete="off" placeholder="name@example.com"></label>
+          <label class="field span2"><span>ตำแหน่ง <a href="#" class="link" data-roles style="float:right;font-weight:400">รายละเอียดแต่ละตำแหน่ง</a></span>
+            <select data-role><option value="">กรุณาเลือกตำแหน่ง</option>${d.roles.map((r) => `<option value="${r.key}">${esc(r.name)}</option>`).join('')}</select></label>
+        </div>
+        <div class="field" style="margin-top:16px" data-pwrap hidden><span>สิทธิ์การเข้าถึง <small class="muted">ปรับได้ตามต้องการ</small></span><div data-pp></div></div>
+      </div>`;
+    const roleSel = $('[data-role]', main);
+    roleSel.onchange = () => {
+      const r = d.roles.find((x) => x.key === roleSel.value);
+      $('[data-pwrap]', main).hidden = !r;
+      if (r) $('[data-pp]', main).innerHTML = permPickers(r.perms, r.key === 'owner');
+    };
+    $('[data-roles]', main).onclick = (e) => { e.preventDefault(); rolesDialog(d.roles); };
+    $('[data-send]', main).onclick = async (e) => {
+      const btn = e.currentTarget;
+      const email = $('[data-email]', main).value.trim();
+      const role = roleSel.value;
+      if (!email) { toast('กรุณากรอกอีเมล', true); return; }
+      if (!role) { toast('กรุณาเลือกตำแหน่ง', true); return; }
+      btn.disabled = true;
+      try {
+        const r = await post('/members/invite', { email, role, perms: readPerms(main) });
+        location.hash = '#/users';
+        inviteSent(email.toLowerCase(), d.roles.find((x) => x.key === role).name, r.link);
+      } catch (err) { fail(err); } finally { btn.disabled = false; }
+    };
+  }
+
+  async function viewProfile(main) {
+    const { profile: p } = await api('GET', '/acc/me');
+    const members = await get('/members').catch(() => null);
+    const me = members?.members.find((x) => x.me);
+    let sig = p.signature || null;
+    let sigName = sig ? 'ลายเซ็น.png' : '';
+    main.innerHTML = `<div class="page-h"><div><h1>ข้อมูลส่วนตัว</h1><div class="sub">ใช้กับทุกกิจการในบัญชีนี้</div></div><div class="actions"><button class="btn primary" data-save>บันทึก</button></div></div>
+      <div class="grid" style="max-width:760px">
+        <div class="card card-pad"><h2>ข้อมูลส่วนตัว</h2>
+          <div class="form-rows">
+            <label class="frow"><span>ชื่อ</span><input type="text" name="first_name" value="${esc(p.first_name || '')}" placeholder="${esc((p.display_name || '').split(' ')[0] || '')}"></label>
+            <label class="frow"><span>นามสกุล</span><input type="text" name="last_name" value="${esc(p.last_name || '')}"></label>
+            <label class="frow"><span>เบอร์ติดต่อ</span><input type="tel" name="phone" value="${esc(p.phone || '')}"></label>
+            <div class="frow"><span>อีเมล (ผู้ใช้ระบบ)</span><div class="frow-v"><input type="email" value="${esc(p.email || '')}" disabled><span class="u-ok nowrap">✓ ยืนยันแล้ว</span></div></div>
+            <div class="frow"><span>ตำแหน่ง</span><div><input type="text" value="${esc(me?.role_name || S.boot.role || '')}" disabled>
+              ${me ? `<details class="perm-mine"><summary class="link">ดูรายละเอียดสิทธิ์ของตนเอง</summary>${permTable(me.perms)}</details>` : ''}</div></div>
+          </div></div>
+        <div class="card card-pad"><h2>ลายเซ็นอิเล็กทรอนิกส์</h2>
+          <p class="muted" style="margin-top:0">ใส่ในช่องลงนามของกิจการ บนเอกสารที่คุณเป็นผู้ออก (เมื่อเปิด "ลายเซ็นและตราประทับ") ถ้ายังไม่มี ระบบใช้ลายเซ็นของกิจการในหน้าตั้งค่า ถ่ายรูปลายเซ็นบนกระดาษขาวได้ ระบบลบพื้นหลังให้</p>
+          <div class="frow"><span>แนบไฟล์ลายเซ็น</span><div>
+            <div class="sig-box" data-sig>${sig ? `<img src="${esc(sig)}" alt="ลายเซ็น">` : '<button type="button" class="btn" data-up>อัปโหลดลายเซ็น</button>'}</div>
+            <div class="sig-file" data-sf ${sig ? '' : 'hidden'}><span data-sn>${esc(sigName)}</span><button type="button" class="icon-btn" data-rm aria-label="เอาลายเซ็นออก">×</button></div>
+            <small class="muted">*ขนาดภาพที่แนะนำ 400×140 px และขนาดไม่เกิน 3MB</small><input type="file" accept="image/*" hidden data-f></div></div>
+        </div>
+        ${me && !me.primary ? `<div class="card card-pad"><h2>ออกจากกิจการ</h2><p class="muted" style="margin-top:0">เลิกเป็นผู้ใช้งานของ${esc(biz().name)}</p><button class="btn danger" data-leave>ออกจากกิจการนี้</button></div>` : ''}
+      </div>`;
+    const f = $('[data-f]', main);
+    const drawSig = () => {
+      $('[data-sig]', main).innerHTML = sig ? `<img src="${esc(sig)}" alt="ลายเซ็น">` : '<button type="button" class="btn" data-up>อัปโหลดลายเซ็น</button>';
+      $('[data-sf]', main).hidden = !sig;
+      $('[data-sn]', main).textContent = sigName;
+    };
+    main.addEventListener('click', (e) => {
+      if (e.target.closest('[data-up]') || (e.target.closest('[data-sig]') && sig)) { f.value = ''; f.click(); }
+      if (e.target.closest('[data-rm]')) { sig = null; sigName = ''; drawSig(); }
+      if (e.target.closest('[data-leave]')) leaveBusiness();
+    });
+    f.onchange = async () => {
+      const file = f.files[0]; if (!file) return;
+      if (file.size > 3 * 1024 * 1024) { toast('ไฟล์ใหญ่เกิน 3MB', true); return; }
+      try { sig = await cleanMark(file); sigName = file.name; drawSig(); } catch { toast('อ่านรูปไม่ได้ ลองไฟล์ PNG หรือ JPG', true); }
+    };
+    $('[data-save]', main).onclick = async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      try {
+        const d = formData(main);
+        await api('PUT', '/acc/me', { first_name: d.first_name, last_name: d.last_name, phone: d.phone, signature: sig });
+        toast('บันทึกแล้ว');
+      } catch (err) { fail(err); } finally { btn.disabled = false; }
+    };
+  }
+
+  // Invites to my email: join from a dialog (also shown when I have no business yet).
+  async function showInvites(invites, first) {
+    const joined = await dialog({
+      title: 'คุณได้รับคำเชิญ', ok: '', cancel: first ? 'สร้างกิจการของตัวเอง' : 'ภายหลัง',
+      body: `<div class="biz-list">${invites.map((i) => `<div class="inv-row">${i.logo ? `<img src="${esc(i.logo)}" width="36" height="36" style="object-fit:contain;border-radius:6px">` : `<span class="chip">${esc(i.business.slice(0, 2))}</span>`}
+        <span style="flex:1"><b>${esc(i.business)}</b><br><small class="muted">${esc(i.role_name)}${i.invited_by ? ` · เชิญโดย ${esc(i.invited_by)}` : ''}</small></span>
+        <button class="btn sm ghost" data-no="${i.id}">ปฏิเสธ</button><button class="btn sm primary" data-yes="${i.id}">เข้าร่วม</button></div>`).join('')}</div>`,
+      onOpen: (el, close) => el.addEventListener('click', async (e) => {
+        const yes = e.target.closest('[data-yes]'); const no = e.target.closest('[data-no]');
+        try {
+          if (yes) { const r = await api('POST', '/acc/invites/accept', { id: yes.dataset.yes }); close(r.business_id); }
+          if (no) { await api('POST', `/acc/invites/${no.dataset.no}/decline`); no.closest('.inv-row').remove(); if (!$('.inv-row', el)) close(null); }
+        } catch (err) { fail(err); }
+      }),
+    });
+    return joined;
+  }
+
+  // #/invite/<token>: the link from an invite email.
+  const inviteToken = () => { const m = location.hash.match(/^#\/invite\/([A-Za-z0-9_-]{32})/); return m ? m[1] : null; };
+
+  async function start() {
+    const token = inviteToken();
+    const load = async () => { const r = await api('GET', '/acc/businesses'); S.user = r.user; S.businesses = r.businesses; };
+    try {
+      await load();
     } catch (e) {
-      if (e.status === 401) return renderAuth();
+      if (e.status === 401) return renderAuth(token);
       app.innerHTML = `<div class="boot">เชื่อมต่อไม่สำเร็จ: ${esc(e.message)}</div>`;
       return;
+    }
+    S.boot = null;
+    if (token) {
+      history.replaceState(null, '', '#/');
+      try {
+        const j = await api('POST', '/acc/invites/accept', { token });
+        store.set('acc.biz', j.business_id);
+        await load();
+        toast('เข้าร่วมกิจการแล้ว');
+      } catch (e) {
+        app.innerHTML = '<div class="boot"></div>';
+        await dialog({ title: 'เปิดคำเชิญไม่ได้', body: `<p style="margin:0">${esc(e.message)}</p><p class="muted">เข้าสู่ระบบอยู่ด้วย ${esc(S.user?.email || '')}</p>`, ok: '', cancel: 'ตกลง',
+          extra: '<button class="btn" data-out>ออกจากระบบ</button>', onOpen: (el, close) => { $('[data-out]', el).onclick = async () => { await api('POST', '/auth/logout').catch(() => {}); close(); location.hash = `#/invite/${token}`; renderAuth(token); }; } });
+        if (!S.user) return;
+      }
+    }
+    // Invites to my email I have not answered yet (asked once per invite unless I have no business).
+    let invites = [];
+    try { invites = (await api('GET', '/acc/invites')).invites; } catch { /* older api */ }
+    const seen = (store.get('acc.invSeen') || '').split(',');
+    const fresh = S.businesses.length ? invites.filter((i) => !seen.includes(i.id)) : invites;
+    if (fresh.length) {
+      store.set('acc.invSeen', [...seen, ...fresh.map((i) => i.id)].slice(-50).join(','));
+      app.innerHTML = '<div class="boot"></div>';
+      const joined = await showInvites(fresh, !S.businesses.length);
+      if (joined) { store.set('acc.biz', joined); await load(); toast('เข้าร่วมกิจการแล้ว'); }
     }
     if (!S.businesses.length) {
       app.innerHTML = '<div class="boot"></div>';
