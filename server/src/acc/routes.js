@@ -116,10 +116,9 @@ async function updateBusiness(db, id, body) {
       prefixes,
       notes,
       payment: str(s.payment, 600),
-      // Bank accounts printed on quotations and invoices, and the PromptPay ID their QR pays into.
-      banks: (Array.isArray(s.banks) ? s.banks : []).slice(0, 4).map((b) => ({
-        bank: str(b?.bank, 100), number: str(b?.number, 40), name: str(b?.name, 200), branch: str(b?.branch, 100),
-      })).filter((b) => b.bank && b.number),
+      // Payment channels (ช่องทางการเงิน): bank accounts and other ways to pay, e.g. a payment gateway.
+      // Active ones are printed on quotations and invoices; the PromptPay ID is where their QR pays into.
+      banks: (Array.isArray(s.banks) ? s.banks : []).slice(0, 20).map(cleanChannel).filter(Boolean),
       promptpay: promptPayId(s.promptpay?.id) ? { id: promptPayId(s.promptpay.id), name: str(s.promptpay.name, 200), qr: s.promptpay.qr !== false } : null,
       signer: str(s.signer, 100),
       signerTitle: str(s.signerTitle, 100),
@@ -894,6 +893,23 @@ function publicDoc(d, ref) {
   };
 }
 
+const ACCT_TYPES = ['savings', 'current', 'fixed'];
+function cleanChannel(b) {
+  if (!b || typeof b !== 'object') return null;
+  const kind = b.kind === 'other' ? 'other' : 'bank';
+  const c = {
+    id: /^[a-z0-9]{6,16}$/.test(b.id || '') ? b.id : Math.random().toString(36).slice(2, 10),
+    kind, active: b.active !== false,
+    bank: str(b.bank, 100), number: str(b.number, 40), name: str(b.name, 200), branch: str(b.branch, 100),
+  };
+  if (kind === 'bank') {
+    c.acctType = ACCT_TYPES.includes(b.acctType) ? b.acctType : 'savings';
+    return c.bank && c.number ? c : null;
+  }
+  // Other channels: bank = what it is (e.g. ช่องทางรับชำระออนไลน์), name = provider (e.g. Stripe), number = optional detail.
+  return c.bank || c.name ? c : null;
+}
+
 function publicBusiness(b) {
   return {
     name: b.name, name_en: b.name_en, tax_id: b.tax_id, branch: b.branch, address: b.address, phone: b.phone,
@@ -901,7 +917,7 @@ function publicBusiness(b) {
     // The signature and stamp only leave the app when the business chose to sign documents automatically.
     signature: b.settings?.signAuto ? b.signature : null, stamp: b.settings?.signAuto ? b.stamp : null,
     settings: {
-      payment: b.settings?.payment || null, banks: b.settings?.banks || [], promptpay: b.settings?.promptpay || null, notes: b.settings?.notes || {}, signer: b.settings?.signer || null, signerTitle: b.settings?.signerTitle || null, signAuto: !!b.settings?.signAuto, lang: b.settings?.lang || 'th', color: b.settings?.color || null },
+      payment: b.settings?.payment || null, banks: (b.settings?.banks || []).filter((x) => x.active !== false), promptpay: b.settings?.promptpay || null, notes: b.settings?.notes || {}, signer: b.settings?.signer || null, signerTitle: b.settings?.signerTitle || null, signAuto: !!b.settings?.signAuto, lang: b.settings?.lang || 'th', color: b.settings?.color || null },
   };
 }
 

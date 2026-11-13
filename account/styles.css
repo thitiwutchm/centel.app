@@ -531,3 +531,23 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .wht50-paper canvas { display: block; width: 100%; height: auto; }
 .wht50-side { display: grid; gap: 8px; font-size: 14px; }
 @media (max-width: 720px) { .wht50 { grid-template-columns: 1fr; } .wht50-side { order: -1; } }
+
+/* Payment channels (ช่องทางการเงิน) */
+.ch-tbl td { vertical-align: middle; }
+.ch-tbl tr.off td:not(:nth-last-child(-n+2)) { opacity: .55; }
+.ch-name { display: inline-flex; align-items: center; gap: 12px; min-width: 0; }
+.ch-badge { --c: #6C717B; flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; font-size: 10.5px; font-weight: 700; }
+.ch-badge.other { background: var(--info-soft); color: var(--info); }
+.ch-badge.other svg { width: 18px; height: 18px; }
+.ch-detail { font-size: 13px; }
+.ch-link { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; text-decoration: none; background: var(--panel-2); }
+.ch-link:hover { border-color: var(--accent); }
+.ch-link .ch-badge { width: 30px; height: 30px; font-size: 8px; }
+.split { display: inline-flex; }
+.split .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.split .btn + .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0 10px; border-left: 1px solid rgba(255, 255, 255, .35); }
+.form-rows { display: grid; gap: 12px; }
+.form-rows > label, .form-rows > .fr { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 12px; }
+.form-rows > label > span, .form-rows > .fr > span { font-weight: 500; color: var(--ink-2); }
+.radios { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+@media (max-width: 560px) { .form-rows > label, .form-rows > .fr { grid-template-columns: 1fr; gap: 4px; } }

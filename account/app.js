@@ -109,6 +109,8 @@
     reports: I('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
     settings: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
     plus: I('<path d="M12 5v14M5 12h14"/>'),
+    bank: I('<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>'),
+    swap: I('<path d="M4 8h14l-3-3M20 16H6l3 3"/>'),
     print: I('<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/>'),
     link: I('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
@@ -245,7 +247,7 @@
     ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
     ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex]]],
     ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items]]],
-    ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['settings', 'ตั้งค่า', ICON.settings]]],
+    ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['channels', 'ช่องทางการเงิน', ICON.bank], ['settings', 'ตั้งค่า', ICON.settings]]],
   ];
 
   function shell() {
@@ -301,6 +303,7 @@
       else if (r === 'integrations') await viewIntegrations(main, parts[1]);
       else if (r === 'report') await viewReport(main, parts[1], q);
       else if (r === 'settings') viewSettings(main);
+      else if (r === 'channels') viewChannels(main);
       else main.innerHTML = '<div class="empty"><b>ไม่พบหน้านี้</b></div>';
     } catch (e) {
       if (e.status === 401) return start();
@@ -1774,7 +1777,7 @@
             <label class="field"><span>พร้อมเพย์ (เบอร์มือถือ / เลขผู้เสียภาษี / เลขบัตรประชาชน)</span><input type="text" inputmode="numeric" data-pp="id" value="${esc(s.promptpay?.id || '')}" placeholder="0812345678 หรือ 0105567012345"><small data-pp-hint></small></label>
             <label class="field"><span>ชื่อบัญชีพร้อมเพย์</span><input type="text" data-pp="name" value="${esc(s.promptpay?.name || '')}" placeholder="${esc(b.name)}"></label>
             <label class="check span2"><input type="checkbox" data-pp="qr" ${s.promptpay?.qr === false ? '' : 'checked'}> แสดง QR พร้อมเพย์ในเอกสาร</label>
-            <div class="field span2"><span>บัญชีธนาคาร</span><div class="grid" data-banks></div><div><button type="button" class="btn sm" data-addbank>${ICON.plus}เพิ่มบัญชีธนาคาร</button></div></div>
+            <div class="field span2"><span>บัญชีธนาคารและช่องทางอื่น</span><a class="ch-link" href="#/channels">${(s.banks || []).filter((x) => x.active !== false).map((x) => `<span class="ch-name">${channelBadge(x)}<span>${esc(x.kind === 'other' ? x.name || x.bank : `${x.bank} ${x.number}`)}</span></span>`).join('') || '<span class="muted">ยังไม่มีบัญชีธนาคาร</span>'}<span class="muted nowrap" style="margin-left:auto">จัดการช่องทางการเงิน ›</span></a></div>
             <label class="field span2"><span>ข้อความเพิ่มเติม (ไม่บังคับ)</span><textarea data-s="payment" rows="2" placeholder="เช่น กรุณาส่งสลิปมาที่ LINE @example">${esc(s.payment || '')}</textarea></label>
           </div></div>
         <a class="card card-pad int-card" href="#/integrations"><span class="int-logo">CC</span><div style="flex:1"><h2 style="margin:0 0 2px">เชื่อมต่อระบบ</h2><div class="muted">CapCourt Admin: ออกใบแจ้งหนี้รายเดือนให้สนามอัตโนมัติ และแจ้งผลการชำระกลับ</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
@@ -1800,21 +1803,7 @@
         if (!b.signature && !b.stamp) $('[data-sign-auto]', main).checked = true;
       } catch (err) { fail(err); }
     };
-    // Bank accounts and PromptPay
-    const BANKS = ['ธนาคารกสิกรไทย', 'ธนาคารไทยพาณิชย์', 'ธนาคารกรุงเทพ', 'ธนาคารกรุงไทย', 'ธนาคารกรุงศรีอยุธยา', 'ธนาคารทหารไทยธนชาต (ttb)', 'ธนาคารออมสิน', 'ธนาคารยูโอบี', 'ธนาคารซีไอเอ็มบี ไทย', 'ธนาคารเกียรตินาคินภัทร', 'ธนาคารแลนด์ แอนด์ เฮ้าส์', 'ธ.ก.ส.'];
-    const banks = (s.banks || []).map((x) => ({ ...x }));
-    const drawBanks = () => {
-      $('[data-banks]', main).innerHTML = banks.map((x, i) => `<div class="grid g4" data-bi="${i}" style="align-items:end">
-        <label class="field"><small>ธนาคาร</small><input type="text" list="bank-dl" data-bf="bank" value="${esc(x.bank || '')}"></label>
-        <label class="field"><small>เลขที่บัญชี</small><input type="text" inputmode="numeric" data-bf="number" value="${esc(x.number || '')}" placeholder="123-4-56789-0"></label>
-        <label class="field"><small>ชื่อบัญชี</small><input type="text" data-bf="name" value="${esc(x.name || '')}" placeholder="${esc(b.name)}"></label>
-        <div style="display:flex;gap:6px;align-items:end"><label class="field" style="flex:1"><small>สาขา</small><input type="text" data-bf="branch" value="${esc(x.branch || '')}"></label><button type="button" class="btn sm ghost danger" data-rmbank style="height:38px">ลบ</button></div>
-      </div>`).join('') + `<datalist id="bank-dl">${BANKS.map((n) => `<option value="${n}">`).join('')}</datalist>`;
-    };
-    drawBanks();
-    $('[data-banks]', main).addEventListener('input', (e) => { const r = e.target.closest('[data-bi]'); if (r && e.target.dataset.bf) banks[Number(r.dataset.bi)][e.target.dataset.bf] = e.target.value; });
-    $('[data-banks]', main).addEventListener('click', (e) => { if (e.target.closest('[data-rmbank]')) { banks.splice(Number(e.target.closest('[data-bi]').dataset.bi), 1); drawBanks(); } });
-    $('[data-addbank]', main).onclick = () => { if (banks.length < 4) { banks.push({ bank: '', number: '', name: '', branch: '' }); drawBanks(); } };
+    // PromptPay
     const ppHint = () => {
       const d = $('[data-pp=id]', main).value.replace(/\D/g, '');
       const ok = (d.length === 10 && d[0] === '0') || d.length === 13 || d.length === 15;
@@ -1843,7 +1832,6 @@
       $$('[data-prefix]', main).forEach((i) => { settings.prefixes[i.dataset.prefix] = i.value; });
       $$('[data-s]', main).forEach((i) => { settings[i.dataset.s] = i.value; });
       $$('[data-note]', main).forEach((i) => { settings.notes[i.dataset.note] = i.value; });
-      settings.banks = banks;
       settings.signAuto = $('[data-sign-auto]', main).checked;
       settings.promptpay = { id: $('[data-pp=id]', main).value, name: $('[data-pp=name]', main).value, qr: $('[data-pp=qr]', main).checked };
       e.target.disabled = true;
@@ -1873,6 +1861,115 @@
   const CC_LOGO = '<span class="int-logo">CC</span>';
   const CC_KINDS = [['package', 'แพ็กเกจเว็บรายเดือน'], ['slips', 'ค่าตรวจสลิป'], ['gp', 'GP จากยอดขายคลิป']];
   const thDateTime = (iso) => { if (!iso) return ''; const d = new Date(new Date(iso).getTime() + 7 * 3600e3).toISOString(); return `${T.thDate(d.slice(0, 10))} ${d.slice(11, 16)}`; };
+
+  /* ---------- Payment channels (ช่องทางการเงิน) ---------- */
+  // Bank accounts and other ways to pay, kept in business settings.banks. Active ones print on
+  // quotations and invoices; switching one to ไม่ใช้งานแล้ว hides it without losing it.
+
+  // Short name and brand tone for the bank badge (initials in a coloured circle, not the banks' logos).
+  const BANK_INFO = [
+    ['ธนาคารกสิกรไทย', 'KBank', '#138F2D'], ['ธนาคารไทยพาณิชย์', 'SCB', '#4E2A84'], ['ธนาคารกรุงเทพ', 'BBL', '#1E4598'],
+    ['ธนาคารกรุงไทย', 'KTB', '#1BA5E1'], ['ธนาคารกรุงศรีอยุธยา', 'BAY', '#C9A100'], ['ธนาคารทหารไทยธนชาต (ttb)', 'ttb', '#0050F0'],
+    ['ธนาคารออมสิน', 'GSB', '#EB198D'], ['ธนาคารยูโอบี', 'UOB', '#0B3979'], ['ธนาคารซีไอเอ็มบี ไทย', 'CIMB', '#7E2F36'],
+    ['ธนาคารเกียรตินาคินภัทร', 'KKP', '#635D96'], ['ธนาคารแลนด์ แอนด์ เฮ้าส์', 'LH', '#6D6E71'], ['ธ.ก.ส.', 'BAAC', '#4B9B3D'],
+    ['ธนาคารทิสโก้', 'TISCO', '#12306B'], ['ธนาคารไอซีบีซี (ไทย)', 'ICBC', '#C4161C'], ['ธนาคารอาคารสงเคราะห์', 'GHB', '#F7941D'],
+  ];
+  const BANK_NAMES = BANK_INFO.map((x) => x[0]);
+  const ACCT_TYPE = { savings: 'ออมทรัพย์', current: 'กระแสรายวัน', fixed: 'ฝากประจำ' };
+  const OTHER_KINDS = ['ช่องทางรับชำระออนไลน์ (Payment Gateway)', 'บัตรเครดิต / เดบิต', 'วอลเล็ต (TrueMoney, ShopeePay …)', 'เช็ค', 'อื่นๆ'];
+  const fmtAcct = (n) => { const d = String(n || '').replace(/\D/g, ''); return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 4)}-${d.slice(4, 9)}-${d.slice(9)}` : String(n || ''); };
+  function channelBadge(c) {
+    if (c.kind === 'other') return `<span class="ch-badge other">${ICON.swap}</span>`;
+    const info = BANK_INFO.find((x) => x[0] === c.bank);
+    return `<span class="ch-badge" style="--c:${info ? info[2] : '#6C717B'}">${esc(info ? info[1] : (c.bank || '?').replace(/^ธนาคาร/, '').slice(0, 3))}</span>`;
+  }
+
+  async function saveChannels(list) {
+    const s = biz().settings || {};
+    await put('', { settings: { ...s, banks: list } });
+    await loadBoot();
+  }
+
+  function editChannel(c, kind) {
+    const isNew = !c;
+    c = c || { kind, active: true, acctType: 'savings', bank: kind === 'bank' ? BANK_NAMES[0] : OTHER_KINDS[0] };
+    const bank = c.kind !== 'other';
+    const body = bank
+      ? `<div class="form-rows">
+          <label><span>ธนาคาร</span><select name="bank">${[...new Set([...BANK_NAMES, c.bank].filter(Boolean))].map((n) => `<option ${n === c.bank ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+          <label><span>เลขที่บัญชี</span><input type="text" name="number" inputmode="numeric" value="${esc(c.number || '')}" placeholder="123-4-56789-0"></label>
+          <label><span>สาขาธนาคาร</span><input type="text" name="branch" value="${esc(c.branch || '')}"></label>
+          <label><span>ชื่อบัญชี</span><input type="text" name="name" value="${esc(c.name || biz().name)}"></label>
+          <div class="fr"><span>ประเภทบัญชี</span><div class="radios">${Object.entries(ACCT_TYPE).map(([k, l]) => `<label class="check"><input type="radio" name="acctType" value="${k}" ${(c.acctType || 'savings') === k ? 'checked' : ''}> ${l}</label>`).join('')}</div></div>
+        </div>`
+      : `<div class="form-rows">
+          <label><span>ประเภท</span><select name="bank">${[...new Set([...OTHER_KINDS, c.bank].filter(Boolean))].map((n) => `<option ${n === c.bank ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+          <label><span>ชื่อผู้ให้บริการ</span><input type="text" name="name" value="${esc(c.name || '')}" placeholder="เช่น Stripe, 2C2P, Omise"></label>
+          <label><span>รายละเอียด</span><input type="text" name="number" value="${esc(c.number || '')}" placeholder="เช่น ลิงก์ชำระเงิน หรือเลขบัญชีร้านค้า (ไม่บังคับ)"></label>
+        </div>`;
+    return dialog({
+      title: `${isNew ? 'เพิ่ม' : 'แก้ไข'}${bank ? 'บัญชีธนาคาร' : 'ช่องทางชำระอื่นๆ'}`, body, ok: 'บันทึกและปิด',
+      onOk: async (el) => {
+        const d = formData(el);
+        if (bank && !String(d.number || '').replace(/\D/g, '')) { toast('กรอกเลขที่บัญชี', true); return false; }
+        if (!bank && !d.name) { toast('กรอกชื่อผู้ให้บริการ', true); return false; }
+        const next = { ...c, ...d, number: bank ? fmtAcct(d.number) : d.number };
+        const list = (biz().settings?.banks || []).map((x) => ({ ...x }));
+        if (isNew) list.push(next); else list.splice(list.findIndex((x) => x.id === c.id), 1, next);
+        await saveChannels(list);
+        toast('บันทึกแล้ว');
+        return true;
+      },
+    });
+  }
+
+  function viewChannels(main) {
+    const list = biz().settings?.banks || [];
+    const row = (c) => {
+      const bank = c.kind !== 'other';
+      const detail = bank
+        ? `<div>ประเภทบัญชี: ${ACCT_TYPE[c.acctType] || ACCT_TYPE.savings}</div>${c.branch ? `<div>สาขา: ${esc(c.branch)}</div>` : ''}`
+        : (c.number ? `<div>${esc(c.number)}</div>` : '');
+      const on = c.active !== false;
+      return `<tr data-id="${esc(c.id)}"${on ? '' : ' class="off"'}>
+        <td class="nowrap">${bank ? 'บัญชีธนาคาร' : 'ช่องทางชำระอื่นๆ'}</td>
+        <td><div class="ch-name">${channelBadge(c)}<div><div>${esc(bank ? `${c.bank} ${c.number}` : c.bank)}</div><div class="muted">${esc(c.name || '')}</div></div></div></td>
+        <td class="muted ch-detail">${detail}</td>
+        <td><label class="st ${on ? 'info' : ''} pick"><select data-active aria-label="สถานะ"><option value="1" ${on ? 'selected' : ''}>ใช้งานอยู่</option><option value="0" ${on ? '' : 'selected'}>ไม่ใช้งานแล้ว</option></select>${CHEV}</label></td>
+        <td class="act"><button type="button" class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`;
+    };
+    // Listeners go on a fresh wrapper so a redraw doesn't stack them on <main>.
+    main.innerHTML = `<div data-ch><div class="page-h"><div><div class="muted" style="font-size:13px"><a class="link" href="#/settings">ตั้งค่า</a> ›</div><h1>ช่องทางการเงิน</h1><div class="sub">บัญชีธนาคารและช่องทางรับชำระที่ใช้อยู่จะพิมพ์ในใบเสนอราคาและใบแจ้งหนี้</div></div>
+      <div class="actions"><div class="split"><button class="btn primary" data-add="bank">${ICON.plus}เพิ่มบัญชี</button><button class="btn primary" data-addmenu aria-label="เลือกประเภท">${CHEV}</button></div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="tbl ch-tbl"><thead><tr><th>ประเภท</th><th>ชื่อบัญชี</th><th>รายละเอียดเพิ่มเติม</th><th>สถานะ</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map(row).join('') : `<tr><td colspan="5"><div class="empty"><b>ยังไม่มีช่องทางการเงิน</b>เพิ่มบัญชีธนาคารเพื่อให้ลูกค้าโอนเงินตามใบแจ้งหนี้<div style="margin-top:12px"><button class="btn primary" data-add="bank">${ICON.plus}เพิ่มบัญชีธนาคาร</button></div></div></td></tr>`}</tbody></table></div></div>
+      ${biz().settings?.promptpay?.id ? '' : '<p class="muted" style="font-size:13px">ตั้งพร้อมเพย์เพื่อพิมพ์ QR รับเงินในใบแจ้งหนี้ได้ที่ <a class="link" href="#/settings">ตั้งค่า › รับชำระเงิน</a></p>'}</div>`;
+    const root = $('[data-ch]', main);
+    const redraw = () => viewChannels(main);
+    const byId = (id) => (biz().settings?.banks || []).find((x) => x.id === id);
+    root.addEventListener('click', (e) => {
+      const add = e.target.closest('[data-add]');
+      if (add) return editChannel(null, add.dataset.add).then((r) => r && redraw());
+      const am = e.target.closest('[data-addmenu]');
+      if (am) return popMenu(am, [['บัญชีธนาคาร', () => editChannel(null, 'bank').then((r) => r && redraw())], ['ช่องทางชำระอื่นๆ', () => editChannel(null, 'other').then((r) => r && redraw())]]);
+      const more = e.target.closest('[data-more]');
+      if (more) {
+        const c = byId(more.closest('tr').dataset.id);
+        popMenu(more, [['แก้ไข', () => editChannel(c).then((r) => r && redraw())], null, ['ลบ', async () => {
+          if (!(await confirmBox('ลบช่องทางการเงิน', `ลบ ${esc(c.bank)} ${esc(c.number || c.name || '')} ออกจากรายการ? เอกสารที่ออกไปแล้วไม่เปลี่ยน`, 'ลบ'))) return;
+          try { await saveChannels((biz().settings?.banks || []).filter((x) => x.id !== c.id)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
+        }, { danger: true }]]);
+      }
+    });
+    root.addEventListener('change', async (e) => {
+      if (!e.target.matches('[data-active]')) return;
+      const id = e.target.closest('tr').dataset.id;
+      try {
+        await saveChannels((biz().settings?.banks || []).map((x) => (x.id === id ? { ...x, active: e.target.value === '1' } : x)));
+        toast(e.target.value === '1' ? 'เปิดใช้งานแล้ว' : 'ปิดการใช้งานแล้ว'); redraw();
+      } catch (err) { fail(err); redraw(); }
+    });
+  }
 
   async function viewIntegrations(main, which) {
     if (which === 'capcourt') return viewCapcourt(main);
