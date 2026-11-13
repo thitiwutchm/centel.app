@@ -1,6 +1,8 @@
-// Investment portfolio (invest.centel.app), mounted at /api/invest. Prices for Thai SET and
-// US stocks come from Yahoo Finance's chart endpoint (free, no key, unofficial), with
-// TradingView's scanner as the backup when Yahoo refuses. Prices are kept in inv_prices for
+// Investment portfolio (invest.centel.app), mounted at /api/invest. With EODHD_API_KEY set,
+// search, prices (15-20 minutes delayed) and history for Thai SET and US stocks come from
+// EODHD (eodhd.com, a paid API with a key). Without it they come from Yahoo Finance's public
+// endpoints (no key, unofficial; Yahoo answers 429 to servers it rate-limits), with
+// TradingView's scanner as the backup for prices. Prices are kept in inv_prices for
 // 15 minutes so the page never makes us call Yahoo more than that. Trades run as app_user
 // (asUser), so the row level security in migrations/038_invest.sql keeps them per person.
 import express from 'express';
@@ -18,7 +20,11 @@ export const FRESH_MS = 15 * 60000;
 const TIMEOUT = 8000;
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
 export const SYMBOL = /^[A-Z0-9][A-Z0-9.&-]{0,19}$/;
-export const TV = /^[A-Z]{2,8}:[A-Z0-9.&_-]{1,20}$/;
+// Exchange-prefixed (SET:PTT, NASDAQ:AAPL), or bare for a US stock whose exchange EODHD's search
+// doesn't say (TradingView's widgets resolve TLN on their own).
+export const TV = /^([A-Z]{2,8}:)?[A-Z0-9.&_-]{1,20}$/;
+const tvPrefixed = (tv) => typeof tv === 'string' && tv.includes(':');
+const eodKey = () => process.env.EODHD_API_KEY || '';
 
 // Yahoo exchange code → TradingView exchange prefix. Only these markets are offered.
 const EXCH = {
@@ -107,7 +113,7 @@ const rowOut = (r) => ({
 // Prices for [{ symbol, tv }]: fresh cached rows as they are, the rest fetched (Yahoo, a few
 // at a time; whatever Yahoo misses goes to TradingView in one call). A symbol nobody answers
 // keeps its last stored price, marked stale.
-export async function quotes(wants, { fetchImpl = fetch, db = pool, now = new Date() } = {}) {
+export async function quotes(wants, { fetchImpl = fetch, db = pool, now = new Date(), key = eodKey() } = {}) {
   const syms = wants.map((w) => w.symbol);
   const have = new Map((await db.query('select * from inv_prices where symbol = any($1)', [syms])).rows.map((r) => [r.symbol, r]));
   const out = {};
@@ -117,13 +123,13 @@ export async function quotes(wants, { fetchImpl = fetch, db = pool, now = new Da
     if (r && now.getTime() - new Date(r.at).getTime() < FRESH_MS) out[w.symbol] = rowOut(r);
     else need.push(w);
   }
-  const got = {};
-  for (let i = 0; i < need.length; i += 5) {
+  const got = key && need.length ? await eodQuotes(need.map((w) => w.symbol), key, fetchImpl) : {};
+  for (let i = 0; i < need.length && !key; i += 5) {
     const part = need.slice(i, i + 5);
     const res = await Promise.all(part.map((w) => yahooQuote(w.symbol, fetchImpl)));
     part.forEach((w, k) => { if (res[k]) got[w.symbol] = res[k]; });
   }
-  const missing = need.filter((w) => !got[w.symbol] && w.tv);
+  const missing = need.filter((w) => !got[w.symbol] && tvPrefixed(w.tv));
   if (missing.length) Object.assign(got, await tvQuotes(missing, fetchImpl));
   for (const w of need) {
     const q = got[w.symbol];
@@ -144,9 +150,14 @@ export async function quotes(wants, { fetchImpl = fetch, db = pool, now = new Da
   return out;
 }
 
-// Yahoo's symbol search, kept to stocks and ETFs on SET and the US exchanges.
-export async function search(q, fetchImpl = fetch) {
+// Symbol search, kept to stocks and ETFs on SET and the US exchanges.
+export async function search(q, fetchImpl = fetch, key = eodKey()) {
+  return key ? eodSearch(q, key, fetchImpl) : yahooSearch(q, fetchImpl);
+}
+
+async function yahooSearch(q, fetchImpl) {
   const j = await getJson(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=12&newsCount=0&listsCount=0`, fetchImpl);
+  if (!j) return null;
   const out = [];
   for (const x of Array.isArray(j?.quotes) ? j.quotes : []) {
     if (!['EQUITY', 'ETF'].includes(x.quoteType)) continue;
@@ -166,10 +177,18 @@ export async function search(q, fetchImpl = fetch) {
 // SET symbols ("only available on TradingView"), so Thai stocks are drawn from this instead.
 export const RANGES = { '1mo': '1d', '6mo': '1d', '1y': '1d', '5y': '1wk' };
 const histCache = new Map();
-export async function history(symbol, range, { fetchImpl = fetch, now = Date.now() } = {}) {
+export async function history(symbol, range, { fetchImpl = fetch, now = Date.now(), key: apiKey = eodKey() } = {}) {
   const key = `${symbol}|${range}`;
   const hit = histCache.get(key);
   if (hit && now - hit.at < 60 * 60000) return hit.value;
+  const value = apiKey ? await eodHistory(symbol, range, apiKey, fetchImpl, now) : await yahooHistory(symbol, range, fetchImpl);
+  if (!value) return null;
+  if (histCache.size > 400) histCache.clear();
+  histCache.set(key, { at: now, value });
+  return value;
+}
+
+async function yahooHistory(symbol, range, fetchImpl) {
   const j = await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${RANGES[range]}`, fetchImpl);
   const r = j?.chart?.result?.[0];
   const ts = r?.timestamp, cl = r?.indicators?.quote?.[0]?.close;
@@ -177,10 +196,72 @@ export async function history(symbol, range, { fetchImpl = fetch, now = Date.now
   const points = [];
   ts.forEach((t, i) => { if (Number.isFinite(t) && good(cl[i])) points.push([t, Math.round(cl[i] * 1e4) / 1e4]); });
   if (!points.length) return null;
-  const value = { symbol, range, currency: r.meta?.currency || null, points };
-  if (histCache.size > 400) histCache.clear();
-  histCache.set(key, { at: now, value });
-  return value;
+  return { symbol, range, currency: r.meta?.currency || null, points };
+}
+
+/* ---------- EODHD ---------- */
+// Our symbols are Yahoo-style (PTT.BK, AAPL, BRK-B); EODHD wants PTT.BK, AAPL.US, BRK-B.US.
+export const eodTicker = (symbol) => (symbol.endsWith('.BK') ? symbol : `${symbol}.US`);
+const fromEod = (code) => (code.endsWith('.BK') ? code : code.replace(/\.US$/, ''));
+const eodUrl = (path, key, params = '') => `https://eodhd.com/api/${path}?api_token=${encodeURIComponent(key)}&fmt=json${params}`;
+
+// Delayed live prices, 20 tickers a call (each ticker costs one API call either way).
+export async function eodQuotes(symbols, key, fetchImpl = fetch) {
+  const out = {};
+  for (let i = 0; i < symbols.length; i += 20) {
+    const part = symbols.slice(i, i + 20).map(eodTicker);
+    const j = await getJson(eodUrl(`real-time/${encodeURIComponent(part[0])}`, key, part.length > 1 ? `&s=${encodeURIComponent(part.slice(1).join(','))}` : ''), fetchImpl);
+    for (const x of Array.isArray(j) ? j : j ? [j] : []) {
+      const code = String(x?.code || '').toUpperCase();
+      // Outside trading hours close can be 'NA'; the previous close is still the last price.
+      const close = good(Number(x.close)) ? Number(x.close) : good(Number(x.previousClose)) ? Number(x.previousClose) : null;
+      if (!code || close == null) continue;
+      out[fromEod(code)] = {
+        price: close,
+        prevClose: good(Number(x.previousClose)) ? Number(x.previousClose) : null,
+        currency: code.endsWith('.BK') ? 'THB' : 'USD',
+        name: null,
+        marketAt: Number.isFinite(x.timestamp) ? new Date(x.timestamp * 1000).toISOString() : null,
+        src: 'eodhd',
+      };
+    }
+  }
+  return out;
+}
+
+export async function eodSearch(q, key, fetchImpl = fetch) {
+  const j = await getJson(eodUrl(`search/${encodeURIComponent(q)}`, key, '&limit=30'), fetchImpl);
+  if (!Array.isArray(j)) return null;
+  const out = [];
+  for (const x of Array.isArray(j) ? j : []) {
+    const ex = String(x.Exchange || '').toUpperCase();
+    if (ex !== 'BK' && ex !== 'US') continue;
+    if (!['Common Stock', 'ETF', 'Preferred Stock'].includes(x.Type)) continue;
+    const code = String(x.Code || '').toUpperCase();
+    const symbol = ex === 'BK' ? `${code}.BK` : code;
+    const tv = ex === 'BK' ? `SET:${code}` : code.replace(/-/g, '.');
+    if (!SYMBOL.test(symbol) || !TV.test(tv) || out.some((o) => o.symbol === symbol)) continue;
+    out.push({
+      symbol, tv, name: str(x.Name, 120) || symbol,
+      market: ex === 'BK' ? 'SET' : 'US', currency: ex === 'BK' ? 'THB' : 'USD',
+      type: x.Type === 'ETF' ? 'ETF' : 'stock', exchange: ex === 'BK' ? 'SET' : 'US',
+    });
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
+const RANGE_DAYS = { '1mo': 31, '6mo': 183, '1y': 366, '5y': 1827 };
+export async function eodHistory(symbol, range, key, fetchImpl = fetch, now = Date.now()) {
+  const from = new Date(now - RANGE_DAYS[range] * 86400000).toISOString().slice(0, 10);
+  const j = await getJson(eodUrl(`eod/${encodeURIComponent(eodTicker(symbol))}`, key, `&from=${from}&period=${range === '5y' ? 'w' : 'd'}`), fetchImpl);
+  const points = [];
+  for (const x of Array.isArray(j) ? j : []) {
+    const t = Date.parse(`${x.date}T00:00:00Z`) / 1000;
+    if (Number.isFinite(t) && good(Number(x.close))) points.push([t, Math.round(Number(x.close) * 1e4) / 1e4]);
+  }
+  if (!points.length) return null;
+  return { symbol, range, currency: symbol.endsWith('.BK') ? 'THB' : 'USD', points };
 }
 
 /* ---------- Routes ---------- */
@@ -188,10 +269,16 @@ export async function history(symbol, range, { fetchImpl = fetch, now = Date.now
 router.use(requireUser);
 const tx = (req, fn) => asUser(req.user.id, fn);
 
+// Which source the prices come from, so the page can say so.
+router.get('/source', (_req, res) => res.json({ source: eodKey() ? 'eodhd' : 'yahoo' }));
+
 router.get('/search', rateLimit(300, 60 * 60000), wrap(async (req, res) => {
   const q = str(req.query.q, 40);
   if (!q) return res.json({ results: [] });
-  res.json({ results: await search(q) });
+  const results = await search(q);
+  // The source refused or is down: say so, rather than "nothing found".
+  if (!results) throw bad('search_unavailable', 503);
+  res.json({ results });
 }));
 
 // ?s=PTT.BK~SET:PTT,AAPL~NASDAQ:AAPL (the TradingView half lets the backup source answer too).
@@ -226,7 +313,7 @@ function readTrade(b) {
   if (!SYMBOL.test(symbol) || !TV.test(tv)) throw bad('bad_symbol');
   const kind = ['buy', 'sell', 'div'].includes(b.kind) ? b.kind : null;
   if (!kind) throw bad('bad_kind');
-  const currency = tv.startsWith('SET:') ? 'THB' : 'USD';
+  const currency = symbol.endsWith('.BK') ? 'THB' : 'USD';
   const date = isDate(b.date) ? b.date : null;
   if (!date) throw bad('bad_date');
   const qty = kind === 'div' ? 0 : Math.round(Number(b.qty) * 1e6) / 1e6;
