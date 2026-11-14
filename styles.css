@@ -2055,3 +2055,14 @@ a.btn { text-decoration: none; text-align: center; box-sizing: border-box; }
 .couple .pb-total .amt { font-size: 18px; font-weight: 800; }
 .couple .pb-ico { width: 40px; flex: 0 0 40px; text-align: center; font-size: 20px; }
 .couple .pb-total { border-top: 1px solid var(--line); width: 100%; text-align: left; }
+
+/* Partner's expenses (balshare.js): row in the ร่วมกับ … card and its month sheet. */
+.couple .pe-row .right { margin-right: 4px; }
+.couple .pe-row .amt { font-size: 16px; font-weight: 700; }
+.pe-month { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 6px; }
+.pe-month .pe-mid { text-align: center; font-weight: 700; }
+.pe-month .pe-total { font-size: 24px; font-weight: 800; margin-top: 2px; }
+.pe-month .day-step:disabled { opacity: .3; }
+.pe-hint { text-align: center; margin-top: 0; }
+.pe-cats .pe-bar { height: 6px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; }
+.pe-cats .pe-bar i { display: block; height: 100%; border-radius: 3px; }
