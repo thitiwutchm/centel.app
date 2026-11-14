@@ -12,6 +12,7 @@ import {
 import { report, REPORTS, purchaseVatState, vatSales, vatPurchase, vatPp36 } from './reports.js';
 import { readPurchaseDoc } from './ai.js';
 import { mountUsers, guard, permsOf, inviteInfo, issuerOf } from './users.js';
+import { mountCentel, startReminderJob } from './centel.js';
 import { CC_KINDS, DEFAULT_BASE, ccFetch, cleanBase, cleanKey, reportFor, sinceMonth, toDocBody, venueContact } from './capcourt.js';
 
 const router = express.Router();
@@ -97,6 +98,7 @@ router.use('/b/:biz', wrap(async (req, _res, next) => {
   next();
 }), biz);
 mountUsers(router, biz, { wrap, rateLimit });
+mountCentel(biz, { wrap });
 
 const B = (req) => req.biz.id;
 
@@ -1044,6 +1046,7 @@ export function startAccJobs() {
   };
   setTimeout(tick, 30000);
   setInterval(tick, 60 * 60000);
+  startReminderJob();
 }
 
 /* ---------- Public shapes ---------- */
