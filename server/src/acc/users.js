@@ -287,6 +287,7 @@ export async function guard(req) {
     case 'scan': if (!any('purchase')) deny(); return;
     case 'attachment': if (!any('purchase', 'accounting')) deny(); return;
     case 'integrations': if (!any('settings')) deny(); return;
+    case 'centel': case 'reminders': if (!any('accounting', 'settings')) deny(); return; // reminders through Centel
     case 'vat': // purchase tax documents go with purchase; monthly returns with accounting
       if (!(id === 'purchases' ? any('purchase', 'accounting') : any('accounting'))) deny();
       return;

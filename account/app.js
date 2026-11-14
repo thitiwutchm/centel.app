@@ -39,6 +39,8 @@
     google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่', bad_role: 'กรุณาเลือกตำแหน่ง', already_member: 'อีเมลนี้เป็นผู้ใช้งานในกิจการนี้อยู่แล้ว',
     too_many_users: 'เพิ่มผู้ใช้งานได้สูงสุด 50 คนต่อกิจการ', primary_owner: 'เจ้าของหลักของกิจการแก้ไขหรือลบไม่ได้', self_demote: 'เปลี่ยนตำแหน่งของตัวเองไม่ได้ ให้เจ้าของคนอื่นเปลี่ยนให้',
     self_disable: 'ระงับบัญชีของตัวเองไม่ได้', invite_gone: 'คำเชิญนี้หมดอายุหรือถูกใช้ไปแล้ว ขอให้เจ้าของกิจการส่งคำเชิญใหม่',
+    not_linked: 'ยังไม่ได้เชื่อมต่อกับ Centel', code_gone: 'รหัสหมดอายุหรือถูกใช้แล้ว', bad_title: 'กรอกชื่อการแจ้งเตือน', bad_day: 'วันที่ไม่ถูกต้อง', bad_date: 'เลือกวันที่ครบกำหนด',
+    bad_month: 'เลือกเดือน', bad_contact: 'ไม่พบผู้ติดต่อนี้', bad_amount: 'จำนวนเงินไม่ถูกต้อง', bad_remind: 'เลือกเวลาเตือน', too_many: 'มีการแจ้งเตือนครบจำนวนสูงสุดแล้ว',
     invite_other_email: 'คำเชิญนี้ส่งถึงอีเมลอื่น ออกจากระบบแล้วเข้าสู่ระบบด้วยอีเมลที่ได้รับเชิญ', bad_image: 'ไฟล์รูปไม่ถูกต้อง', ref_void: 'เอกสารต้นทางถูกยกเลิกแล้ว', bad_code: 'รหัสบัญชีไม่ถูกต้อง',
   };
   async function api(method, path, body) {
@@ -134,6 +136,7 @@
     print: I('<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/>'),
     link: I('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+    bell: I('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
     scan: I('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/>'),
   };
 
@@ -278,7 +281,7 @@
   /* ---------- Shell and routing ---------- */
 
   const NAV = [
-    ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home]]],
+    ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home], ['reminders', 'การแจ้งเตือน', ICON.bell]]],
     ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
     ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex]]],
     ['ภาษี', 'vat'],
@@ -293,7 +296,7 @@
     dashboard: ['accounting'], 'docs/QT': ['sales', 'accounting'], 'docs/IV': ['sales', 'accounting'], 'docs/RE': ['sales', 'accounting'],
     'docs/EX': ['purchase', 'accounting'], contacts: ['sales', 'purchase', 'accounting'], items: ['sales', 'purchase', 'accounting'],
     journal: ['accounting'], accounts: ['accounting'], reports: ['accounting'],
-    'vat/purchases': ['purchase', 'accounting'], 'vat/returns': ['accounting'], 'report/vat_sales': ['accounting'], 'report/vat_purchase': ['accounting'], integrations: ['settings'], channels: ['settings'], settings: ['settings'],
+    'vat/purchases': ['purchase', 'accounting'], 'vat/returns': ['accounting'], 'report/vat_sales': ['accounting'], 'report/vat_purchase': ['accounting'], integrations: ['settings'], channels: ['settings'], reminders: ['accounting', 'settings'], settings: ['settings'],
   };
   const pageOk = (r) => !PAGE_AREA[r] || PAGE_AREA[r].some((a) => can(a));
   // Where someone lands: the dashboard, or their first page when the dashboard is not theirs.
@@ -376,6 +379,7 @@
       else if (r === 'vat') await viewVatPurchases(main, q);
       else if (r === 'settings') viewSettings(main);
       else if (r === 'channels') viewChannels(main);
+      else if (r === 'reminders') await viewReminders(main);
       else if (r === 'profile') await viewProfile(main);
       else if (r === 'users' && parts[1] === 'new') await viewInvite(main);
       else if (r === 'users') await viewUsers(main);
@@ -2360,11 +2364,183 @@
     });
   }
 
+  /* ---------- Reminders through Centel (การแจ้งเตือน) ---------- */
+  // Deadlines (tax forms, paying suppliers, collecting from customers, anything else) delivered by
+  // the Centel app: the business is linked once to someone's Centel with a code, then each
+  // deadline becomes a to-do with a reminder there a week ahead (server/src/acc/centel.js).
+
+  const REM_CAT = { tax: ['ภาษี', 'warn'], pay: ['จ่ายคู่ค้า', 'bad'], collect: ['รับเงินลูกค้า', 'good'], other: ['อื่นๆ', ''] };
+  const REM_DAYS = [[0, 'วันกำหนด 09:00'], [1, 'ล่วงหน้า 1 วัน'], [2, 'ล่วงหน้า 2 วัน'], [3, 'ล่วงหน้า 3 วัน']];
+  const REM_PRESET_TAG = { pp30: 'ภ.พ.30', pnd1: 'ภ.ง.ด.1', pnd3: 'ภ.ง.ด.3', pnd53: 'ภ.ง.ด.53' };
+  const remWhen = (r) => (r.every === 'once' ? `ครั้งเดียว ${T.thDate(r.date)}`
+    : r.every === 'yearly' ? `ทุกปี ${r.day} ${T.TH_MONTHS[r.month - 1]}` : `ทุกเดือน วันที่ ${r.day}`);
+  const remDays = (n) => (REM_DAYS.find(([k]) => k === n) || REM_DAYS[2])[1];
+  const CENTEL_MARK = '<span class="cn-mark" aria-hidden="true">C</span>';
+
+  // The link dialog: a code to approve in Centel, closed by itself once Centel says yes.
+  async function linkCentel(before) {
+    const c = await post('/centel/code');
+    let timer;
+    const done = await dialog({
+      title: 'เชื่อมต่อกับแอป Centel', ok: null, cancel: 'ปิด',
+      body: `<div class="cn-link">
+        <p style="margin-top:0">อนุญาตใน Centel ที่ต้องการให้แจ้งเตือนเด้ง (iPhone, กลุ่ม LINE) โดยเข้าสู่ระบบ Centel บัญชีนั้นไว้</p>
+        <a class="btn primary cn-open" href="${esc(c.url)}" target="_blank" rel="noopener">${CENTEL_MARK}เปิด Centel เพื่ออนุญาต</a>
+        <div class="muted" style="margin:14px 0 6px">หรือพิมพ์รหัสนี้ใน Centel › บัญชี › การแจ้งเตือน › Centel Account</div>
+        <div class="cn-code">${esc(c.code)}</div>
+        <div class="muted cn-wait"><span class="cn-dot"></span>รอการอนุญาตจาก Centel · รหัสใช้ได้ 15 นาที</div></div>`,
+      onOpen: (el, close) => {
+        const tick = async () => {
+          if (!document.body.contains(el)) return;
+          try { const { links } = await get('/centel'); if (links.length > before) return close(links); } catch { /* try again */ }
+          timer = setTimeout(tick, 3000);
+        };
+        timer = setTimeout(tick, 3000);
+      },
+    });
+    clearTimeout(timer);
+    if (done) toast('เชื่อมต่อกับ Centel แล้ว');
+    return done;
+  }
+
+  function editReminder(r, preset) {
+    const isNew = !r;
+    r = r || (preset ? { kind: preset, category: 'tax', every: 'monthly', remind_days: 2, early: true }
+      : { kind: 'custom', category: 'pay', every: 'monthly', day: 1, remind_days: 2, early: true });
+    const tax = REM_PRESET_TAG[r.kind];
+    const contacts = (S.boot.contacts || []).filter((c) => !c.archived);
+    const body = `<div class="grid g2 rem-form">
+        ${tax ? `<div class="field span2"><span>แบบภาษี</span><div><span class="chip warn">${esc(tax)}</span> <span class="muted">ยื่นออนไลน์ภายในวันที่ ${S.remPresets?.[r.kind]?.day || r.day} ของเดือนถัดไป</span></div></div>`
+          : `<label class="field"><span>ประเภท</span><select name="category">${Object.entries(REM_CAT).map(([k, [l]]) => `<option value="${k}" ${r.category === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`}
+        <label class="field${tax ? ' span2' : ''}"><span>ชื่อการแจ้งเตือน</span><input type="text" name="title" maxlength="200" value="${esc(r.title || S.remPresets?.[r.kind]?.title || '')}" placeholder="เช่น จ่ายค่าเช่าโกดัง, ต่อประกันรถ"></label>
+        ${tax ? '' : `<label class="field"><span>คู่ค้า / ผู้ติดต่อ (ไม่บังคับ)</span><select name="contact_id"><option value="">ไม่ระบุ</option>${contacts.map((c) => `<option value="${c.id}" ${r.contact_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>จำนวนเงิน (ไม่บังคับ)</span><input type="number" name="amount" min="0" step="0.01" inputmode="decimal" value="${r.amount ?? ''}" placeholder="0.00"></label>
+        <label class="field"><span>รอบ</span><select name="every">${[['monthly', 'ทุกเดือน'], ['yearly', 'ทุกปี'], ['once', 'ครั้งเดียว']].map(([k, l]) => `<option value="${k}" ${r.every === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field" data-show="monthly yearly"><span>วันที่</span><select name="day">${Array.from({ length: 31 }, (_, i) => `<option ${Number(r.day) === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select><small>เดือนที่มีไม่ถึงวันนี้ ใช้วันสุดท้ายของเดือน</small></label>
+        <label class="field" data-show="yearly"><span>เดือน</span><select name="month">${T.TH_MONTHS.map((m, i) => `<option value="${i + 1}" ${Number(r.month) === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+        <label class="field" data-show="once"><span>วันที่ครบกำหนด</span><input type="date" name="date" value="${esc(r.date || '')}"></label>`}
+        <label class="field"><span>เตือนใน Centel</span><select name="remind_days">${REM_DAYS.map(([k, l]) => `<option value="${k}" ${r.remind_days === k ? 'selected' : ''}>${l}</option>`).join('')}</select><small>แจ้งเตือนเวลา 09:00 น.</small></label>
+        <label class="field span2 check" style="flex-direction:row"><input type="checkbox" name="early" ${r.early !== false ? 'checked' : ''}> ถ้าครบกำหนดวันเสาร์-อาทิตย์ ให้เตือนตามวันศุกร์ก่อนหน้า</label>
+        <label class="field span2"><span>หมายเหตุ (แสดงในสิ่งที่ต้องทำของ Centel)</span><input type="text" name="note" maxlength="500" value="${esc(r.note || '')}" placeholder="เช่น ใช้เอกสารจากแฟ้มภาษีซื้อ"></label>
+      </div>`;
+    return dialog({
+      title: isNew ? 'สร้างการแจ้งเตือน' : 'แก้ไขการแจ้งเตือน', body, ok: 'บันทึก', wide: true,
+      onOpen: (el) => {
+        const every = $('[name=every]', el);
+        const sync = () => { if (every) for (const f of $$('[data-show]', el)) f.hidden = !f.dataset.show.split(' ').includes(every.value); };
+        if (every) every.onchange = sync;
+        sync();
+      },
+      onOk: async (el) => {
+        const d = formData(el);
+        if (!d.title) { toast('กรอกชื่อการแจ้งเตือน', true); return false; }
+        const b = { ...d, kind: r.kind, remind_days: Number(d.remind_days) };
+        if (!tax) {
+          if (d.every === 'once' && !d.date) { toast('เลือกวันที่ครบกำหนด', true); return false; }
+          b.day = Number(d.day); b.month = Number(d.month);
+          if (d.every === 'once') { delete b.day; delete b.month; } else delete b.date;
+        }
+        return isNew ? post('/reminders', b) : put(`/reminders/${r.id}`, b);
+      },
+    });
+  }
+
+  async function viewReminders(main) {
+    const data = await get('/reminders');
+    S.remPresets = data.presets;
+    const { reminders: list, links, prefs } = data;
+    const has = (k) => list.some((r) => r.kind === k);
+    const contactName = (id) => (S.boot.contacts || []).find((c) => c.id === id)?.name;
+    const row = (r) => {
+      const [cl, tone] = REM_CAT[r.category] || REM_CAT.other;
+      const sub = [contactName(r.contact_id), r.amount ? `฿${money(r.amount)}` : '', r.note].filter(Boolean).map(esc).join(' · ');
+      return `<tr data-id="${r.id}"${r.active ? '' : ' class="off"'}>
+        <td><div class="rem-title"><b>${esc(r.title)}</b><span class="chip ${tone}">${cl}</span></div>${sub ? `<div class="muted" style="font-size:12px;margin-top:2px">${sub}</div>` : ''}</td>
+        <td class="nowrap">${remWhen(r)}</td>
+        <td class="nowrap">${remDays(r.remind_days)}</td>
+        <td class="nowrap">${r.next ? `<b>${T.thDate(r.next.date)}</b>${r.next.moved ? `<div class="muted" style="font-size:12px">กำหนดจริง ${T.thDate(r.next.due)}</div>` : ''}` : '<span class="muted">—</span>'}</td>
+        <td><label class="st ${r.active ? 'info' : ''} pick"><select data-active aria-label="สถานะ"><option value="1" ${r.active ? 'selected' : ''}>เปิดอยู่</option><option value="0" ${r.active ? '' : 'selected'}>ปิดไว้</option></select>${CHEV}</label></td>
+        <td class="act"><button type="button" class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`;
+    };
+    const linkRows = links.map((l) => `<div class="cn-person" data-link="${l.id}"><span class="cn-av">${esc(l.avatar || (l.name || l.email || '?').replace(/^[เแโใไ]/, '').slice(0, 1))}</span>
+      <div style="flex:1;min-width:0"><b>${esc(l.name || 'Centel')}</b><div class="muted" style="font-size:12px">${esc(l.email || '')} · เชื่อมต่อเมื่อ ${thDateTime(l.created_at)}</div></div>
+      <button class="btn sm ghost danger" data-unlink>ตัดการเชื่อมต่อ</button></div>`).join('');
+    main.innerHTML = `<div data-rem><div class="page-h"><div><h1>การแจ้งเตือน</h1><div class="sub">กำหนดยื่นภาษี จ่ายคู่ค้า รับเงินลูกค้า และเรื่องอื่นๆ ส่งไปเตือนในแอป Centel ของคุณ</div></div>
+      <div class="actions"><button class="btn primary" data-new>${ICON.plus}สร้างการแจ้งเตือน</button></div></div>
+      <div class="grid" style="max-width:980px">
+        <div class="card card-pad"><div class="int-status">${CENTEL_MARK}<div style="flex:1;min-width:200px"><b>แอป Centel</b> ${links.length ? '<span class="chip good">เชื่อมต่อแล้ว</span>' : '<span class="chip">ยังไม่เชื่อมต่อ</span>'}
+            <div class="muted" style="font-size:13px;margin-top:2px">${links.length ? 'ล่วงหน้า 7 วันก่อนครบกำหนด รายการจะขึ้นเป็นสิ่งที่ต้องทำใน Centel แล้วแจ้งเตือนบน iPhone และกลุ่ม LINE ตามที่ตั้งไว้ในแอป' : 'เชื่อมต่อครั้งเดียว แล้วการแจ้งเตือนทั้งหมดของกิจการนี้จะส่งไปที่ Centel'}</div></div>
+            <button class="btn ${links.length ? '' : 'primary'}" data-link-new>${links.length ? 'เพิ่มบัญชี Centel' : 'เชื่อมต่อกับ Centel'}</button></div>
+          ${linkRows ? `<div class="cn-people">${linkRows}</div>` : ''}</div>
+
+        <div class="card card-pad"><h2 style="margin-top:0">ภาษีรายเดือน</h2><p class="muted" style="margin-top:0">กดเพื่อเพิ่ม กำหนดยื่นออนไลน์ของเดือนถัดไป</p>
+          <div class="rem-presets">${Object.entries(REM_PRESET_TAG).map(([k, tag]) => `<button class="rem-preset${has(k) ? ' on' : ''}" data-preset="${k}" ${has(k) ? 'disabled' : ''}>
+            <b>${tag}</b><span>${k === 'pp30' ? 'ภาษีมูลค่าเพิ่ม' : k === 'pnd1' ? 'หัก ณ ที่จ่าย เงินเดือน' : k === 'pnd3' ? 'หัก ณ ที่จ่าย บุคคลธรรมดา' : 'หัก ณ ที่จ่าย นิติบุคคล'}</span>
+            <small>${has(k) ? '✓ เพิ่มแล้ว' : `ทุกวันที่ ${data.presets[k].day}`}</small></button>`).join('')}</div>
+          ${!biz().vat_registered && !has('pp30') ? '<p class="muted" style="font-size:12px;margin:8px 0 0">ภ.พ.30 ใช้เฉพาะกิจการที่จด VAT</p>' : ''}</div>
+
+        <div class="card"><div class="tbl-wrap"><table class="tbl rem-tbl"><thead><tr><th>การแจ้งเตือน</th><th>รอบ</th><th>เตือน</th><th>ครั้งถัดไป</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody>${list.length ? list.map(row).join('') : `<tr><td colspan="6"><div class="empty"><b>ยังไม่มีการแจ้งเตือน</b>เพิ่มภาษีรายเดือนจากด้านบน หรือสร้างการแจ้งเตือนจ่ายคู่ค้า รับเงิน และเรื่องอื่นๆ</div></td></tr>`}</tbody></table></div></div>
+
+        <div class="card card-pad"><h2 style="margin-top:0">เตือนจากเอกสาร</h2><p class="muted" style="margin-top:0">เอกสารที่ยังไม่ชำระและมีวันครบกำหนด จะขึ้นใน Centel ล่วงหน้า 7 วัน ชำระแล้วรายการที่ยังไม่ได้เตือนจะถูกเอาออกเอง</p>
+          <div class="rem-prefs">
+            <label class="check"><input type="checkbox" data-pref="ex_due" ${prefs.ex_due ? 'checked' : ''}> ค่าใช้จ่ายรอจ่าย ใกล้ครบกำหนดจ่ายคู่ค้า</label>
+            <label class="check"><input type="checkbox" data-pref="iv_due" ${prefs.iv_due ? 'checked' : ''}> ใบแจ้งหนี้รอรับชำระ ใกล้ครบกำหนด (ตามเก็บเงินลูกค้า)</label>
+            <label class="field" style="max-width:220px"><span>เตือนใน Centel</span><select data-pref="remind_days">${REM_DAYS.map(([k, l]) => `<option value="${k}" ${prefs.remind_days === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          </div></div>
+        <p class="muted" style="font-size:12px;margin:0">วันครบกำหนดภาษีที่ตรงวันหยุดราชการอาจเลื่อนตามประกาศกรมสรรพากร ระบบเตือนตามวันปกติ (หรือวันศุกร์ก่อนหน้าเมื่อตรงเสาร์-อาทิตย์) จึงไม่เตือนช้ากว่ากำหนด</p>
+      </div></div>`;
+    const root = $('[data-rem]', main);
+    const redraw = () => viewReminders(main);
+    const byId = (id) => list.find((x) => x.id === id);
+    const saved = (r) => { if (r) { toast(links.length ? 'บันทึกแล้ว จะขึ้นใน Centel ล่วงหน้า 7 วันก่อนครบกำหนด' : 'บันทึกแล้ว เชื่อมต่อกับ Centel เพื่อรับการแจ้งเตือน'); redraw(); } };
+    root.addEventListener('click', async (e) => {
+      try {
+        if (e.target.closest('[data-new]')) return saved(await editReminder(null));
+        const p = e.target.closest('[data-preset]');
+        if (p) return saved(await editReminder(null, p.dataset.preset));
+        if (e.target.closest('[data-link-new]')) { if (await linkCentel(links.length)) redraw(); return; }
+        const un = e.target.closest('[data-unlink]');
+        if (un) {
+          const l = links.find((x) => x.id === un.closest('[data-link]').dataset.link);
+          if (!(await confirmBox('ตัดการเชื่อมต่อ Centel', `หยุดส่งการแจ้งเตือนไปที่ Centel ของ ${esc(l.name || l.email)}? สิ่งที่ต้องทำที่ยังไม่ถึงเวลาเตือนจะถูกเอาออก`, 'ตัดการเชื่อมต่อ'))) return;
+          await api('DELETE', A(`/centel/${l.id}`)); toast('ตัดการเชื่อมต่อแล้ว'); redraw(); return;
+        }
+        const more = e.target.closest('[data-more]');
+        if (more) {
+          const r = byId(more.closest('tr').dataset.id);
+          popMenu(more, [['แก้ไข', async () => saved(await editReminder(r))],
+            ['ส่งทดสอบไปที่ Centel', async () => {
+              try { const x = await post(`/reminders/${r.id}/test`); toast(x.devices ? `ส่งแล้ว ${x.devices} เครื่อง` : 'ส่งแล้ว แต่ยังไม่มีเครื่องที่เปิดแจ้งเตือนใน Centel'); } catch (err) { fail(err); }
+            }], null,
+            ['ลบ', async () => {
+              if (!(await confirmBox('ลบการแจ้งเตือน', `ลบ ${esc(r.title)}?`, 'ลบ'))) return;
+              try { await api('DELETE', A(`/reminders/${r.id}`)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
+            }, { danger: true }]]);
+        }
+      } catch (err) { fail(err); }
+    });
+    root.addEventListener('change', async (e) => {
+      try {
+        if (e.target.matches('[data-active]')) {
+          await put(`/reminders/${e.target.closest('tr').dataset.id}`, { active: e.target.value === '1' });
+          toast(e.target.value === '1' ? 'เปิดการแจ้งเตือนแล้ว' : 'ปิดการแจ้งเตือนแล้ว'); redraw();
+        } else if (e.target.matches('[data-pref]')) {
+          const k = e.target.dataset.pref;
+          await put('/reminders/prefs', { [k]: k === 'remind_days' ? Number(e.target.value) : e.target.checked });
+          toast('บันทึกแล้ว');
+        }
+      } catch (err) { fail(err); redraw(); }
+    });
+  }
+
   async function viewIntegrations(main, which) {
     if (which === 'capcourt') return viewCapcourt(main);
     const { integration: cc } = await get('/integrations/capcourt');
     main.innerHTML = `<div class="page-h"><div><h1>เชื่อมต่อระบบ</h1><div class="sub">ให้ระบบอื่นออกเอกสารในกิจการนี้ให้อัตโนมัติ</div></div></div>
       <div class="grid" style="max-width:860px">
+        <a class="card card-pad int-card" href="#/reminders">${CENTEL_MARK}<div style="flex:1"><h2 style="margin:0 0 2px">แอป Centel</h2>
+          <div class="muted">ส่งการแจ้งเตือนยื่นภาษี จ่ายคู่ค้า รับเงินลูกค้า และเรื่องอื่นๆ ไปเตือนเป็นสิ่งที่ต้องทำในแอป Centel (iPhone, กลุ่ม LINE)</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
         <a class="card card-pad int-card" href="#/integrations/capcourt">${CC_LOGO}<div style="flex:1"><h2 style="margin:0 0 2px">CapCourt Admin</h2>
           <div class="muted">ออกใบแจ้งหนี้รายเดือนให้สนามที่ใช้บริการ CapCourt อัตโนมัติทุกวันที่ 1 ออกใบเสร็จ/ใบกำกับภาษีเมื่ออนุมัติการชำระ แล้วแจ้งผลกลับไปที่ CapCourt</div>
           <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${cc ? `<span class="chip good">เชื่อมต่อแล้ว</span><span class="chip">${esc(cc.base_url.replace(/^https?:\/\//, ''))}</span><span class="chip">${cc.settings.venues.length} สนาม</span>` : '<span class="chip">ยังไม่เชื่อมต่อ</span>'}</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>

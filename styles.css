@@ -2066,3 +2066,16 @@ a.btn { text-decoration: none; text-align: center; box-sizing: border-box; }
 .pe-hint { text-align: center; margin-top: 0; }
 .pe-cats .pe-bar { height: 6px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; }
 .pe-cats .pe-bar i { display: block; height: 100%; border-radius: 3px; }
+
+/* Centel Account link (accountlink.js) */
+.al-ask { text-align: center; padding: 6px 4px 4px; }
+.al-ask h3 { margin: 12px 0 4px; font-size: 20px; }
+.al-ask .btn { margin-top: 10px; }
+.al-logos { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 6px; }
+.al-logos img, .al-biz, .al-c { width: 56px; height: 56px; border-radius: 16px; object-fit: contain; background: var(--card); }
+.al-biz, .al-c { display: inline-grid; place-items: center; font-weight: 800; font-size: 24px; }
+.al-biz { background: var(--card); color: var(--c-text); }
+.al-c { background: linear-gradient(145deg, #ff8a3d, #f76707); color: #fff; }
+.al-plus { font-size: 22px; color: var(--muted, #8a8f99); }
+.al-row .al-logo, .al-biz.sm { width: 36px; height: 36px; border-radius: 10px; font-size: 16px; flex: none; object-fit: contain; }
+.al-off { color: var(--bad); font-size: 15px; }

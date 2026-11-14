@@ -632,3 +632,28 @@ input:disabled { background: var(--panel-2); color: var(--ink-2); }
 .theme-sw button.on { background: var(--sw-on); color: var(--rail-hi); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); font-weight: 600; }
 .topbar .theme-tg { margin-left: auto; }
 .topbar .theme-tg svg { width: 20px; height: 20px; display: block; }
+
+/* การแจ้งเตือน — reminders through the Centel app */
+.cn-mark { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(145deg, #FF8A3D, #F76707); color: #fff; font-weight: 800; font-size: 22px; line-height: 1; box-shadow: 0 2px 6px rgba(247, 103, 7, .28); }
+.btn .cn-mark { width: 20px; height: 20px; border-radius: 6px; font-size: 12px; margin-right: 8px; box-shadow: none; background: rgba(255, 255, 255, .22); }
+.cn-link { text-align: center; }
+.cn-link .cn-open { display: inline-flex; align-items: center; text-decoration: none; }
+.cn-code { font: 700 30px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; padding: 12px 16px; border: 1px dashed var(--line); border-radius: 12px; background: var(--panel-2); user-select: all; font-variant-numeric: tabular-nums; }
+.cn-wait { margin-top: 12px; font-size: 13px; display: flex; gap: 8px; align-items: center; justify-content: center; }
+.cn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: cn-pulse 1.2s ease-in-out infinite; }
+@keyframes cn-pulse { 50% { opacity: .25; } }
+.cn-people { margin-top: 14px; border-top: 1px solid var(--line); }
+.cn-person { display: flex; gap: 12px; align-items: center; padding: 12px 0 0; }
+.cn-av { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.rem-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.rem-preset { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); cursor: pointer; font: inherit; }
+.rem-preset:hover:not(:disabled) { border-color: var(--accent); }
+.rem-preset b { font-size: 16px; }
+.rem-preset span { font-size: 13px; color: var(--ink-2); }
+.rem-preset small { margin-top: 4px; font-size: 12px; color: var(--accent); font-weight: 600; }
+.rem-preset.on { background: var(--panel-2); cursor: default; }
+.rem-preset.on small { color: var(--good); }
+.rem-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rem-tbl tr.off td:not(:nth-last-child(-n+2)) { opacity: .55; }
+.rem-prefs { display: flex; flex-direction: column; gap: 10px; }
+.rem-form [hidden] { display: none; }
