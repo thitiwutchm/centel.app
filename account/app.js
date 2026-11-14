@@ -1778,7 +1778,7 @@
     const sel = new Set();
     const deferred = (d) => d.claim_month !== d.date.slice(0, 7);
     main.innerHTML = `<div class="page-h"><div><h1>จัดการเอกสารภาษีซื้อ</h1><div class="sub">สถานะใบกำกับภาษีของค่าใช้จ่าย และเดือนที่ใช้สิทธิ์ภาษีซื้อ</div></div>
-      <div class="actions"><button class="btn" data-xls>ดาวน์โหลด Excel</button><a class="btn" href="#/report/vat_purchase">รายงานภาษีซื้อ</a><a class="btn primary" href="#/new/EX">${ICON.plus}บันทึกค่าใช้จ่าย</a></div></div>
+      <div class="actions"><a class="btn efiling" href="https://efiling.rd.go.th/rd-efiling-web/login" target="_blank" rel="noopener" title="ยื่นแบบ ภ.พ.30 ทางเว็บไซต์กรมสรรพากร (เปิดแท็บใหม่)" aria-label="ยื่น E-Filing กรมสรรพากร"><img src="img/efiling.png" alt="E-Filing"></a><button class="btn" data-xls>ดาวน์โหลด Excel</button><a class="btn" href="#/report/vat_purchase">รายงานภาษีซื้อ</a><a class="btn primary" href="#/new/EX">${ICON.plus}บันทึกค่าใช้จ่าย</a></div></div>
       <div class="card">
         <div class="filters">
           <input type="search" placeholder="ค้นหา เลขที่เอกสาร ชื่อผู้จำหน่าย เลขที่ใบกำกับภาษี" data-q style="flex:1;max-width:none;min-width:200px">
