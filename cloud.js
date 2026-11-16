@@ -148,6 +148,7 @@ function applyBootstrap(b) {
     budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId,
       name: x.name || undefined, period: x.period || 'month', startDate: x.startDate || undefined, endDate: x.endDate || undefined, merchant: x.merchant || undefined })),
     labels: (b.labels || []).map((l) => ({ id: l.id, name: l.name })),
+    ious: b.ious || [],
     prefs,
   };
   if (ui.wallet !== 'total' && !walletById(ui.wallet)) ui.wallet = 'total';
@@ -657,7 +658,7 @@ function loginSheet(mode = 'login') {
 // The first sign-in can bring this device's records into the account.
 async function offerImport(local, b) {
   const mine = b.expenses.filter((e) => e.ownerId === b.user.id).length;
-  const hasLocal = local.txns.length || local.budgets.length || local.wallets.some((w) => w.id !== 'cash' || w.initial);
+  const hasLocal = local.txns.length || local.budgets.length || (local.ious || []).length || local.wallets.some((w) => w.id !== 'cash' || w.initial);
   if (!hasLocal || mine || b.wallets.length) {
     if (!b.wallets.length) saveWallet({ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0, excluded: false });
     return;
@@ -676,6 +677,7 @@ async function cloudImport(data) {
       txns: (data.txns || []).filter((t) => t.type !== 'settle' && t.scope !== 'shared'),
       budgets: (data.budgets || []).filter((x) => x.scope !== 'shared'),
       labels: data.labels || [],
+      ious: data.ious || [],
     });
     if (data.prefs) { money.prefs = { ...money.prefs, ...data.prefs }; cloudSavePrefs(); }
     await cloudRefresh();

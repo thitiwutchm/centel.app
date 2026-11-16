@@ -622,6 +622,26 @@ const I18N_EN = {
   'ต้องอนุญาตให้ METANG ใช้ตำแหน่งก่อน': 'Allow METANG to use your location first', 'เลือก "อนุญาตตลอด" เพื่อให้อัปเดตเองแม้ปิดแอป': 'Choose "Always Allow" so it updates while the app is closed',
   'อัปเดตตำแหน่งไม่สำเร็จ ลองใหม่อีกครั้ง': 'Could not update location, try again',
   'อยู่ที่เดียวกัน': 'In the same place', 'ตั้งค่าพิเศษ': 'Special settings', '📌 ปักหมุดตำแหน่ง': '📌 Pin location', '📌 ปักหมุด': '📌 Pinned', '📌 ปักหมุด · ตั้งเอง ไม่ใช่จากเครื่อง': '📌 Pinned · set by hand, not from the phone', '📡 ตำแหน่งจากเครื่อง · อัปเดตเบื้องหลัง': '📡 From the phone · background updates', '📱 ตำแหน่งจากเครื่อง · ตอนเปิดแอป': '📱 From the phone · when the app was opened', 'ยังไม่ได้แชร์ตำแหน่ง': 'Not sharing location', 'อัปเดต {0}': 'Updated {0}', 'รู้สึกเหมือน {0}°C': 'Feels like {0}°C', 'เลื่อนแผนที่ให้หมุดอยู่ตรงจุดที่ต้องการ': 'Move the map so the pin sits on the place', '📌 ปักหมุดตรงนี้': '📌 Pin here', 'กำลังหาชื่อสถานที่…': 'Finding the place name…', 'โหลดแผนที่ไม่ได้ ลองค้นหาด้วยชื่อแทน': 'The map could not load; search by name instead', 'จุดนี้': 'this spot', 'ใส่รหัสเพื่อเปิดหน้าตั้งค่าพิเศษ': 'Enter the code to open special settings', 'รหัสไม่ถูกต้อง': 'Wrong code', 'เลิกปักหมุด กลับไปใช้ตำแหน่งจริง': 'Unpin and use my real location', 'ปักหมุดอยู่ · ตำแหน่งจริงหยุดอัปเดต': 'Pinned · live location paused', '🔍 ค้นหา': '🔍 Search', 'ดูบนแผนที่': 'View on map', 'ห่างกัน {0} กม.': '{0} km apart', 'ห่างกัน {0} ม.': '{0} m apart', 'เส้นตรง': 'straight line',
+  // ติดเงิน / IOU (iou.js)
+  'ติดเงิน': 'IOU', 'เขาติดฉัน': 'Owes me', 'ฉันติดเขา': 'I owe', 'สำรองจ่าย': 'Paid first', 'ยืมเงิน': 'Loan', 'แบบไหน': 'Kind',
+  'ใคร': 'Who', 'ใคร เช่น ชื่อเพื่อน': 'Who, e.g. a friend’s name', 'ค่าอะไร': 'What for', 'ค่าอะไร เช่น ค่าข้าว ค่าตั๋ว': 'What for, e.g. dinner, tickets',
+  'กำหนดคืน': 'Pay back by', 'กำหนดคืน {0}': 'pay back by {0}', 'ไม่กำหนด': 'No date', 'ใครสักคน': 'Someone',
+  '{0} ยืมเงินฉัน': '{0} borrowed from me', 'ฉันสำรองจ่ายให้ {0}': 'I paid for {0}', '{0} สำรองจ่ายให้ฉัน': '{0} paid for me', 'ฉันยืมเงิน {0}': 'I borrowed from {0}',
+  'จดไว้ดูเท่านั้น ไม่หักจากกระเป๋าเงินและไม่นับในยอดรวม งบประมาณ หรือรายงาน': 'Just a note: it is not taken from any wallet and not counted in totals, budgets or reports',
+  'บันทึกติดเงิน': 'Save IOU', 'จดแล้ว {0}': 'Saved {0}', 'กรุณาใส่ชื่อคน': 'Enter who it is', 'ลบรายการติดเงินนี้?': 'Delete this IOU?',
+  'ประวัติการคืน': 'Repayments', 'ค้างอีก {0}': '{0} left', 'คืนครบแล้ว': 'Paid back', 'คืนครบแล้ว ({0})': 'Paid back ({0})', 'คืนครบแล้ว 🎉': 'All paid back 🎉',
+  'ได้รับเงินคืน': 'Got paid back', 'คืนเงินแล้ว': 'I paid back', 'ยังไม่ได้คืน': 'Nothing paid back yet', 'เต็ม {0}': 'of {0}',
+  'ลงในกระเป๋าเงินแล้ว': 'in a wallet', 'รายการในกระเป๋าเงินถูกลบแล้ว': 'wallet entry deleted', 'ลบการคืนนี้': 'Remove this repayment',
+  'ลบการคืนแล้ว รายการในกระเป๋าเงิน (ถ้ามี) ยังอยู่': 'Repayment removed. Any wallet entry stays',
+  'ได้คืน (ค้าง {0})': 'Received ({0} left)', 'คืนไป (ค้าง {0})': 'Paid back ({0} left)',
+  'ลงเป็นรายรับในกระเป๋าเงิน': 'Also add as income', 'ลงเป็นรายจ่ายจากกระเป๋าเงิน': 'Also add as an expense',
+  'เปิดถ้าเงินเข้ากระเป๋าเงินจริง จะเปิดหน้าเพิ่มรายรับ (หมวดรับคืนเงินยืม) ให้ตรวจก่อนบันทึก': 'Turn on if the money went into a wallet. The income form opens (Loan repaid to me) for you to check before saving',
+  'เปิดถ้าเงินออกจากกระเป๋าเงินจริง จะเปิดหน้าเพิ่มรายจ่ายให้เลือกหมวดหมู่ก่อนบันทึก': 'Turn on if the money left a wallet. The expense form opens so you can pick a category before saving',
+  'บันทึกการคืน': 'Save repayment', 'บันทึกแล้ว ค้างอีก {0}': 'Saved. {0} left', 'คืนได้ไม่เกิน {0}': 'At most {0}',
+  '🤝 จากรายการติดเงิน: {0}': '🤝 From IOU: {0}', 'ติดฉัน {0}': 'owes me {0}', 'ฉันติด {0}': 'I owe {0}',
+  'ไม่มีเงินค้างอยู่': 'Nothing owed', 'ยังไม่มีรายการติดเงิน': 'No IOUs yet', '＋ เพิ่ม': '＋ Add',
+  'จดไว้ว่าใครยืมเงิน หรือใครสำรองจ่ายอะไรให้ใคร ไม่หักจากกระเป๋าเงินและไม่นับในรายงาน': 'Note who borrowed money or who paid for what first. Not taken from any wallet and not counted in reports',
+  'ใครติดเงินใคร ยืมหรือสำรองจ่าย': 'Who owes whom: loans and paid-first',
 };
 
 // Thai letters, not the ฿ sign (U+0E3F) that amounts carry in both languages.
