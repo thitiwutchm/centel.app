@@ -2079,3 +2079,45 @@ a.btn { text-decoration: none; text-align: center; box-sizing: border-box; }
 .al-plus { font-size: 22px; color: var(--muted, #8a8f99); }
 .al-row .al-logo, .al-biz.sm { width: 36px; height: 36px; border-radius: 10px; font-size: 16px; flex: none; object-fit: contain; }
 .al-off { color: var(--bad); font-size: 15px; }
+
+/* ---------- ติดเงิน (IOU, iou.js) ---------- */
+.seg.iou-dir button { font-weight: 500; }
+.tr-amt.iou-owed .tr-body input { color: var(--ok); }
+.tr-body > .date-pill.iou-due, .tr-body > .date-pill.iou-rp { flex: 0 1 auto; padding: 0 14px; min-width: 110px; }
+.iou-due-x { flex: 0 0 30px; height: 30px; border: 0; border-radius: 50%; background: var(--bg); color: var(--muted); font-size: 13px; }
+.iou-people { margin: 8px 0 2px; }
+.iou-people .chip { padding: 6px 12px; font-size: 13.5px; }
+.iou-say {
+  display: flex; align-items: center; gap: 10px; margin: 2px 4px 14px; padding: 12px 14px;
+  border-radius: 16px; background: var(--card); font-size: 15px; line-height: 1.35;
+}
+.iou-say b { font-variant-numeric: tabular-nums; }
+.iou-ico { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 18px; }
+.iou-ico.owed { background: color-mix(in srgb, var(--ok) 16%, transparent); }
+.iou-ico.owe { background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.iou-ico.done { background: var(--bg); color: var(--muted); font-size: 15px; font-weight: 700; }
+.item .ico.iou-ico { width: 40px; height: 40px; font-size: 20px; }
+.iou-amt.owed, .iou-net.owed, .iou-left.owed { color: var(--ok); }
+.iou-amt.owe, .iou-net.owe, .iou-left.owe { color: var(--bad); }
+.iou-left { font-weight: 600; font-size: 14px; }
+.iou-left.done { color: var(--muted); }
+.iou-item.done .name, .iou-item.done .iou-amt { color: var(--muted); font-weight: 500; }
+.iou-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+.iou-sheet-tiles .iou-tiles, #iouBody > .iou-tiles { padding: 0; margin-bottom: 12px; }
+.iou-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; border: 0;
+  border-radius: 16px; text-align: left; font-family: inherit; color: var(--text);
+}
+.iou-tile span { font-size: 13px; color: var(--muted); }
+.iou-tile b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.iou-tile.owed { background: color-mix(in srgb, var(--ok) 12%, var(--card)); }
+.iou-tile.owed b { color: var(--ok); }
+.iou-tile.owe { background: color-mix(in srgb, var(--bad) 10%, var(--card)); }
+.iou-tile.owe b { color: var(--bad); }
+.iou-tile:active { opacity: .75; }
+.iou-person b { font-size: 14px; }
+.iou-done-toggle { width: calc(100% - 8px); border: 0; background: none; font-family: inherit; padding: 0; text-align: left; }
+.iou-done-toggle .svg-i { transition: transform .2s; }
+.iou-done-toggle .svg-i.down { transform: rotate(90deg); }
+.iou-pay-x { width: 34px; height: 34px; color: var(--muted); }
+#iRepay { margin-top: 12px; }

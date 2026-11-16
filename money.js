@@ -76,6 +76,8 @@ const defaultMoney = () => ({
   budgets: [],
   // labels: { id, name } — tags a transaction can carry several of (t.labels = [label ids])
   labels: [],
+  // ious: ติดเงิน records, never counted anywhere (see iou.js)
+  ious: [],
   prefs: { hideBalance: false },
 });
 
@@ -91,6 +93,7 @@ function loadMoney() {
       txns: Array.isArray(s.txns) ? s.txns.map((t) => (t.category ? { ...t, category: newCat(t.category) } : t)) : [],
       budgets: Array.isArray(s.budgets) ? s.budgets.map((bg) => ({ ...bg, category: newCat(bg.category) })) : [],
       labels: Array.isArray(s.labels) ? s.labels : [],
+      ious: Array.isArray(s.ious) ? s.ious : [],
       prefs: { ...d.prefs, ...(s.prefs || {}) },
     };
   } catch (e) {
@@ -877,6 +880,7 @@ function renderHome() {
     notes: () => notesCard(),
     couple: () => coupleCard(),
     partnerloc: () => (window.partnerLocCard ? partnerLocCard() : ''),
+    ious: () => iouCard(),
     bills: () => (state.bills.length ? `
     <div class="section-row"><span>บิลที่ต้องจ่ายเดือนนี้</span><button class="link-btn" data-goto="bills">ดูบิล</button></div>
     <div class="card list-card">
@@ -948,6 +952,7 @@ const HOME_SECS = [
   { id: 'notes', label: 'สิ่งที่ต้องทำ', sub: 'โน้ตเตือนความจำ', icon: '📝', color: '#ff9f0a', col: 1 },
   { id: 'couple', label: 'รายจ่ายร่วมกับคู่', sub: 'ยอดร่วมเดือนนี้ และเงินคงเหลือของคู่', icon: '🤝', color: '#e8a33b', col: 1 },
   { id: 'partnerloc', label: 'ตอนนี้อยู่ที่ไหน', sub: 'ตำแหน่งและอากาศของคู่', icon: '📍', color: '#ff3b30', col: 1 },
+  { id: 'ious', label: 'ติดเงิน', sub: 'ใครติดเงินใคร ยืมหรือสำรองจ่าย', icon: '🤝', color: '#14b8a6', col: 1 },
   { id: 'bills', label: 'บิลที่ต้องจ่ายเดือนนี้', sub: 'บิลที่ยังไม่จ่าย', icon: '🧾', color: '#00a37a', col: 1 },
   { id: 'report', label: 'รายงานเดือนนี้', sub: 'กราฟใช้จ่ายและข้อมูลเชิงลึก', icon: '📈', color: '#7a5cff', col: 2 },
   { id: 'recent', label: 'รายการล่าสุด', sub: '4 รายการล่าสุด', icon: '🕘', color: '#00a3e0', col: 2 },
@@ -1713,6 +1718,7 @@ function txnForm(t, preset = {}, opts = {}) {
       <button type="button" data-ttype="expense">รายจ่าย</button>
       <button type="button" data-ttype="income">รายรับ</button>
       <button type="button" data-ttype="transfer">โอนเงิน</button>
+      ${isNew && !opts.noIou ? '<button type="button" data-ttype="iou">ติดเงิน</button>' : ''}
     </div>
     ${canShare ? `<div class="scope-row" id="txScope">
       <button type="button" data-scope="personal">ส่วนตัว</button>
@@ -1921,6 +1927,12 @@ function txnForm(t, preset = {}, opts = {}) {
   $('#txType').addEventListener('click', (e) => {
     const b = e.target.closest('[data-ttype]');
     if (!b) return;
+    // ติดเงิน is its own form (iou.js): it never touches a wallet. What was typed comes along.
+    if (b.dataset.ttype === 'iou') {
+      const amt = num($('#tAmount').value);
+      iouForm(null, { ...(amt > 0 ? { amount: amt } : {}), note: $('#tNote').value.trim() || $('#tMerchant').value.trim(), date: $('#tDate').value || dateStr(new Date()) });
+      return;
+    }
     d.type = b.dataset.ttype;
     renderType();
   });
@@ -2759,7 +2771,7 @@ function sampleMoney() {
   ];
   wallets.forEach((w) => { w.name = tr(w.name); });
   txns.forEach((x) => { x.note = tr(x.note); });
-  money = { wallets, txns, budgets, labels: money.labels || [], prefs: { ...money.prefs, billWallet: bank } };
+  money = { wallets, txns, budgets, labels: money.labels || [], ious: money.ious || [], prefs: { ...money.prefs, billWallet: bank } };
   // Bills already paid in the sample show up as expenses from the bank account.
   const ym = ymOf(t);
   occurrences(ym).filter((o) => o.paid).forEach((o) => recordBillTxn(o.bill, ym, o.amount, bank, dateStr(o.due)));
@@ -2817,6 +2829,8 @@ function moneyAction(action, el) {
   switch (action) {
     case 'add-tx': txnForm(); break;
     case 'add-transfer': txnForm(null, { type: 'transfer' }); break;
+    case 'ious': iouListSheet(el.dataset.dir || ''); break;
+    case 'add-iou': iouForm(); break;
     case 'wallet-pick': walletSheet('pick'); break;
     case 'wallets': walletSheet('edit'); break;
     case 'add-wallet': walletForm(); break;
