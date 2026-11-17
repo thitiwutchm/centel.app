@@ -2430,7 +2430,9 @@
     await loadBoot();
   }
 
-  function editChannel(c, kind) {
+  // idx is the entry's place in settings.banks: entries saved before ids existed have no id, so
+  // editing, deleting and switching go by position, not id.
+  function editChannel(c, kind, idx) {
     const isNew = !c;
     c = c || { kind, active: true, acctType: 'savings', bank: kind === 'bank' ? BANK_NAMES[0] : OTHER_KINDS[0] };
     const bank = c.kind !== 'other';
@@ -2455,7 +2457,7 @@
         if (!bank && !d.name) { toast('กรอกชื่อผู้ให้บริการ', true); return false; }
         const next = { ...c, ...d, number: bank ? fmtAcct(d.number) : d.number };
         const list = (biz().settings?.banks || []).map((x) => ({ ...x }));
-        if (isNew) list.push(next); else list.splice(list.findIndex((x) => x.id === c.id), 1, next);
+        if (isNew) list.push(next); else list.splice(idx, 1, next);
         await saveChannels(list);
         toast('บันทึกแล้ว');
         return true;
@@ -2465,13 +2467,13 @@
 
   function viewChannels(main) {
     const list = biz().settings?.banks || [];
-    const row = (c) => {
+    const row = (c, i) => {
       const bank = c.kind !== 'other';
       const detail = bank
         ? `<div>ประเภทบัญชี: ${ACCT_TYPE[c.acctType] || ACCT_TYPE.savings}</div>${c.branch ? `<div>สาขา: ${esc(c.branch)}</div>` : ''}`
         : (c.number ? `<div>${esc(c.number)}</div>` : '');
       const on = c.active !== false;
-      return `<tr data-id="${esc(c.id)}"${on ? '' : ' class="off"'}>
+      return `<tr data-i="${i}"${on ? '' : ' class="off"'}>
         <td class="nowrap">${bank ? 'บัญชีธนาคาร' : 'ช่องทางชำระอื่นๆ'}</td>
         <td><div class="ch-name">${channelBadge(c)}<div><div>${esc(bank ? `${c.bank} ${c.number}` : c.bank)}</div><div class="muted">${esc(c.name || '')}</div></div></div></td>
         <td class="muted ch-detail">${detail}</td>
@@ -2486,7 +2488,7 @@
       ${biz().settings?.promptpay?.id ? '' : '<p class="muted" style="font-size:13px">ตั้งพร้อมเพย์เพื่อพิมพ์ QR รับเงินในใบแจ้งหนี้ได้ที่ <a class="link" href="#/settings">ตั้งค่า › รับชำระเงิน</a></p>'}</div>`;
     const root = $('[data-ch]', main);
     const redraw = () => viewChannels(main);
-    const byId = (id) => (biz().settings?.banks || []).find((x) => x.id === id);
+    const all = () => biz().settings?.banks || [];
     root.addEventListener('click', (e) => {
       const add = e.target.closest('[data-add]');
       if (add) return editChannel(null, add.dataset.add).then((r) => r && redraw());
@@ -2494,18 +2496,20 @@
       if (am) return popMenu(am, [['บัญชีธนาคาร', () => editChannel(null, 'bank').then((r) => r && redraw())], ['ช่องทางชำระอื่นๆ', () => editChannel(null, 'other').then((r) => r && redraw())]]);
       const more = e.target.closest('[data-more]');
       if (more) {
-        const c = byId(more.closest('tr').dataset.id);
-        popMenu(more, [['แก้ไข', () => editChannel(c).then((r) => r && redraw())], null, ['ลบ', async () => {
+        const i = Number(more.closest('tr').dataset.i);
+        const c = all()[i];
+        if (!c) return;
+        popMenu(more, [['แก้ไข', () => editChannel(c, c.kind, i).then((r) => r && redraw())], null, ['ลบ', async () => {
           if (!(await confirmBox('ลบช่องทางการเงิน', `ลบ ${esc(c.bank)} ${esc(c.number || c.name || '')} ออกจากรายการ? เอกสารที่ออกไปแล้วไม่เปลี่ยน`, 'ลบ'))) return;
-          try { await saveChannels((biz().settings?.banks || []).filter((x) => x.id !== c.id)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
+          try { await saveChannels(all().filter((_, j) => j !== i)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
         }, { danger: true }]]);
       }
     });
     root.addEventListener('change', async (e) => {
       if (!e.target.matches('[data-active]')) return;
-      const id = e.target.closest('tr').dataset.id;
+      const i = Number(e.target.closest('tr').dataset.i);
       try {
-        await saveChannels((biz().settings?.banks || []).map((x) => (x.id === id ? { ...x, active: e.target.value === '1' } : x)));
+        await saveChannels(all().map((x, j) => (j === i ? { ...x, active: e.target.value === '1' } : x)));
         toast(e.target.value === '1' ? 'เปิดใช้งานแล้ว' : 'ปิดการใช้งานแล้ว'); redraw();
       } catch (err) { fail(err); redraw(); }
     });
