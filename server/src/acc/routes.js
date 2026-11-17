@@ -643,7 +643,17 @@ biz.post('/scan', rateLimit(60, 60 * 60000), wrap(async (req, res) => {
   } catch (e) {
     console.error('acc scan failed', e.status || '', e.message);
   }
-  res.json({ attachment: key, result });
+  // The same vendor bill recorded before (same bill number, same vendor tax ID when known).
+  let duplicate = null;
+  if (result?.doc_no) {
+    const taxId = result.vendor?.tax_id || null;
+    duplicate = await tx(req, async (db) => (await db.query(
+      `select id, number, date from acc_docs
+        where business_id = $1 and type = 'EX' and status <> 'void' and lower(trim(ref_no)) = lower(trim($2))
+          and ($3::text is null or coalesce(contact->>'tax_id', '') in ('', $3))
+        order by created_at desc limit 1`, [B(req), String(result.doc_no).slice(0, 100), taxId])).rows[0] || null);
+  }
+  res.json({ attachment: key, result, duplicate });
 }));
 
 biz.get('/attachment', wrap(async (req, res) => {
