@@ -145,3 +145,52 @@ test('history gives closing points, skips gaps, and is cached for an hour', asyn
   assert.equal(n, 1);
   assert.equal(await history('X', '1y', { fetchImpl: async () => ({ ok: false }) }), null);
 });
+
+test('EODHD: search keeps SET and US stocks / ETFs, tickers map both ways', async () => {
+  const urls = [];
+  const f = async (url) => {
+    urls.push(url);
+    if (url.includes('/search/')) return json([
+      { Code: 'TLN', Exchange: 'US', Name: 'Talen Energy Corp', Type: 'Common Stock' },
+      { Code: 'PTT', Exchange: 'BK', Name: 'PTT Public Company Limited', Type: 'Common Stock' },
+      { Code: 'TLN', Exchange: 'F', Name: 'Talen (Frankfurt)', Type: 'Common Stock' },
+      { Code: 'VOO', Exchange: 'US', Name: 'Vanguard S&P 500', Type: 'ETF' },
+      { Code: 'BRK-B', Exchange: 'US', Name: 'Berkshire B', Type: 'Common Stock' },
+      { Code: 'XFUND', Exchange: 'US', Name: 'Some fund', Type: 'FUND' },
+    ]);
+    return { ok: false };
+  };
+  const r = await search('tln', f, 'k');
+  assert.match(urls[0], /^https:\/\/eodhd\.com\/api\/search\/tln\?api_token=k&fmt=json/);
+  assert.deepEqual(r.map((x) => [x.symbol, x.tv, x.market, x.currency, x.type]), [
+    ['TLN', 'TLN', 'US', 'USD', 'stock'], ['PTT.BK', 'SET:PTT', 'SET', 'THB', 'stock'],
+    ['VOO', 'VOO', 'US', 'USD', 'ETF'], ['BRK-B', 'BRK.B', 'US', 'USD', 'stock']]);
+  assert.equal(await search('tln', async () => ({ ok: false, status: 429 }), 'k'), null);
+  assert.equal(await search('tln', async () => ({ ok: false, status: 429 }), ''), null);
+});
+
+test('EODHD: quotes in one call, closed market falls back to previous close', async () => {
+  const db = fakeDb();
+  let url;
+  const f = async (u) => {
+    url = u;
+    return json([
+      { code: 'PTT.BK', timestamp: 1794389705, close: 38.25, previousClose: 38 },
+      { code: 'TLN.US', timestamp: 1794389705, close: 'NA', previousClose: 351.2 },
+    ]);
+  };
+  const out = await quotes([{ symbol: 'PTT.BK', tv: 'SET:PTT' }, { symbol: 'TLN', tv: 'TLN' }], { fetchImpl: f, db, now: NOW, key: 'k' });
+  assert.match(url, /real-time\/PTT\.BK\?api_token=k&fmt=json&s=TLN\.US/);
+  assert.equal(out['PTT.BK'].price, 38.25);
+  assert.equal(out['PTT.BK'].src, 'eodhd');
+  assert.equal(out.TLN.price, 351.2);
+  assert.equal(out.TLN.currency, 'USD');
+});
+
+test('EODHD: history from the end-of-day API, weekly for 5 years', async () => {
+  let url;
+  const h = await history('TLN', '5y', { key: 'k', now: Date.parse('2026-11-12T00:00:00Z'), fetchImpl: async (u) => { url = u; return json([{ date: '2026-11-03', close: 340 }, { date: '2026-11-10', close: 351.2 }]); } });
+  assert.match(url, /eod\/TLN\.US\?api_token=k&fmt=json&from=2021-11-1\d&period=w/);
+  assert.deepEqual(h.points.map((p) => p[1]), [340, 351.2]);
+  assert.equal(h.currency, 'USD');
+});

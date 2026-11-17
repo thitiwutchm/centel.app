@@ -42,7 +42,7 @@
     bad_email: 'อีเมลไม่ถูกต้อง', bad_symbol: 'เลือกหุ้นจากรายการค้นหา', bad_kind: 'เลือกประเภทรายการ', bad_date: 'วันที่ไม่ถูกต้อง',
     bad_qty: 'จำนวนหุ้นต้องมากกว่า 0', bad_price: 'กรอกราคาให้ถูกต้อง', bad_fee: 'ค่าธรรมเนียมไม่ถูกต้อง', too_many_trades: 'รายการเยอะเกินไป',
     not_found: 'ไม่พบข้อมูล', too_many_requests: 'ลองใหม่อีกครั้งในอีกสักครู่', google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่',
-    fx_unavailable: 'ดึงอัตราแลกเปลี่ยนไม่ได้', history_unavailable: 'ดึงกราฟไม่ได้',
+    fx_unavailable: 'ดึงอัตราแลกเปลี่ยนไม่ได้', history_unavailable: 'ดึงกราฟไม่ได้', search_unavailable: 'ค้นหาหุ้นไม่ได้ตอนนี้ แหล่งข้อมูลราคาปฏิเสธการเชื่อมต่อ ลองใหม่ภายหลัง',
   };
   async function api(method, path, body) {
     const res = await fetch('/api' + path, {
@@ -440,7 +440,7 @@
                     }
                   };
                 });
-              } catch (e) { fail(e); }
+              } catch (e) { if (my === seq) { res.hidden = false; res.innerHTML = `<div class="empty" style="padding:16px">${esc(e.message)}</div>`; } }
             }, 280);
           };
           setTimeout(() => q.focus(), 40);

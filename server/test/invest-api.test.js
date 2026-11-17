@@ -40,11 +40,15 @@ test('trades are saved, edited, deleted and private to their owner', async () =>
   const us = await A.post('/invest/trades', { symbol: 'AAPL', tv: 'NASDAQ:AAPL', kind: 'buy', date: '2026-11-10', qty: 0.5, price: 354.2 });
   assert.equal(us.trade.currency, 'USD');
   assert.equal(us.trade.qty, 0.5);
+  const bare = await A.post('/invest/trades', { symbol: 'TLN', tv: 'TLN', kind: 'buy', date: '2026-11-10', qty: 1, price: 351.2 });
+  assert.equal(bare.status, 200);
+  assert.equal(bare.trade.currency, 'USD');
+  assert.equal((await A.del(`/invest/trades/${bare.trade.id}`)).ok, true);
   const div = await A.post('/invest/trades', { symbol: 'PTT.BK', tv: 'SET:PTT', kind: 'div', date: '2026-11-11', qty: 5, price: 140, fee: 14 });
   assert.equal(div.trade.qty, 0);
 
   assert.equal((await A.post('/invest/trades', { symbol: 'PTT.BK', tv: 'SET:PTT', kind: 'buy', date: '2026-11-10', qty: 0, price: 1 })).error, 'bad_qty');
-  assert.equal((await A.post('/invest/trades', { symbol: 'PTT.BK', tv: 'bad', kind: 'buy', date: '2026-11-10', qty: 1, price: 1 })).error, 'bad_symbol');
+  assert.equal((await A.post('/invest/trades', { symbol: 'PTT.BK', tv: 'NOT A SYMBOL', kind: 'buy', date: '2026-11-10', qty: 1, price: 1 })).error, 'bad_symbol');
   assert.equal((await A.post('/invest/trades', { symbol: 'PTT.BK', tv: 'SET:PTT', kind: 'hold', date: '2026-11-10', qty: 1, price: 1 })).error, 'bad_kind');
   assert.equal((await A.post('/invest/trades', { symbol: 'PTT.BK', tv: 'SET:PTT', kind: 'buy', date: 'x', qty: 1, price: 1 })).error, 'bad_date');
 
