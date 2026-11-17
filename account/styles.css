@@ -626,6 +626,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .perm-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .perm-t small { color: var(--muted); font-size: 12px; }
 .perm-row select { width: auto; min-width: 140px; }
+.perm-lock { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.perm-lock svg { width: 14px; height: 14px; }
 .perm-tbl td { vertical-align: middle; }
 .perm-mine { margin-top: 8px; }
 .perm-mine summary { display: inline-block; font-size: 13px; margin-bottom: 8px; }

@@ -2813,7 +2813,10 @@
   const permTable = (p) => `<table class="tbl perm-tbl"><tbody>${AREAS.map(([k, name, desc]) => `<tr><td><b>${esc(name)}</b><div class="muted" style="font-size:12px">${esc(desc)}</div></td><td class="nowrap">${p[k] === 2 ? '<span class="chip good">ดูและแก้ไข</span>' : p[k] === 1 ? '<span class="chip info">ดูอย่างเดียว</span>' : '<span class="chip">ไม่มีสิทธิ์</span>'}</td></tr>`).join('')}</tbody></table>`;
   const permPickers = (p, locked) => `<div class="perm-pick">${AREAS.map(([k, name, desc, color, path]) => `<label class="perm-row"><span class="perm-b" style="--c:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${path}</svg></span>
     <span class="perm-t"><b>${esc(name)}</b><small>${esc(desc)}</small></span>
-    <select data-perm="${k}" ${locked ? 'disabled' : ''}>${LEVEL.map((l, i) => `<option value="${i}" ${p[k] === i ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`).join('')}</div>`;
+    ${locked ? `<span class="perm-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>ดูและแก้ไข</span>`
+    : `<select data-perm="${k}">${LEVEL.map((l, i) => `<option value="${i}" ${p[k] === i ? 'selected' : ''}>${l}</option>`).join('')}</select>`}</label>`).join('')}</div>`;
+  // The line beside "สิทธิ์การเข้าถึง": owners always reach everything, other positions can be adjusted.
+  const permHint = (owner) => owner ? 'เจ้าของกิจการเข้าถึงได้ทุกส่วนเสมอ ปรับไม่ได้ ถ้าต้องการจำกัดสิทธิ์ ให้เลือกตำแหน่งอื่น' : 'ปรับได้ตามต้องการ';
   const readPerms = (el) => Object.fromEntries($$('[data-perm]', el).map((x) => [x.dataset.perm, Number(x.value)]));
 
   function rolesDialog(roles) {
@@ -2914,9 +2917,9 @@
       title: 'แก้ไขตำแหน่งและสิทธิ์',
       body: `<p class="muted" style="margin-top:0">${esc(m.email)}${m.name ? ` · ${esc(m.name)}` : ''}</p>
         <label class="field"><span>ตำแหน่ง</span><select data-role>${roles.map((r) => `<option value="${r.key}" ${r.key === m.role ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
-        <div class="field" style="margin-top:14px"><span>สิทธิ์การเข้าถึง</span><div data-pp>${permPickers(m.perms, m.role === 'owner')}</div></div>`,
+        <div class="field" style="margin-top:14px"><span>สิทธิ์การเข้าถึง <small class="muted" data-ph>${permHint(m.role === 'owner')}</small></span><div data-pp>${permPickers(m.perms, m.role === 'owner')}</div></div>`,
       onOpen: (el) => {
-        $('[data-role]', el).onchange = (e) => { const r = roles.find((x) => x.key === e.target.value); $('[data-pp]', el).innerHTML = permPickers(r.perms, r.key === 'owner'); };
+        $('[data-role]', el).onchange = (e) => { const r = roles.find((x) => x.key === e.target.value); $('[data-pp]', el).innerHTML = permPickers(r.perms, r.key === 'owner'); $('[data-ph]', el).textContent = permHint(r.key === 'owner'); };
       },
       onOk: async (el) => {
         await put(`/members/${m.user_id}`, { role: $('[data-role]', el).value, perms: readPerms(el) });
@@ -2949,13 +2952,13 @@
           <label class="field span2"><span>ตำแหน่ง <a href="#" class="link" data-roles style="float:right;font-weight:400">รายละเอียดแต่ละตำแหน่ง</a></span>
             <select data-role><option value="">กรุณาเลือกตำแหน่ง</option>${d.roles.map((r) => `<option value="${r.key}">${esc(r.name)}</option>`).join('')}</select></label>
         </div>
-        <div class="field" style="margin-top:16px" data-pwrap hidden><span>สิทธิ์การเข้าถึง <small class="muted">ปรับได้ตามต้องการ</small></span><div data-pp></div></div>
+        <div class="field" style="margin-top:16px" data-pwrap hidden><span>สิทธิ์การเข้าถึง <small class="muted" data-ph></small></span><div data-pp></div></div>
       </div>`;
     const roleSel = $('[data-role]', main);
     roleSel.onchange = () => {
       const r = d.roles.find((x) => x.key === roleSel.value);
       $('[data-pwrap]', main).hidden = !r;
-      if (r) $('[data-pp]', main).innerHTML = permPickers(r.perms, r.key === 'owner');
+      if (r) { $('[data-pp]', main).innerHTML = permPickers(r.perms, r.key === 'owner'); $('[data-ph]', main).textContent = permHint(r.key === 'owner'); }
     };
     $('[data-roles]', main).onclick = (e) => { e.preventDefault(); rolesDialog(d.roles); };
     $('[data-send]', main).onclick = async (e) => {
