@@ -353,7 +353,7 @@
     const r = parts[0];
     const key = r === 'new' && q.get('scan') ? 'scan' : r === 'docs' || r === 'new' ? `docs/${parts[1] || 'IV'}` : r === 'doc' || r === 'edit' ? null
       : r === 'report' ? (NAV_VAT.some(([k]) => k === `report/${parts[1]}`) ? `report/${parts[1]}` : 'reports')
-        : r === 'vat' ? `vat/${parts[1] === 'returns' ? 'returns' : 'purchases'}` : r;
+        : r === 'vat' ? `vat/${parts[1] === 'returns' ? 'returns' : 'purchases'}` : r === 'ai' ? null : r;
     for (const a of $$('.nav a')) a.classList.toggle('on', a.dataset.r === key);
     // A fresh element per page so listeners from the last page do not pile up.
     const old = $('#main');
@@ -375,6 +375,7 @@
       else if (r === 'journal') await viewJournal(main, q);
       else if (r === 'reports') viewReports(main);
       else if (r === 'integrations') await viewIntegrations(main, parts[1]);
+      else if (r === 'ai') await viewAi(main);
       else if (r === 'report') await viewReport(main, parts[1], q);
       else if (r === 'vat' && parts[1] === 'returns') await viewVatReturns(main, q, parts[2]);
       else if (r === 'vat') await viewVatPurchases(main, q);
@@ -2683,15 +2684,72 @@
 
   async function viewIntegrations(main, which) {
     if (which === 'capcourt') return viewCapcourt(main);
-    const { integration: cc } = await get('/integrations/capcourt');
+    if (which === 'ai') { location.replace('#/ai'); return; }
+    const [{ integration: cc }, ai] = await Promise.all([get('/integrations/capcourt'), api('GET', '/acc/ai').catch(() => null)]);
     main.innerHTML = `<div class="page-h"><div><h1>เชื่อมต่อระบบ</h1><div class="sub">ให้ระบบอื่นออกเอกสารในกิจการนี้ให้อัตโนมัติ</div></div></div>
       <div class="grid" style="max-width:860px">
         <a class="card card-pad int-card" href="#/reminders">${CENTEL_MARK}<div style="flex:1"><h2 style="margin:0 0 2px">แอป Centel</h2>
           <div class="muted">ส่งการแจ้งเตือนยื่นภาษี จ่ายคู่ค้า รับเงินลูกค้า และเรื่องอื่นๆ ไปเตือนเป็นสิ่งที่ต้องทำในแอป Centel (iPhone, กลุ่ม LINE)</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
+        <a class="card card-pad int-card" href="#/ai">${AI_LOGO}<div style="flex:1"><h2 style="margin:0 0 2px">Claude และ ChatGPT</h2>
+          <div class="muted">ให้ AI อ่านเอกสาร ผู้ติดต่อ และรายงานของกิจการ และออกใบเสนอราคา ใบแจ้งหนี้ ใบเสร็จ หรือบันทึกค่าใช้จ่ายให้ โดยต้องให้คุณยืนยันก่อนทุกครั้ง</div>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${ai?.apps.length ? `<span class="chip good">เชื่อมต่อแล้ว</span>${ai.apps.map((a) => `<span class="chip">${esc(a.name)}</span>`).join('')}` : '<span class="chip">ยังไม่เชื่อมต่อ</span>'}<span class="chip mono">${esc(ai?.url.replace(/^https?:\/\//, '') || 'account.centel.app/mcp')}</span></div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
         <a class="card card-pad int-card" href="#/integrations/capcourt">${CC_LOGO}<div style="flex:1"><h2 style="margin:0 0 2px">CapCourt Admin</h2>
           <div class="muted">ออกใบแจ้งหนี้รายเดือนให้สนามที่ใช้บริการ CapCourt อัตโนมัติทุกวันที่ 1 ออกใบเสร็จ/ใบกำกับภาษีเมื่ออนุมัติการชำระ แล้วแจ้งผลกลับไปที่ CapCourt</div>
           <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${cc ? `<span class="chip good">เชื่อมต่อแล้ว</span><span class="chip">${esc(cc.base_url.replace(/^https?:\/\//, ''))}</span><span class="chip">${cc.settings.venues.length} สนาม</span>` : '<span class="chip">ยังไม่เชื่อมต่อ</span>'}</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
       </div>`;
+  }
+
+  /* ----- Claude / ChatGPT: account.centel.app/mcp (server/src/acc/mcp.js) -----
+     Personal, not per business: the AI works as this person, in every business they are in,
+     with the access their position gives them there. Open to every position. */
+  const AI_LOGO = '<span class="int-logo ai-logo" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9zM19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z"/></svg></span>';
+  const aiWhen = (t) => (t ? `${T.thDate(String(new Date(new Date(t).getTime() + 7 * 3600e3).toISOString()).slice(0, 10))} ${new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })}` : 'ยังไม่ได้ใช้');
+
+  async function viewAi(main) {
+    const [info, made] = await Promise.all([api('GET', '/acc/ai'), get('/docs?via=ai').catch(() => ({ docs: [] }))]);
+    const docs = made.docs.slice(0, 20);
+    main.innerHTML = `<div class="page-h"><div>${can('settings') ? '<div class="muted" style="font-size:13px"><a class="link" href="#/integrations">เชื่อมต่อระบบ</a> ›</div>' : ''}<h1>Claude และ ChatGPT</h1>
+        <div class="sub">ถามเรื่องบัญชีหรือสั่งออกเอกสารผ่านแชท AI ได้เลย เช่น "เดือนนี้มีใบแจ้งหนี้ค้างรับเท่าไร" "ออกใบเสนอราคาออกแบบเว็บ 20,000 ให้บริษัท ก" "บันทึกค่าใช้จ่ายจากบิลนี้"</div></div></div>
+      <div class="grid" style="max-width:860px">
+        <div class="card card-pad"><h2>ลิงก์สำหรับเชื่อมต่อ</h2>
+          <div class="muted" style="margin-bottom:10px">ใช้ลิงก์เดียวกันได้ทั้ง Claude และ ChatGPT</div>
+          <div class="ai-url"><code class="mono" translate="no">${esc(info.url)}</code><button class="btn primary" data-copy>คัดลอกลิงก์</button></div>
+          <div class="note-box" style="margin-top:12px">AI ทำงานในชื่อของคุณ เห็นและทำได้เท่าที่ตำแหน่งของคุณในแต่ละกิจการทำได้ ก่อนออกเอกสาร รับชำระ หรือยกเลิกเอกสาร AI จะแสดงตัวอย่างให้คุณยืนยันก่อนทุกครั้ง เอกสารที่ออกแล้วลบไม่ได้ ยกเลิกได้เท่านั้น</div>
+        </div>
+        <div class="ai-steps">
+          <div class="card card-pad"><h2>Claude</h2><ol>
+            <li>เปิด claude.ai หรือแอป Claude › <b>Settings › Connectors</b></li>
+            <li>กด <b>Add custom connector</b> ตั้งชื่อ <b>Centel Account</b> แล้ววางลิงก์ด้านบน</li>
+            <li>กด <b>Connect</b> เข้าสู่ระบบด้วยบัญชีเดียวกับที่นี่ แล้วกด <b>อนุญาต</b></li>
+          </ol></div>
+          <div class="card card-pad"><h2>ChatGPT</h2><ol>
+            <li>เปิด chatgpt.com › <b>Settings › Apps &amp; Connectors › Advanced settings</b> เปิด <b>Developer mode</b></li>
+            <li>กลับมาที่ Apps &amp; Connectors กด <b>Create</b> ตั้งชื่อ <b>Centel Account</b> วางลิงก์ เลือก Authentication <b>OAuth</b></li>
+            <li>กด <b>Create</b> เข้าสู่ระบบ แล้วกด <b>อนุญาต</b> · ในแชทเลือก Centel Account จากปุ่ม + ก่อนถาม</li>
+          </ol></div>
+        </div>
+        <div class="card"><div class="card-pad" style="padding-bottom:6px"><h2 style="margin:0">แอปที่เชื่อมอยู่</h2></div>
+          ${info.apps.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>แอป</th><th>สิทธิ์</th><th>เชื่อมเมื่อ</th><th>ใช้ล่าสุด</th><th></th></tr></thead><tbody>
+            ${info.apps.map((a) => `<tr><td><b>${esc(a.name)}</b></td><td>${a.write ? '<span class="chip accent">อ่าน + ออกเอกสาร</span>' : '<span class="chip">อ่านอย่างเดียว</span>'}</td>
+              <td class="nowrap">${esc(aiWhen(a.createdAt))}</td><td class="nowrap">${esc(aiWhen(a.lastUsedAt))}</td>
+              <td class="num"><button class="btn sm ghost" data-remove="${esc(a.id)}" data-name="${esc(a.name)}">ยกเลิกการเชื่อมต่อ</button></td></tr>`).join('')}
+            </tbody></table></div>` : '<div class="card-pad muted" style="padding-top:0">ยังไม่มี เชื่อมจาก Claude หรือ ChatGPT แล้วกลับมาหน้านี้ จะเห็นชื่อแอปที่นี่</div>'}
+        </div>
+        <div class="card"><div class="card-pad" style="padding-bottom:6px"><h2 style="margin:0">เอกสารที่ AI ออกในกิจการนี้</h2></div>
+          ${docs.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>วันที่</th><th>เลขที่</th><th>ผู้ติดต่อ</th><th>โดย</th><th class="num">ยอดรวม</th><th></th></tr></thead><tbody>
+            ${docs.map((d) => `<tr class="click" data-doc="${esc(d.id)}"><td class="nowrap">${esc(T.thDate(d.date))}</td><td class="mono nowrap">${esc(d.number)}</td><td>${esc(d.contact_name || '')}</td>
+              <td>${esc(d.created_via)}</td><td class="num">${money(d.total)}</td><td>${statusChip(d.type, d.status)}</td></tr>`).join('')}
+            </tbody></table></div>` : '<div class="card-pad muted" style="padding-top:0">ยังไม่มี</div>'}
+        </div>
+      </div>`;
+    main.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-copy]')) return copyText(info.url);
+      const row = e.target.closest('[data-doc]');
+      if (row) { location.hash = `#/doc/${row.dataset.doc}`; return; }
+      const rm = e.target.closest('[data-remove]');
+      if (!rm || !confirm(`ยกเลิกการเชื่อมต่อ ${rm.dataset.name}? AI จะเข้าถึงบัญชีนี้ไม่ได้อีก จนกว่าจะเชื่อมใหม่`)) return;
+      try { await api('DELETE', `/acc/ai/apps/${rm.dataset.remove}`); toast('ยกเลิกการเชื่อมต่อแล้ว'); render(); } catch (err) { fail(err); }
+    });
   }
 
   async function viewCapcourt(main) {

@@ -13,6 +13,7 @@ import { report, REPORTS, purchaseVatState, vatSales, vatPurchase, vatPp36 } fro
 import { readPurchaseDoc } from './ai.js';
 import { mountUsers, guard, permsOf, inviteInfo, issuerOf } from './users.js';
 import { mountCentel, startReminderJob } from './centel.js';
+import { ACC_BASE, MCP_PATH } from '../oauth.js';
 import { CC_KINDS, DEFAULT_BASE, ccFetch, cleanBase, cleanKey, reportFor, sinceMonth, toDocBody, venueContact } from './capcourt.js';
 
 const router = express.Router();
@@ -58,6 +59,28 @@ router.get('/invite-info/:token', rateLimit(120, 60 * 60000), wrap(async (req, r
 
 router.use(requireUser);
 const tx = (req, fn) => asUser(req.user.id, fn);
+
+/* ---------- Claude / ChatGPT (the MCP server in acc/mcp.js) ---------- */
+
+// The connector address and the AI apps this person connected to the accounting app.
+router.get('/ai', wrap(async (req, res) => {
+  const apps = (await pool.query(
+    `select g.id, c.name, g.scope, g.created_at, g.last_used_at from oauth_grants g join oauth_clients c on c.id = g.client_id
+     where g.user_id = $1 and g.revoked_at is null and c.realm = 'acc' order by g.created_at desc`, [req.user.id])).rows;
+  res.json({
+    url: `${ACC_BASE()}${MCP_PATH}`,
+    apps: apps.map((a) => ({ id: a.id, name: a.name, write: String(a.scope || '').split(' ').includes('acc.write'), createdAt: a.created_at, lastUsedAt: a.last_used_at })),
+  });
+}));
+
+router.delete('/ai/apps/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const r = await pool.query(
+    `update oauth_grants g set revoked_at = now() from oauth_clients c
+     where g.id = $1 and g.user_id = $2 and g.revoked_at is null and c.id = g.client_id and c.realm = 'acc'`, [req.params.id, req.user.id]);
+  if (r.rowCount) await pool.query('delete from oauth_tokens where grant_id = $1', [req.params.id]);
+  res.json({ ok: true });
+}));
 
 /* ---------- Businesses ---------- */
 
@@ -500,10 +523,12 @@ biz.get('/docs', wrap(async (req, res) => {
   if (isDate(q.to)) { p.push(q.to); where.push(`date <= $${p.length}`); }
   if (typeof q.status === 'string' && /^[a-z]{2,10}$/.test(q.status)) { p.push(q.status); where.push(`status = $${p.length}`); }
   if (isUuid(q.contact)) { p.push(q.contact); where.push(`contact_id = $${p.length}`); }
+  if (q.via === 'ai') where.push('created_via is not null');
   const rows = await tx(req, async (db) => (await db.query(
     `select id, type, number, status, date, due_date, contact_id, contact->>'name' as contact_name, tax_invoice,
             subtotal, vat, total, wht, ref_id, (pay->>'date') as paid_date, created_at,
-            attachment, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared, ext_no
+            attachment, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared, ext_no,
+            created_via
      from acc_docs where ${where.join(' and ')} order by date desc, number desc limit 2000`, p)).rows);
   // Short-lived links to the scanned bill pictures, for the expense list thumbnails.
   if (storageEnabled) {
@@ -532,14 +557,17 @@ biz.get('/docs/:id', wrap(async (req, res) => {
 }));
 
 biz.post('/docs', wrap(async (req, res) => {
+  // The MCP server (acc/mcp.js) asks for the document as it would be saved, to show the
+  // person before they confirm. Only it can set these (they are not read from the body).
+  if (req.mcpPreview) return res.json({ preview: await tx(req, (db) => buildDoc(db, req, req.body || {}, null)) });
   const doc = await tx(req, async (db) => {
     const d = await buildDoc(db, req, req.body || {}, null);
     const prefix = req.biz.settings?.prefixes?.[d.type] || DEFAULT_PREFIX[d.type];
     const number = await nextNumber(db, B(req), prefix, d.date);
     const row = (await db.query(
-      `insert into acc_docs (business_id, number, created_by, ${COLS.join(', ')})
-       values ($1, $2, app_uid(), ${COLS.map((_, i) => `$${i + 3}`).join(', ')}) returning *`,
-      [B(req), number, ...COLS.map((k) => val(k, d[k]))])).rows[0];
+      `insert into acc_docs (business_id, number, created_by, created_via, ${COLS.join(', ')})
+       values ($1, $2, app_uid(), $3, ${COLS.map((_, i) => `$${i + 4}`).join(', ')}) returning *`,
+      [B(req), number, req.mcpClient || null, ...COLS.map((k) => val(k, d[k]))])).rows[0];
     await afterSave(db, req, row);
     return row;
   });

@@ -367,7 +367,7 @@ aiRouter.use(requireUser);
 
 const activeApps = async (userId) => (await pool.query(
   `select g.id, c.name, g.created_at, g.last_used_at from oauth_grants g join oauth_clients c on c.id = g.client_id
-   where g.user_id = $1 and g.revoked_at is null order by g.created_at desc`, [userId])).rows;
+   where g.user_id = $1 and g.revoked_at is null and c.realm = 'centel' order by g.created_at desc`, [userId])).rows;
 
 aiRouter.get('/', wrap(async (req, res) => {
   const apps = await activeApps(req.user.id);
@@ -381,7 +381,9 @@ aiRouter.get('/', wrap(async (req, res) => {
 
 aiRouter.delete('/apps/:id', wrap(async (req, res) => {
   if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'bad_id' });
-  const r = await pool.query('update oauth_grants set revoked_at = now() where id = $1 and user_id = $2 and revoked_at is null', [req.params.id, req.user.id]);
+  const r = await pool.query(
+    `update oauth_grants g set revoked_at = now() from oauth_clients c
+     where g.id = $1 and g.user_id = $2 and g.revoked_at is null and c.id = g.client_id and c.realm = 'centel'`, [req.params.id, req.user.id]);
   if (r.rowCount) await pool.query('delete from oauth_tokens where grant_id = $1', [req.params.id]);
   // With no app left, the bill copy has no reader: drop it.
   if (!(await activeApps(req.user.id)).length) await pool.query('delete from mcp_bills where user_id = $1', [req.user.id]);

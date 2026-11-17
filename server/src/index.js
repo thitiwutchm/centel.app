@@ -4,7 +4,8 @@ import { loadUser, csrfGuard } from './auth.js';
 import routes from './routes.js';
 import { lineWebhook, startReminders } from './line.js';
 import chatRoutes, { bridgeRouter, startChatJobs } from './chat.js';
-import { oauthRouter, wellKnown } from './oauth.js';
+import { oauthRouter, wellKnown, realmOf } from './oauth.js';
+import { accMcpRouter } from './acc/mcp.js';
 import { mcpRouter, aiRouter } from './mcp.js';
 import { udidReply } from './udid.js';
 import accRoutes, { startAccJobs } from './acc/routes.js';
@@ -31,7 +32,8 @@ app.use('/api/bridge', bridgeRouter);
 app.use('/api/chat', loadUser, csrfGuard, chatRoutes);
 // Claude / ChatGPT: the MCP server, its OAuth sign-in, and the app's own settings for it.
 app.use('/.well-known', wellKnown);
-app.use('/mcp', mcpRouter);
+// account.centel.app/mcp is the accounting app's own MCP server (acc/mcp.js).
+app.use('/mcp', (req, res, next) => (realmOf(req) === 'acc' ? accMcpRouter : mcpRouter)(req, res, next));
 app.use('/api/oauth', oauthRouter);
 app.use('/api/ai', loadUser, csrfGuard, aiRouter);
 // Accounting (account.centel.app): its own router so its public document links skip sign-in.

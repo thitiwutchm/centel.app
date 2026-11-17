@@ -16,10 +16,20 @@ import { googleClientId } from './google.js';
       Account › เชื่อมกับ AI.
 
    PUBLIC_URL is the address people and apps use (https://centel.app); web's Caddy sends
-   /mcp, /.well-known/oauth-* and /api/* here. */
+   /mcp, /.well-known/oauth-* and /api/* here.
+
+   Two servers share this sign-in, told apart by the address the AI app uses (its realm):
+   centel.app/mcp is Centel (mcp.js) and account.centel.app/mcp is the accounting app
+   (acc/mcp.js, ACC_PUBLIC_URL). Each is its own issuer: an app registered with one cannot
+   sign in to or call the other. */
 
 export const BASE = () => (process.env.PUBLIC_URL || 'https://centel.app').replace(/\/+$/, '');
+export const ACC_BASE = () => (process.env.ACC_PUBLIC_URL || 'https://account.centel.app').replace(/\/+$/, '');
 export const MCP_PATH = '/mcp';
+const accHost = () => { try { return new URL(ACC_BASE()).hostname; } catch (e) { return 'account.centel.app'; } };
+// 'acc' when the request came in on the accounting app's address, else 'centel'.
+export const realmOf = (req) => (req.hostname === accHost() ? 'acc' : 'centel');
+const baseOf = (realm) => (realm === 'acc' ? ACC_BASE() : BASE());
 const ACCESS_SEC = 3600;
 const REFRESH_DAYS = 60;
 const CODE_SEC = 600;
@@ -27,6 +37,10 @@ const CODE_SEC = 600;
 // and income / expense records (with confirmation for deletes and money changes).
 export const SCOPES = ['centel.read', 'centel.notes', 'centel.money'];
 const SCOPE = SCOPES.join(' ');
+// The accounting app: read the businesses the person belongs to; create documents, contacts
+// and products and void documents (within their role in each business, with confirmation).
+export const ACC_SCOPES = ['acc.read', 'acc.write'];
+const scopesOf = (realm) => (realm === 'acc' ? ACC_SCOPES : SCOPES);
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const rand = (n = 32) => crypto.randomBytes(n).toString('base64url');
@@ -48,25 +62,26 @@ export { cors };
 export const wellKnown = express.Router();
 wellKnown.use(cors);
 
-function resourceMeta() {
+function resourceMeta(realm) {
+  const b = baseOf(realm);
   return {
-    resource: BASE() + MCP_PATH,
-    authorization_servers: [BASE()],
-    scopes_supported: SCOPES,
+    resource: b + MCP_PATH,
+    authorization_servers: [b],
+    scopes_supported: scopesOf(realm),
     bearer_methods_supported: ['header'],
-    resource_name: 'Centel',
-    resource_documentation: BASE() + '/',
+    resource_name: realm === 'acc' ? 'Centel Account' : 'Centel',
+    resource_documentation: b + '/',
   };
 }
-function serverMeta() {
-  const b = BASE();
+function serverMeta(realm) {
+  const b = baseOf(realm);
   return {
     issuer: b,
     authorization_endpoint: `${b}/api/oauth/authorize`,
     token_endpoint: `${b}/api/oauth/token`,
     registration_endpoint: `${b}/api/oauth/register`,
     revocation_endpoint: `${b}/api/oauth/revoke`,
-    scopes_supported: SCOPES,
+    scopes_supported: scopesOf(realm),
     response_types_supported: ['code'],
     response_modes_supported: ['query'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
@@ -77,9 +92,9 @@ function serverMeta() {
   };
 }
 // Clients look for these at the root and with the resource / issuer path appended.
-wellKnown.get(['/oauth-protected-resource', '/oauth-protected-resource/*rest'], (_req, res) => res.json(resourceMeta()));
+wellKnown.get(['/oauth-protected-resource', '/oauth-protected-resource/*rest'], (req, res) => res.json(resourceMeta(realmOf(req))));
 wellKnown.get(['/oauth-authorization-server', '/oauth-authorization-server/*rest', '/openid-configuration', '/openid-configuration/*rest'],
-  (_req, res) => res.json(serverMeta()));
+  (req, res) => res.json(serverMeta(realmOf(req))));
 
 /* ---------- Errors ---------- */
 
@@ -120,8 +135,9 @@ oauthRouter.post('/register', rateLimit(30, 60 * 60000), wrap(async (req, res) =
   const name = String(b.client_name || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 80) || hostOf(uris[0]);
   const id = `c_${rand(18)}`;
   const secret = method === 'none' ? null : rand(32);
-  await pool.query('insert into oauth_clients (id, secret_hash, name, redirect_uris) values ($1, $2, $3, $4)',
-    [id, secret && sha(secret), name, uris]);
+  const realm = realmOf(req);
+  await pool.query('insert into oauth_clients (id, secret_hash, name, redirect_uris, realm) values ($1, $2, $3, $4, $5)',
+    [id, secret && sha(secret), name, uris, realm]);
   res.status(201).json({
     client_id: id,
     ...(secret ? { client_secret: secret, client_secret_expires_at: 0 } : {}),
@@ -131,7 +147,7 @@ oauthRouter.post('/register', rateLimit(30, 60 * 60000), wrap(async (req, res) =
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: method,
-    scope: SCOPE,
+    scope: scopesOf(realm).join(' '),
   });
 }));
 
@@ -139,15 +155,16 @@ function hostOf(u) { try { return new URL(u).hostname; } catch (e) { return 'AI 
 
 /* ---------- Consent page ---------- */
 
-async function clientById(id) {
+// Only an app registered on this address (realm) is known here.
+async function clientById(id, realm) {
   if (typeof id !== 'string' || !id) return null;
-  return (await pool.query('select * from oauth_clients where id = $1', [id])).rows[0] || null;
+  return (await pool.query('select * from oauth_clients where id = $1 and realm = $2', [id, realm])).rows[0] || null;
 }
 
 // The request's own parameters, checked. Returns { error } for problems that must not be
 // sent back to an unchecked redirect_uri, or { redirectError } for ones that can be.
-async function checkAuthorize(q) {
-  const client = await clientById(field(q.client_id, 100));
+async function checkAuthorize(q, realm) {
+  const client = await clientById(field(q.client_id, 100), realm);
   if (!client) return { error: 'ไม่รู้จักแอปนี้ (client_id) ลองเชื่อมต่อใหม่จากแอป AI อีกครั้ง' };
   let redirectUri = field(q.redirect_uri, 500);
   if (!redirectUri && client.redirect_uris.length === 1) redirectUri = client.redirect_uris[0];
@@ -181,7 +198,8 @@ input{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);ba
 .gbox{display:flex;justify-content:center;margin:16px 0 4px}.or{margin:14px 0 4px;font-size:13px}.err{color:#d9534f;text-align:center;min-height:1.5em}
 small{display:block;text-align:center;color:var(--muted);margin-top:14px}`;
 
-function page(res, title, body, status = 200) {
+// account.centel.app serves its own files from /account, so the logo comes from centel.app.
+function page(res, title, body, status = 200, logo = '/icons/centel-192.png') {
   res.status(status).set({
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -190,14 +208,15 @@ function page(res, title, body, status = 200) {
     'Referrer-Policy': 'no-referrer',
   }).send(`<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body><main class="card">
-<img class="logo" src="/icons/centel-192.png" alt="">${body}</main></body></html>`);
+<img class="logo" src="${esc(logo)}" alt="">${body}</main></body></html>`);
 }
 
-function signInPage(res, clientName) {
+function signInPage(res, clientName, realm) {
   const gid = googleClientId();
-  page(res, 'เข้าสู่ระบบ Centel', `
-<h1>เข้าสู่ระบบ Centel</h1>
-<p><b>${esc(clientName)}</b> ขอเชื่อมกับบัญชี Centel ของคุณ เข้าสู่ระบบก่อนนะครับ</p>
+  const app = realm === 'acc' ? 'Centel Account' : 'Centel';
+  page(res, `เข้าสู่ระบบ ${app}`, `
+<h1>เข้าสู่ระบบ ${app}</h1>
+<p><b>${esc(clientName)}</b> ขอเชื่อมกับบัญชี ${app} ของคุณ เข้าสู่ระบบก่อนนะครับ</p>
 ${gid ? '<div class="gbox" id="g"></div><p class="or">หรือใช้อีเมล</p>' : ''}
 <form id="f"><input name="email" type="email" autocomplete="email" placeholder="อีเมล" required>
 <input name="password" type="password" autocomplete="current-password" placeholder="รหัสผ่าน" required>
@@ -209,16 +228,37 @@ const done=async(r)=>{if(r.ok)location.reload();else document.getElementById('e'
 document.getElementById('f').onsubmit=async(ev)=>{ev.preventDefault();const d=new FormData(ev.target);done(await post('/auth/login',{email:d.get('email'),password:d.get('password')}));};
 ${gid ? `window.onGsi=()=>{google.accounts.id.initialize({client_id:${JSON.stringify(gid)},callback:async(r)=>done(await post('/auth/google',{credential:r.credential})),ux_mode:'popup'});
 google.accounts.id.renderButton(document.getElementById('g'),{theme:'outline',size:'large',shape:'pill',text:'signin_with',locale:'th'});};` : ''}
-</script>${gid ? '<script src="https://accounts.google.com/gsi/client?hl=th" async onload="onGsi()"></script>' : ''}`);
+</script>${gid ? '<script src="https://accounts.google.com/gsi/client?hl=th" async onload="onGsi()"></script>' : ''}`, 200, logoOf(realm));
+}
+const logoOf = (realm) => (realm === 'acc' ? `${BASE()}/icons/centel-192.png` : '/icons/centel-192.png');
+
+// What the accounting app's consent page lists. Writing is a choice on the page (acc.write).
+function accConsent(res, req, c, hidden) {
+  page(res, `อนุญาต ${c.client.name}`, `
+<h1>อนุญาตให้ ${esc(c.client.name)} ใช้ Centel Account?</h1>
+<p class="who">${esc(req.user.display_name)} · ${esc(req.user.email)}</p>
+<ul>
+<li>อ่านเอกสาร ใบเสนอราคา ใบแจ้งหนี้ ใบเสร็จ และค่าใช้จ่าย ผู้ติดต่อ สินค้า/บริการ และรายงาน ของทุกกิจการที่คุณอยู่</li>
+<li>เห็นเท่าที่ตำแหน่งของคุณในแต่ละกิจการเห็นได้ ไม่มากกว่านั้น</li>
+</ul>
+<form method="post" action="/api/oauth/authorize">
+${Object.entries(hidden).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join('')}
+<label style="display:flex;gap:10px;align-items:flex-start;margin:8px 0 4px;cursor:pointer"><input type="checkbox" name="write" value="1" checked style="width:auto;margin:4px 0 0">
+<span><b>ให้สร้างเอกสารได้</b> ออกใบเสนอราคา ใบแจ้งหนี้ ใบเสร็จ บันทึกค่าใช้จ่าย เพิ่มผู้ติดต่อ/สินค้า และยกเลิกเอกสาร · AI ต้องแสดงตัวอย่างให้คุณยืนยันก่อนออกหรือยกเลิกเอกสารทุกครั้ง</span></label>
+<div class="row"><button class="no" name="decision" value="deny">ไม่อนุญาต</button><button class="ok" name="decision" value="allow">อนุญาต</button></div>
+</form>
+<small>ยกเลิกได้ทุกเมื่อที่ เชื่อมต่อระบบ › Claude / ChatGPT ใน account.centel.app<br>ส่งกลับไปที่ ${esc(hostOf(c.redirectUri))}</small>`, 200, logoOf('acc'));
 }
 
 oauthRouter.get('/authorize', loadUser, wrap(async (req, res) => {
-  const c = await checkAuthorize(req.query);
-  if (c.error) return page(res, 'เชื่อมต่อไม่ได้', `<h1>เชื่อมต่อไม่ได้</h1><p>${esc(c.error)}</p>`, 400);
-  if (c.redirectError) return redirectWith(res, c.redirectUri, { error: c.redirectError, error_description: c.description, state: c.state, iss: BASE() });
-  if (!req.user) return signInPage(res, c.client.name);
+  const realm = realmOf(req);
+  const c = await checkAuthorize(req.query, realm);
+  if (c.error) return page(res, 'เชื่อมต่อไม่ได้', `<h1>เชื่อมต่อไม่ได้</h1><p>${esc(c.error)}</p>`, 400, logoOf(realm));
+  if (c.redirectError) return redirectWith(res, c.redirectUri, { error: c.redirectError, error_description: c.description, state: c.state, iss: baseOf(realm) });
+  if (!req.user) return signInPage(res, c.client.name, realm);
   const hidden = { client_id: c.client.id, redirect_uri: c.redirectUri, state: c.state, code_challenge: c.challenge,
     code_challenge_method: 'S256', response_type: 'code', csrf: consentToken(req) };
+  if (realm === 'acc') return accConsent(res, req, c, hidden);
   page(res, `อนุญาต ${c.client.name}`, `
 <h1>อนุญาตให้ ${esc(c.client.name)} ใช้ Centel?</h1>
 <p class="who">${esc(req.user.display_name)} · ${esc(req.user.email)}</p>
@@ -239,26 +279,30 @@ ${Object.entries(hidden).map(([k, v]) => `<input type="hidden" name="${k}" value
 }));
 
 oauthRouter.post('/authorize', loadUser, wrap(async (req, res) => {
-  const c = await checkAuthorize(req.body || {});
-  if (c.error) return page(res, 'เชื่อมต่อไม่ได้', `<h1>เชื่อมต่อไม่ได้</h1><p>${esc(c.error)}</p>`, 400);
-  if (c.redirectError) return redirectWith(res, c.redirectUri, { error: c.redirectError, state: c.state, iss: BASE() });
-  if (!req.user) return page(res, 'หมดเวลา', '<h1>หมดเวลาเข้าสู่ระบบ</h1><p>กลับไปที่แอป AI แล้วกดเชื่อมต่ออีกครั้ง</p>', 401);
+  const realm = realmOf(req);
+  const iss = baseOf(realm);
+  const logo = logoOf(realm);
+  const c = await checkAuthorize(req.body || {}, realm);
+  if (c.error) return page(res, 'เชื่อมต่อไม่ได้', `<h1>เชื่อมต่อไม่ได้</h1><p>${esc(c.error)}</p>`, 400, logo);
+  if (c.redirectError) return redirectWith(res, c.redirectUri, { error: c.redirectError, state: c.state, iss });
+  if (!req.user) return page(res, 'หมดเวลา', '<h1>หมดเวลาเข้าสู่ระบบ</h1><p>กลับไปที่แอป AI แล้วกดเชื่อมต่ออีกครั้ง</p>', 401, logo);
   const a = Buffer.from(field(req.body.csrf, 64));
   const b = Buffer.from(consentToken(req));
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return page(res, 'หมดเวลา', '<h1>หน้านี้หมดอายุ</h1><p>กลับไปที่แอป AI แล้วกดเชื่อมต่ออีกครั้ง</p>', 403);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return page(res, 'หมดเวลา', '<h1>หน้านี้หมดอายุ</h1><p>กลับไปที่แอป AI แล้วกดเชื่อมต่ออีกครั้ง</p>', 403, logo);
   if (field(req.body.decision) !== 'allow') {
-    return redirectWith(res, c.redirectUri, { error: 'access_denied', state: c.state, iss: BASE() });
+    return redirectWith(res, c.redirectUri, { error: 'access_denied', state: c.state, iss });
   }
+  const scope = realm === 'acc' ? (field(req.body.write) === '1' ? ACC_SCOPES.join(' ') : 'acc.read') : SCOPE;
   // Connecting the same app again keeps one entry in the Account list.
   // Approving again also brings an older grant up to today's consent page (its scope).
   const grant = (await pool.query(
-    'update oauth_grants set scope = $3 where user_id = $1 and client_id = $2 and revoked_at is null returning id', [req.user.id, c.client.id, SCOPE])).rows[0]
-    || (await pool.query('insert into oauth_grants (user_id, client_id, scope) values ($1, $2, $3) returning id', [req.user.id, c.client.id, SCOPE])).rows[0];
+    'update oauth_grants set scope = $3 where user_id = $1 and client_id = $2 and revoked_at is null returning id', [req.user.id, c.client.id, scope])).rows[0]
+    || (await pool.query('insert into oauth_grants (user_id, client_id, scope) values ($1, $2, $3) returning id', [req.user.id, c.client.id, scope])).rows[0];
   const code = rand(32);
   await pool.query(
     'insert into oauth_codes (code_hash, grant_id, redirect_uri, code_challenge, expires_at) values ($1, $2, $3, $4, $5)',
     [sha(code), grant.id, c.redirectUri, c.challenge, new Date(Date.now() + CODE_SEC * 1000)]);
-  redirectWith(res, c.redirectUri, { code, state: c.state, iss: BASE() });
+  redirectWith(res, c.redirectUri, { code, state: c.state, iss });
 }));
 
 /* ---------- Tokens ---------- */
@@ -272,7 +316,7 @@ async function tokenClient(req) {
     const [u, p] = Buffer.from(h.slice(6), 'base64').toString().split(':');
     id = decodeURIComponent(u || ''); secret = decodeURIComponent(p || '');
   }
-  const client = await clientById(id);
+  const client = await clientById(id, realmOf(req));
   if (!client) return null;
   if (client.secret_hash) {
     const a = Buffer.from(sha(secret || '')), b = Buffer.from(client.secret_hash);
@@ -335,16 +379,18 @@ oauthRouter.post('/revoke', wrap(async (req, res) => {
 /* ---------- Bearer check for /mcp ---------- */
 
 // Sets req.mcpUser = { id, grantId, scopes } or answers 401 with where to find the auth server.
+// A token only works on the server (realm) its app registered with.
 export async function bearer(req, res, next) {
   try {
+    const realm = realmOf(req);
     const m = /^Bearer\s+([A-Za-z0-9_-]{20,200})$/i.exec(req.get('authorization') || '');
     const row = m && (await pool.query(
       `select g.id as grant_id, g.user_id, g.last_used_at, g.scope, c.name as client from oauth_tokens t
        join oauth_grants g on g.id = t.grant_id join oauth_clients c on c.id = g.client_id
-       where t.token_hash = $1 and t.kind = 'access' and t.expires_at > now() and g.revoked_at is null`, [sha(m[1])])).rows[0];
+       where t.token_hash = $1 and t.kind = 'access' and t.expires_at > now() and g.revoked_at is null and c.realm = $2`, [sha(m[1]), realm])).rows[0];
     if (!row) {
       res.set('WWW-Authenticate',
-        `Bearer realm="centel", resource_metadata="${BASE()}/.well-known/oauth-protected-resource"${m ? ', error="invalid_token"' : ''}`);
+        `Bearer realm="${realm}", resource_metadata="${baseOf(realm)}/.well-known/oauth-protected-resource"${m ? ', error="invalid_token"' : ''}`);
       return res.status(401).json({ error: m ? 'invalid_token' : 'unauthenticated' });
     }
     if (!row.last_used_at || Date.now() - new Date(row.last_used_at) > 5 * 60000) {
