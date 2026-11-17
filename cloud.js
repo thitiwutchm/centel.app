@@ -148,6 +148,7 @@ function applyBootstrap(b) {
     budgets: b.budgets.map((x) => ({ id: x.id, ownerId: x.ownerId, scope: x.scope, category: newCat(x.category), amount: x.amount, walletId: x.walletId,
       name: x.name || undefined, period: x.period || 'month', startDate: x.startDate || undefined, endDate: x.endDate || undefined, merchant: x.merchant || undefined })),
     labels: (b.labels || []).map((l) => ({ id: l.id, name: l.name })),
+    ious: b.ious || [],
     prefs,
   };
   if (ui.wallet !== 'total' && !walletById(ui.wallet)) ui.wallet = 'total';
@@ -391,6 +392,8 @@ function coupleCard() {
         <div class="main"><div class="name">รายจ่ายร่วมเดือนนี้ ${baht(total)}</div><div class="sub">ส่วนของฉัน ${baht(mine)}</div></div>
         ${svgIcon('chev', 'svg-i sm muted')}
       </button>
+      ${window.partnerExpRow ? partnerExpRow() : ''}
+      ${window.partnerBalRows ? partnerBalRows() : ''}
       <div class="cp-actions"><button class="btn pillbtn" data-action="add-shared">＋ รายจ่ายร่วม</button></div>
     </div>`;
 }
@@ -655,7 +658,7 @@ function loginSheet(mode = 'login') {
 // The first sign-in can bring this device's records into the account.
 async function offerImport(local, b) {
   const mine = b.expenses.filter((e) => e.ownerId === b.user.id).length;
-  const hasLocal = local.txns.length || local.budgets.length || local.wallets.some((w) => w.id !== 'cash' || w.initial);
+  const hasLocal = local.txns.length || local.budgets.length || (local.ious || []).length || local.wallets.some((w) => w.id !== 'cash' || w.initial);
   if (!hasLocal || mine || b.wallets.length) {
     if (!b.wallets.length) saveWallet({ id: 'cash', name: 'เงินสด', type: 'cash', initial: 0, excluded: false });
     return;
@@ -674,6 +677,7 @@ async function cloudImport(data) {
       txns: (data.txns || []).filter((t) => t.type !== 'settle' && t.scope !== 'shared'),
       budgets: (data.budgets || []).filter((x) => x.scope !== 'shared'),
       labels: data.labels || [],
+      ious: data.ious || [],
     });
     if (data.prefs) { money.prefs = { ...money.prefs, ...data.prefs }; cloudSavePrefs(); }
     await cloudRefresh();
@@ -934,7 +938,7 @@ function coupleSheet() {
   if (cloud.partner) {
     openSheet(`
       <div class="sheet-head"><button class="link-btn" data-action="close">ปิด</button><h2>บัญชีคู่</h2><span style="width:40px"></span></div>
-      <div class="card acct">${cloud.partner.avatar ? userAvatar(cloud.partner) : '<div class="avatar">💞</div>'}<div><b>${esc(partnerName())}</b><div class="muted small">${esc(cloud.partner.email)}</div></div></div>
+      <div class="card acct"><span class="pl-prof" role="button" tabindex="0" data-pl-prof="partner" aria-label="โปรไฟล์ ${esc(partnerName())}">${cloud.partner.avatar ? userAvatar(cloud.partner) : '<div class="avatar">💞</div>'}</span><div><b>${esc(partnerName())}</b><div class="muted small">${esc(cloud.partner.email)}</div></div></div>
       <p class="hint">${esc(partnerName())} เห็นเฉพาะรายจ่ายร่วมและงบร่วมของคุณทั้งสอง รายจ่ายส่วนตัวของแต่ละคนมองไม่เห็น</p>
     `);
     return;

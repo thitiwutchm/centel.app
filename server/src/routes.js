@@ -205,6 +205,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
     const notes = (await db.query('select * from notes order by date nulls last, time nulls first, created_at')).rows;
     const line = (await db.query('select group_id, active, bills from line_targets where user_id = app_uid()')).rows[0];
     const linePeople = (await db.query('select line_user_id, name, who from line_people order by sort, name')).rows;
+    const ious = (await db.query('select * from ious order by date, created_at')).rows;
     let invite = null;
     if (couple && !partner) {
       // The pending invite code is read with the owner role: invites are not exposed to app_user.
@@ -238,6 +239,7 @@ router.get('/bootstrap', wrap(async (req, res) => {
       prefs: prefs ? prefs.data : {},
       planner: planner ? { data: planner.data, rev: planner.rev } : { data: null, rev: 0 },
       notes: notes.map(noteOut),
+      ious: ious.map(iouOut),
       line: line ? { groupId: line.group_id, active: line.active, bills: line.bills } : null,
       linePeople: linePeople.map((x) => ({ userId: x.line_user_id, name: x.name, who: x.who })),
       features: { line: lineEnabled, push: true, apns: apnsEnabled(), ai: aiEnabled && storageEnabled, storage: storageEnabled, model: aiEnabled ? RECEIPT_MODEL : null },
@@ -492,6 +494,55 @@ router.put('/labels/:id', wrap(async (req, res) => {
 // Removing a label takes it off every transaction (expense_labels cascades).
 router.delete('/labels/:id', wrap(async (req, res) => {
   await asUser(uid(req), (db) => db.query('delete from labels where id = $1', [req.params.id]));
+  res.json({ ok: true });
+}));
+
+/* ---------- ติดเงิน (IOUs) ----------
+   Who owes whom and for what. Never a wallet movement: see migration 043. */
+
+function iouOut(r) {
+  return {
+    id: r.id, dir: r.dir, kind: r.kind, person: r.person, amount: r.amount, date: r.date,
+    due: r.due || undefined, note: r.note || undefined, repaid: r.repaid || [],
+  };
+}
+
+// The row as the app sends it, checked. Repayments past the amount are cut off.
+function readIou(b) {
+  const dir = b.dir === 'owe' ? 'owe' : b.dir === 'owed' ? 'owed' : null;
+  if (!dir) throw bad('bad_dir');
+  const person = str(String(b.person || '').trim(), 80);
+  if (!person) throw bad('bad_person');
+  const amount = money(b.amount);
+  if (!(amount > 0) || amount > 1e11) throw bad('bad_amount');
+  if (!isDate(b.date)) throw bad('bad_date');
+  const repaid = (Array.isArray(b.repaid) ? b.repaid : []).slice(0, 200).map((x) => ({
+    id: str(x && x.id, 60) || crypto.randomUUID(), date: x && isDate(x.date) ? x.date : b.date, amount: money(x && x.amount),
+    ...(x && str(x.txnId, 60) ? { txnId: str(x.txnId, 60) } : {}),
+  })).filter((x) => x.amount > 0);
+  return {
+    dir, kind: b.kind === 'advance' ? 'advance' : 'loan', person, amount, date: b.date,
+    due: isDate(b.due) ? b.due : null, note: str(typeof b.note === 'string' ? b.note.trim() : null, 300), repaid,
+  };
+}
+
+router.put('/ious/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('bad_id');
+  const x = readIou(req.body || {});
+  const row = await asUser(uid(req), async (db) => (await db.query(
+    `insert into ious (id, owner_id, dir, kind, person, amount, date, due, note, repaid)
+     values ($1, app_uid(), $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+     on conflict (id) do update set dir = excluded.dir, kind = excluded.kind, person = excluded.person,
+       amount = excluded.amount, date = excluded.date, due = excluded.due, note = excluded.note,
+       repaid = excluded.repaid, updated_at = now()
+     returning *`,
+    [req.params.id, x.dir, x.kind, x.person, x.amount, x.date, x.due, x.note, JSON.stringify(x.repaid)])).rows[0]);
+  res.json({ ok: true, iou: iouOut(row) });
+}));
+
+router.delete('/ious/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('bad_id');
+  await asUser(uid(req), (db) => db.query('delete from ious where id = $1', [req.params.id]));
   res.json({ ok: true });
 }));
 
@@ -852,8 +903,8 @@ router.delete('/bill-files/:billId/:ym', wrap(async (req, res) => {
 /* ---------- Import local data on first sign-in ---------- */
 
 router.post('/import', wrap(async (req, res) => {
-  const { wallets = [], txns = [], budgets = [], labels = [] } = req.body || {};
-  if (wallets.length > 200 || txns.length > 20000 || budgets.length > 200 || labels.length > 500) throw bad('too_large', 413);
+  const { wallets = [], txns = [], budgets = [], labels = [], ious = [] } = req.body || {};
+  if (wallets.length > 200 || txns.length > 20000 || budgets.length > 200 || labels.length > 500 || ious.length > 2000) throw bad('too_large', 413);
   const n = await asUser(uid(req), async (db) => {
     for (const [i, w] of wallets.entries()) {
       if (!str(w.id, 60) || !str(w.name)) continue;
@@ -887,6 +938,14 @@ router.post('/import', wrap(async (req, res) => {
         `insert into budgets (owner_id, scope, category, amount, wallet_id, period, start_date, end_date, name, merchant)
          values (app_uid(), 'personal', $1, $2, $3, $4, $5, $6, $7, $8)`,
         [str(b.category, 40) || 'all', amount, str(b.walletId, 60) || 'total', x.period, x.startDate || null, x.endDate || null, x.name || null, x.merchant || null]);
+    }
+    for (const o of ious) {
+      let x;
+      try { x = readIou(o); } catch { continue; }
+      await db.query(
+        `insert into ious (id, owner_id, dir, kind, person, amount, date, due, note, repaid)
+         values ($1, app_uid(), $2, $3, $4, $5, $6, $7, $8, $9::jsonb) on conflict (id) do nothing`,
+        [isUuid(o.id) ? o.id : crypto.randomUUID(), x.dir, x.kind, x.person, x.amount, x.date, x.due, x.note, JSON.stringify(x.repaid)]);
     }
     return count;
   });

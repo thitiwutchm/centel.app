@@ -13,6 +13,18 @@
     set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
   };
 
+  /* ---------- Day / Night theme ---------- */
+  // Stored per device as acc.theme ('day' | 'night'); until someone picks, the device setting decides.
+  // index.html and doc.html apply the stored choice in <head> so the page never flashes the other theme.
+  const darkMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+  const themeNow = () => { const t = store.get('acc.theme'); return t === 'day' || t === 'night' ? t : (darkMq && darkMq.matches ? 'night' : 'day'); };
+  function setTheme(t) {
+    store.set('acc.theme', t);
+    document.documentElement.dataset.theme = t === 'night' ? 'dark' : 'light';
+    const m = document.querySelector('meta[name=theme-color]');
+    if (m) m.content = t === 'night' ? '#0E0F11' : '#FFFFFF';
+  }
+
   /* ---------- API ---------- */
 
   const ERR = {
@@ -24,7 +36,12 @@
     bad_pay_account: 'เลือกบัญชีเงินสดหรือธนาคาร', negative_total: 'ยอดรวมติดลบไม่ได้', confirm_name: 'พิมพ์ชื่อกิจการให้ตรงเพื่อยืนยัน',
     capcourt_key: 'รหัสเชื่อมต่อ CapCourt ไม่ถูกต้องหรือถูกยกเลิก', capcourt_down: 'ติดต่อ CapCourt ไม่ได้ ลองใหม่อีกครั้ง', bad_url: 'ที่อยู่ต้องขึ้นต้นด้วย https://',
     too_large: 'ไฟล์ใหญ่เกินไป', forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', not_found: 'ไม่พบข้อมูล', too_many_requests: 'ลองใหม่อีกครั้งในอีกสักครู่',
-    google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่', ref_void: 'เอกสารต้นทางถูกยกเลิกแล้ว', bad_code: 'รหัสบัญชีไม่ถูกต้อง',
+    google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่', bad_role: 'กรุณาเลือกตำแหน่ง', already_member: 'อีเมลนี้เป็นผู้ใช้งานในกิจการนี้อยู่แล้ว',
+    too_many_users: 'เพิ่มผู้ใช้งานได้สูงสุด 50 คนต่อกิจการ', primary_owner: 'เจ้าของหลักของกิจการแก้ไขหรือลบไม่ได้', self_demote: 'เปลี่ยนตำแหน่งของตัวเองไม่ได้ ให้เจ้าของคนอื่นเปลี่ยนให้',
+    self_disable: 'ระงับบัญชีของตัวเองไม่ได้', invite_gone: 'คำเชิญนี้หมดอายุหรือถูกใช้ไปแล้ว ขอให้เจ้าของกิจการส่งคำเชิญใหม่',
+    not_linked: 'ยังไม่ได้เชื่อมต่อกับ Centel', code_gone: 'รหัสหมดอายุหรือถูกใช้แล้ว', bad_title: 'กรอกชื่อการแจ้งเตือน', bad_day: 'วันที่ไม่ถูกต้อง', bad_date: 'เลือกวันที่ครบกำหนด',
+    bad_month: 'เลือกเดือน', bad_contact: 'ไม่พบผู้ติดต่อนี้', bad_amount: 'จำนวนเงินไม่ถูกต้อง', bad_remind: 'เลือกเวลาเตือน', too_many: 'มีการแจ้งเตือนครบจำนวนสูงสุดแล้ว',
+    invite_other_email: 'คำเชิญนี้ส่งถึงอีเมลอื่น ออกจากระบบแล้วเข้าสู่ระบบด้วยอีเมลที่ได้รับเชิญ', bad_image: 'ไฟล์รูปไม่ถูกต้อง', ref_void: 'เอกสารต้นทางถูกยกเลิกแล้ว', bad_code: 'รหัสบัญชีไม่ถูกต้อง',
   };
   async function api(method, path, body) {
     const res = await fetch('/api' + path, {
@@ -106,12 +123,20 @@
     items: I('<path d="M21 8l-9-5-9 5 9 5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>'),
     accounts: I('<path d="M4 4h16v16H4zM4 9h16M9 9v11"/>'),
     journal: I('<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>'),
+    tax: I('<path d="M6 3h12v18H6z"/><path d="M9 15l6-6"/><circle cx="9.5" cy="9.5" r=".6"/><circle cx="14.5" cy="14.5" r=".6"/>'),
     reports: I('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
     settings: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
     plus: I('<path d="M12 5v14M5 12h14"/>'),
+    sun: I('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+    moon: I('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    bank: I('<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>'),
+    swap: I('<path d="M4 8h14l-3-3M20 16H6l3 3"/>'),
+    user: I('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+    users: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M19 8v6M16 11h6"/>'),
     print: I('<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/>'),
     link: I('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+    bell: I('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
     scan: I('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/>'),
   };
 
@@ -138,7 +163,7 @@
     } catch { /* Google sign-in not available here */ }
   }
 
-  function renderAuth() {
+  function renderAuth(invite) {
     let mode = 'login';
     app.innerHTML = `<div class="auth">
       <div class="auth-art">
@@ -169,6 +194,21 @@
       </form></div></div>`;
     const f = $('form', app);
     loadGoogle($('[data-google]', f));
+    // Opened from an invite link: say who invited them and to which email.
+    if (invite) {
+      api('GET', `/acc/invite-info/${invite}`).then((i) => {
+        const box = document.createElement('div');
+        box.className = 'invite-banner';
+        box.innerHTML = `${i.logo ? `<img src="${esc(i.logo)}" alt="">` : ''}<div><b>${esc(i.business)}</b> เชิญคุณเข้าร่วมเป็น <b>${esc(i.role_name)}</b><small>เข้าสู่ระบบหรือสมัครด้วย ${esc(i.email)}</small></div>`;
+        f.prepend(box);
+        $('[name=email]', f).value = i.email;
+      }, () => {
+        const box = document.createElement('div');
+        box.className = 'invite-banner bad';
+        box.textContent = 'ลิงก์คำเชิญนี้หมดอายุหรือถูกใช้ไปแล้ว ขอให้เจ้าของกิจการส่งคำเชิญใหม่';
+        f.prepend(box);
+      });
+    }
     $('[data-switch]', f).onclick = () => {
       mode = mode === 'login' ? 'register' : 'login';
       $('[data-name]', f).hidden = mode === 'login';
@@ -209,7 +249,7 @@
       ok: 'สร้างกิจการ', cancel: first ? '' : 'ยกเลิก',
       onOk: async (el) => (await api('POST', '/acc/businesses', formData(el))).id,
     });
-    if (id) { S.bizId = id; store.set('acc.biz', id); await start(); location.hash = '#/dashboard'; }
+    if (id) { S.bizId = id; store.set('acc.biz', id); location.hash = '#/'; await start(); }
     else if (first) newBusiness(true);
   }
 
@@ -220,7 +260,7 @@
         <button data-new>${ICON.plus}<span>เพิ่มกิจการใหม่</span></button></div>`,
       onOpen: (el, close) => el.addEventListener('click', async (e) => {
         const b = e.target.closest('[data-b]');
-        if (b) { close(); S.bizId = b.dataset.b; store.set('acc.biz', S.bizId); await loadBoot(); location.hash = '#/dashboard'; render(); }
+        if (b) { close(); S.bizId = b.dataset.b; store.set('acc.biz', S.bizId); await loadBoot(); app.innerHTML = ''; goHome(); }
         if (e.target.closest('[data-new]')) { close(); newBusiness(false); }
       }),
     });
@@ -241,30 +281,61 @@
   /* ---------- Shell and routing ---------- */
 
   const NAV = [
-    ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home]]],
+    ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home], ['reminders', 'การแจ้งเตือน', ICON.bell]]],
     ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
-    ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex]]],
+    ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex], ['scan', 'สแกนบิลซื้อ', ICON.scan]]],
+    ['ภาษี', 'vat'],
     ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items]]],
-    ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['settings', 'ตั้งค่า', ICON.settings]]],
+    ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['channels', 'ช่องทางการเงิน', ICON.bank], ['settings', 'ตั้งค่า', ICON.settings]]],
+    ['ผู้ใช้งาน', [['profile', 'ข้อมูลส่วนตัว', ICON.user], ['users', 'ผู้ใช้งานในระบบ', ICON.users]]],
   ];
+  // What each page needs (see server/src/acc/users.js): area → 1 view.
+  const perms = () => S.boot?.perms || { sales: 2, purchase: 2, accounting: 2, settings: 2 };
+  const can = (area, lvl = 1) => perms()[area] >= lvl;
+  const PAGE_AREA = {
+    dashboard: ['accounting'], 'docs/QT': ['sales', 'accounting'], 'docs/IV': ['sales', 'accounting'], 'docs/RE': ['sales', 'accounting'],
+    'docs/EX': ['purchase', 'accounting'], scan: ['purchase', 'accounting'], contacts: ['sales', 'purchase', 'accounting'], items: ['sales', 'purchase', 'accounting'],
+    journal: ['accounting'], accounts: ['accounting'], reports: ['accounting'],
+    'vat/purchases': ['purchase', 'accounting'], 'vat/returns': ['accounting'], 'report/vat_sales': ['accounting'], 'report/vat_purchase': ['accounting'], integrations: ['settings'], channels: ['settings'], reminders: ['accounting', 'settings'], settings: ['settings'],
+  };
+  const pageOk = (r) => !PAGE_AREA[r] || PAGE_AREA[r].some((a) => can(a));
+  // Where someone lands: the dashboard, or their first page when the dashboard is not theirs.
+  const goHome = () => { if (location.hash === '#/') render(); else location.hash = '#/'; };
+  const homeRoute = () => navGroups().flatMap(([, items]) => items.map(([r]) => r)).find(pageOk) || 'profile';
 
+  // ภาษีมูลค่าเพิ่ม pages, shown in the menu for VAT-registered businesses only.
+  const NAV_VAT = [
+    ['vat/purchases', 'จัดการเอกสารภาษีซื้อ', ICON.tax], ['vat/returns', 'เตรียมแบบภาษีรายเดือน', ICON.tax],
+    ['report/vat_sales', 'ภาษีขายตามเอกสาร', ICON.reports], ['report/vat_purchase', 'ภาษีซื้อตามเอกสาร', ICON.reports],
+  ];
+  // The menu groups, with the VAT pages put in for VAT-registered businesses.
+  const navGroups = () => NAV.map(([h, items]) => [h, items === 'vat' ? (biz().vat_registered ? NAV_VAT : []) : items]);
   function shell() {
     const b = biz();
+    const nav = navGroups();
     app.innerHTML = `<div class="shell">
       <aside class="rail">
         <div class="brand"><span class="brand-mark">${ICON.journal}</span><div>Centel Account<small>ระบบบัญชีออนไลน์</small></div></div>
         <button class="biz-switch" data-switch>${b.logo ? `<img src="${esc(b.logo)}" alt="">` : `<span class="ph">${esc(b.name.slice(0, 1))}</span>`}<span>${esc(b.name)}</span></button>
-        <nav class="nav">${NAV.map(([h, items]) => `<div class="nav-h">${h}</div>${items.map(([r, label, ic]) => `<a href="#/${r}" data-r="${r}">${ic}${label}</a>`).join('')}`).join('')}</nav>
-        <div class="rail-foot">${esc(S.user?.email || '')}<br><button data-logout>ออกจากระบบ</button></div>
+        <nav class="nav">${nav.map(([h, all]) => { const items = all.filter(([r]) => pageOk(r)); return items.length ? `<div class="nav-h">${h}</div>${items.map(([r, label, ic]) => `<a href="#/${r}" data-r="${r}">${ic}${label}</a>`).join('')}` : ''; }).join('')}</nav>
+        <div class="rail-foot"><div class="theme-sw" role="group" aria-label="ธีม"><button type="button" data-theme-set="day">${ICON.sun}กลางวัน</button><button type="button" data-theme-set="night">${ICON.moon}กลางคืน</button></div><br>${esc(S.user?.email || '')}<br><button data-logout>ออกจากระบบ</button></div>
       </aside>
       <div>
-        <div class="topbar"><button data-menu aria-label="เมนู">${ICON.menu}</button><b>${esc(b.name)}</b></div>
+        <div class="topbar"><button data-menu aria-label="เมนู">${ICON.menu}</button><b>${esc(b.name)}</b><button class="theme-tg" data-theme-tg aria-label="สลับธีมกลางวัน / กลางคืน"></button></div>
         <main class="main" id="main"></main>
       </div></div>`;
     $('[data-switch]').onclick = switchBusiness;
     $('[data-menu]').onclick = () => $('.shell').classList.toggle('menu');
     $('.rail').addEventListener('click', (e) => { if (e.target.closest('a')) $('.shell').classList.remove('menu'); });
     $('.shell').addEventListener('click', (e) => { if (e.target === $('.shell') || (e.target.closest('.main') && $('.shell').classList.contains('menu'))) $('.shell').classList.remove('menu'); });
+    const drawTheme = () => {
+      const t = themeNow();
+      $$('[data-theme-set]').forEach((x) => x.classList.toggle('on', x.dataset.themeSet === t));
+      $('[data-theme-tg]').innerHTML = t === 'night' ? ICON.sun : ICON.moon;
+    };
+    $$('[data-theme-set]').forEach((x) => { x.onclick = () => { setTheme(x.dataset.themeSet); drawTheme(); }; });
+    $('[data-theme-tg]').onclick = () => { setTheme(themeNow() === 'night' ? 'day' : 'night'); drawTheme(); };
+    drawTheme();
     $('[data-logout]').onclick = async () => { await api('POST', '/auth/logout').catch(() => {}); location.hash = ''; start(); };
   }
 
@@ -278,8 +349,11 @@
     if (!S.boot) return;
     if (!$('.shell')) shell();
     const { parts, q } = parseHash();
-    const r = parts[0] || 'dashboard';
-    const key = r === 'docs' || r === 'new' ? `docs/${parts[1] || 'IV'}` : r === 'doc' || r === 'edit' ? null : r === 'report' ? 'reports' : r;
+    if (!parts[0] || parts[0] === 'invite') { location.replace(`#/${homeRoute()}`); return; }
+    const r = parts[0];
+    const key = r === 'new' && q.get('scan') ? 'scan' : r === 'docs' || r === 'new' ? `docs/${parts[1] || 'IV'}` : r === 'doc' || r === 'edit' ? null
+      : r === 'report' ? (NAV_VAT.some(([k]) => k === `report/${parts[1]}`) ? `report/${parts[1]}` : 'reports')
+        : r === 'vat' ? `vat/${parts[1] === 'returns' ? 'returns' : 'purchases'}` : r;
     for (const a of $$('.nav a')) a.classList.toggle('on', a.dataset.r === key);
     // A fresh element per page so listeners from the last page do not pile up.
     const old = $('#main');
@@ -288,9 +362,11 @@
     main.innerHTML = '<div class="empty">กำลังโหลด…</div>';
     window.scrollTo(0, 0);
     try {
+      if (key && !pageOk(key)) { main.innerHTML = `<div class="empty"><b>ไม่มีสิทธิ์เข้าถึงหน้านี้</b>ตำแหน่งของคุณในกิจการนี้ไม่ได้รับสิทธิ์ ติดต่อเจ้าของกิจการเพื่อขอสิทธิ์เพิ่ม<a class="btn" style="margin-top:12px" href="#/${homeRoute()}">กลับหน้าแรก</a></div>`; return; }
       if (r === 'dashboard') await viewDashboard(main, q);
       else if (r === 'docs') await viewDocs(main, parts[1] || 'IV', q);
       else if (r === 'new') await viewEditor(main, parts[1], null, q);
+      else if (r === 'scan') viewScan(main);
       else if (r === 'edit') await viewEditor(main, null, parts[1], q);
       else if (r === 'doc') await viewDoc(main, parts[1]);
       else if (r === 'contacts') viewContacts(main, q);
@@ -300,7 +376,14 @@
       else if (r === 'reports') viewReports(main);
       else if (r === 'integrations') await viewIntegrations(main, parts[1]);
       else if (r === 'report') await viewReport(main, parts[1], q);
+      else if (r === 'vat' && parts[1] === 'returns') await viewVatReturns(main, q, parts[2]);
+      else if (r === 'vat') await viewVatPurchases(main, q);
       else if (r === 'settings') viewSettings(main);
+      else if (r === 'channels') viewChannels(main);
+      else if (r === 'reminders') await viewReminders(main);
+      else if (r === 'profile') await viewProfile(main);
+      else if (r === 'users' && parts[1] === 'new') await viewInvite(main);
+      else if (r === 'users') await viewUsers(main);
       else main.innerHTML = '<div class="empty"><b>ไม่พบหน้านี้</b></div>';
     } catch (e) {
       if (e.status === 401) return start();
@@ -389,8 +472,7 @@
   const CHEV = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
 
   // How documents print and download: original / copies, payment details, signature + stamp, language.
-  function printPrefs() {
-    const b = biz();
+  function printPrefs(b = biz()) {
     const s = b.settings || {};
     let p = {};
     try { p = JSON.parse(store.get(`acc.print.${S.bizId}`) || '{}') || {}; } catch { /* ignore */ }
@@ -405,12 +487,15 @@
   async function downloadDocs(ids, opts) {
     const docs = [];
     for (const id of ids) {
-      const { doc, ref } = await get(`/docs/${id}`);
-      docs.push({ ...doc, ref });
+      const { doc, ref, issuer } = await get(`/docs/${id}`);
+      docs.push({ ...doc, ref, issuer });
     }
-    const html = docs.map((d) => T.renderSet(d, biz(), opts)).join('');
+    const html = docs.map((d) => T.renderSet(d, signedBy(d.issuer), opts)).join('');
     await T.downloadPdf(html, docs.length === 1 ? `${docs[0].number}.pdf` : `เอกสาร-${T.today()}.pdf`);
   }
+
+  // The business as printed on a document: the issuer's own signature (ข้อมูลส่วนตัว) when they have one.
+  const signedBy = (issuer) => (issuer?.signature ? { ...biz(), signature: issuer.signature } : biz());
 
   async function payExpense(doc) {
     return dialog({
@@ -479,7 +564,8 @@
         <a href="#/new/QT"><span class="ic">QT</span><span><b>ใบเสนอราคา</b><small>เสนอราคาลูกค้า</small></span></a>
         <a href="#/new/IV"><span class="ic">IV</span><span><b>ใบแจ้งหนี้</b><small>วางบิล / ใบกำกับภาษี</small></span></a>
         <a href="#/new/RE"><span class="ic">RE</span><span><b>ใบเสร็จรับเงิน</b><small>ขายสด รับเงินทันที</small></span></a>
-        <a href="#/new/EX"><span class="ic">EX</span><span><b>ค่าใช้จ่าย</b><small>สแกนบิลด้วย AI ได้</small></span></a>
+        <a href="#/new/EX"><span class="ic">EX</span><span><b>ค่าใช้จ่าย</b><small>บันทึกค่าใช้จ่ายเอง</small></span></a>
+        <a href="#/scan"><span class="ic">${ICON.scan}</span><span><b>สแกนบิลซื้อ</b><small>รูปหรือ PDF อ่านด้วย AI</small></span></a>
       </div>
       <div class="kpis">
         <div class="card kpi"><div class="k">รายได้เดือนนี้</div><div class="v">${money(d.income)}</div><div class="d">ตามสมุดบัญชี ไม่รวม VAT</div></div>
@@ -534,7 +620,7 @@
     let showTotal = false;
     const sel = new Set();
     main.innerHTML = `<div class="page-h"><div><h1>${LIST_TITLE[type]}</h1><div class="sub">${docs.length} เอกสาร</div></div>
-      <div class="actions"><button class="btn" data-xls title="ดาวน์โหลด Excel">ดาวน์โหลด Excel</button><a class="btn primary" href="#/new/${type}">${ICON.plus}${NEW_LABEL[type]}</a></div></div>
+      <div class="actions"><button class="btn" data-xls title="ดาวน์โหลด Excel">ดาวน์โหลด Excel</button>${isEx ? `<a class="btn" href="#/scan">${ICON.scan}สแกนบิลซื้อ</a>` : ''}<a class="btn primary" href="#/new/${type}">${ICON.plus}${NEW_LABEL[type]}</a></div></div>
       <div class="card">
         <div class="filters">
           <div class="seg" data-s><button data-v="" class="${status ? '' : 'on'}">ทั้งหมด</button>${statuses.map((s) => `<button data-v="${s}" class="${s === status ? 'on' : ''}">${T.statusName(type, s)}</button>`).join('')}</div>
@@ -934,12 +1020,17 @@
     let vatMode = Number(doc.vat_rate) > 0 ? doc.price_mode : 'none';
     if (isEx && !doc.tax_invoice) vatMode = 'none';
 
-    const title = editId ? `แก้ไข ${doc.number}` : src ? `${NEW_LABEL[type]} จาก ${src.number}` : NEW_LABEL[type];
+    // A bill from the scan page (#/scan) opened here for review.
+    let scanItem = isEx && !editId && q.get('scan') ? scans().find((x) => x.id === q.get('scan') && x.status !== 'saved') || null : null;
+    const scanAll = scans().filter((x) => x.status !== 'failed');
+    const title = editId ? `แก้ไข ${doc.number}` : src ? `${NEW_LABEL[type]} จาก ${src.number}` : scanItem ? `ตรวจบิลที่สแกน${scanAll.length > 1 ? ` ใบที่ ${scanAll.indexOf(scanItem) + 1} จาก ${scanAll.length}` : ''}` : NEW_LABEL[type];
     main.innerHTML = `<div class="page-h"><div><h1>${esc(title)}</h1><div class="sub">${esc(T.docTitle({ ...doc, tax_invoice: doc.tax_invoice || (type === 'RE' && vatReg) }).join(' · '))}</div></div>
-      <div class="actions"><a class="btn ghost" href="${editId ? `#/doc/${editId}` : `#/docs/${type}`}">ยกเลิก</a><button class="btn primary" data-save>บันทึก</button></div></div>
-      <div class="editor">
+      <div class="actions"><a class="btn ghost" href="${editId ? `#/doc/${editId}` : scanItem ? '#/scan' : `#/docs/${type}`}">${scanItem ? 'กลับไปรายการสแกน' : 'ยกเลิก'}</a><button class="btn primary" data-save>บันทึก</button></div></div>
+      <div class="editor${scanItem ? ' has-scan' : ''}">
+        ${isEx && !editId ? '<div class="scan-pane" data-scanbox hidden></div>' : ''}
         <div class="grid">
-          ${isEx && !editId ? `<div class="scan-drop" data-scan>${ICON.scan}<b>สแกนบิล / ใบกำกับภาษีด้วย AI</b><span class="muted">เลือกรูปหรือ PDF ระบบจะกรอกผู้ขาย รายการ และภาษีให้</span><input type="file" accept="image/*,application/pdf" hidden></div>` : ''}
+          ${isEx && !editId ? `<div class="scan-drop" data-scan ${scanItem ? 'hidden' : ''}>${ICON.scan}<b>สแกนบิล / ใบกำกับภาษีด้วย AI</b><span class="muted">แตะเพื่อเลือก หรือลากรูป / PDF มาวาง ระบบจะกรอกผู้ขาย รายการ และภาษีให้ · มีหลายใบ? <a href="#/scan">สแกนทีละหลายใบ</a></span><input type="file" accept="image/*,application/pdf" hidden></div>` : ''}
+          <div data-dupbox></div>
           <div class="card card-pad">
             <div class="grid g2">
               <div class="field span2"><span>${isEx ? 'ผู้ขาย / ผู้รับเงิน' : 'ลูกค้า'}</span><div class="contact-pick" data-cp></div></div>
@@ -1094,7 +1185,7 @@
       if (!totals.wht) { box.innerHTML = ''; return; }
       if (!isEx) { box.innerHTML = '<span>ภาษีหัก ณ ที่จ่าย</span><div class="note-box">ลูกค้าจะหักภาษี ณ ที่จ่าย และส่งหนังสือรับรอง 50 ทวิ ให้ ระบบบันทึกเป็นภาษีถูกหัก ณ ที่จ่าย (นำไปเครดิตภาษีเงินได้)</div>'; return; }
       const cur = doc.wht_cert || {};
-      const form = cur.form || (doc.contact && doc.contact.is_company === false ? 'pnd3' : 'pnd53');
+      const form = cur.form || window.Wht50.formFor(doc.contact);
       box.innerHTML = `<span>หนังสือรับรองหัก ณ ที่จ่าย (50 ทวิ)</span>
         <div class="grid g2"><select data-wf><option value="pnd53" ${form === 'pnd53' ? 'selected' : ''}>ภ.ง.ด.53 (นิติบุคคล)</option><option value="pnd3" ${form === 'pnd3' ? 'selected' : ''}>ภ.ง.ด.3 (บุคคลธรรมดา)</option></select>
         <select data-wi>${['ค่าบริการ', 'ค่าจ้างทำของ', 'ค่าเช่า', 'ค่าโฆษณา', 'ค่าขนส่ง', 'ค่าวิชาชีพอิสระ', 'ค่านายหน้า', 'อื่น ๆ'].map((x) => `<option ${cur.income === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
@@ -1124,34 +1215,60 @@
       if (pc) pc.onchange = () => { paidNow = pc.checked; $('[data-pf]', box).hidden = !paidNow; };
     }
 
-    // Scan a purchase bill
+    // Scan a purchase bill: the drop box here reads one file; #/scan reads many.
     const scan = $('[data-scan]', main);
+    const showScan = (it) => {
+      const box = $('[data-scanbox]', main);
+      if (!box) return;
+      box.hidden = false;
+      $('.editor', main).classList.add('has-scan');
+      box.innerHTML = `<details class="card scan-preview" open><summary><b>ไฟล์บิลต้นฉบับ</b><span class="muted">${esc(it.name)}</span><a href="${it.url}" target="_blank" rel="noopener" class="btn sm ghost">เปิดเต็มจอ</a></summary>
+        <div class="sp-body">${it.pdf ? `<iframe src="${it.url}#view=FitH" title="ไฟล์บิล"></iframe>` : `<img src="${it.url}" alt="ไฟล์บิล">`}</div></details>`;
+      const dup = $('[data-dupbox]', main);
+      if (dup) dup.innerHTML = it.duplicate ? `<div class="note-box warn">บิลเลขที่ ${esc(it.result?.doc_no || '')} เคยบันทึกแล้วใน <a href="#/doc/${it.duplicate.id}" target="_blank">${esc(it.duplicate.number)}</a> (${T.thDate(String(it.duplicate.date).slice(0, 10))}) ตรวจก่อนบันทึกซ้ำ</div>` : '';
+    };
     if (scan) {
       const fi = $('input[type=file]', scan);
-      scan.onclick = (e) => { if (e.target !== fi) fi.click(); };
-      fi.onchange = async () => {
-        const f = fi.files[0]; if (!f) return;
+      const one = async (f) => {
+        if (!f || !(/^image\//.test(f.type) || f.type === 'application/pdf')) { toast('เลือกได้เฉพาะรูปภาพหรือ PDF', true); return; }
+        const it = newScan(f);
         scan.innerHTML = '<b>กำลังอ่านบิล…</b><span class="muted">ใช้เวลาประมาณ 5–15 วินาที</span>';
-        try {
-          const { data, mediaType } = await fileToUpload(f);
-          const r = await post('/scan', { data, mediaType });
-          doc.attachment = r.attachment;
-          if (!r.result) { scan.innerHTML = '<b>แนบไฟล์แล้ว</b><span class="muted">อ่านข้อมูลอัตโนมัติไม่ได้ กรุณากรอกเอง</span>'; return; }
-          applyScan(r.result);
-          scan.innerHTML = `<b>อ่านบิลแล้ว ✓</b><span class="muted">ตรวจสอบข้อมูลก่อนบันทึก${r.result.confidence === 'low' ? ' (ภาพไม่ชัด ตรวจละเอียดอีกครั้ง)' : ''}</span>`;
-        } catch (err) { fail(err); scan.innerHTML = '<b>สแกนไม่สำเร็จ</b><span class="muted">ลองอีกครั้ง หรือกรอกเอง</span>'; }
+        await readScan(it);
+        if (it.status === 'failed') { scan.innerHTML = `<b>สแกนไม่สำเร็จ</b><span class="muted">${esc(it.error || '')} ลองอีกครั้ง หรือกรอกเอง</span>`; return; }
+        doc.attachment = it.attachment;
+        showScan(it);
+        if (!it.result) { scan.innerHTML = '<b>แนบไฟล์แล้ว</b><span class="muted">อ่านข้อมูลอัตโนมัติไม่ได้ กรุณากรอกเอง</span>'; return; }
+        await applyScan(it.result);
+        scan.hidden = true;
+        if (it.result.confidence === 'low') toast('ภาพไม่ค่อยชัด ตรวจข้อมูลอีกครั้งก่อนบันทึก', true);
       };
+      scan.onclick = (e) => { if (e.target !== fi && !e.target.closest('a')) fi.click(); };
+      fi.onchange = () => one(fi.files[0]);
+      scan.addEventListener('dragover', (e) => { e.preventDefault(); scan.classList.add('over'); });
+      scan.addEventListener('dragleave', () => scan.classList.remove('over'));
+      scan.addEventListener('drop', (e) => { e.preventDefault(); scan.classList.remove('over'); one(e.dataTransfer.files[0]); });
     }
     async function applyScan(r) {
       if (r.date) { doc.date = r.date; $('[name=date]', main).value = r.date; }
+      if (r.due_date && !r.paid) { doc.due_date = r.due_date; const dd = $('[name=due_date]', main); if (dd) dd.value = r.due_date; }
       if (r.doc_no) $('[name=ref_no]', main).value = r.doc_no;
       if (r.tax_invoice && r.date) $('[name=ref_date]', main).value = r.date;
       doc.tax_invoice = !!r.tax_invoice && (r.vat || 0) > 0;
       vatMode = doc.tax_invoice ? r.price_mode : 'none';
-      if (Array.isArray(r.lines) && r.lines.length) doc.lines = r.lines.map((l) => ({ ...blankLine('EX'), name: l.name, qty: l.qty || 1, price: l.price || 0, account: r.account || sysAcc('other_expense') }));
-      else if (r.total) doc.lines = [{ ...blankLine('EX'), name: r.vendor?.name || 'ค่าใช้จ่าย', price: r.total, account: r.account || sysAcc('other_expense') }];
+      const okAcc = (c) => (c && S.boot.accounts.some((a) => a.code === c) ? c : null);
+      const main0 = okAcc(r.account) || sysAcc('other_expense');
+      const wht = T.WHT_RATES.includes(Number(r.wht_rate)) ? Number(r.wht_rate) : 0;
+      if (Array.isArray(r.lines) && r.lines.length) {
+        doc.lines = r.lines.map((l) => ({ ...blankLine('EX'), name: l.name, qty: l.qty || 1, unit: l.unit || '', price: l.price || 0, disc: l.disc || 0, wht, account: okAcc(l.account) || main0 }));
+      } else if (r.total) doc.lines = [{ ...blankLine('EX'), name: r.vendor?.name || 'ค่าใช้จ่าย', price: r.total, wht, account: main0 }];
+      doc.discount = Number(r.discount) || 0;
+      if (r.paid) {
+        paidNow = true;
+        if (r.date) payDraft.date = r.date;
+        const pb = $('[data-paybox]', main); if (pb) delete pb.dataset.drawn;
+      }
       if (r.vendor?.name) {
-        let c = S.boot.contacts.find((x) => (r.vendor.tax_id && x.tax_id === r.vendor.tax_id) || x.name === r.vendor.name);
+        let c = S.boot.contacts.find((x) => !x.archived && ((r.vendor.tax_id && x.tax_id === r.vendor.tax_id && (!r.vendor.branch || !x.branch || x.branch === r.vendor.branch)) || x.name === r.vendor.name));
         if (!c) {
           c = (await post('/contacts', { kind: 'vendor', name: r.vendor.name, tax_id: r.vendor.tax_id, branch: r.vendor.branch, address: r.vendor.address, is_company: r.vendor.is_company })).contact;
           S.boot.contacts.push(c);
@@ -1164,6 +1281,13 @@
 
     drawVat();
     drawLines();
+    if (scanItem) {
+      doc.attachment = scanItem.attachment;
+      showScan(scanItem);
+      if (scanItem.result) {
+        try { await applyScan(scanItem.result); } catch (e) { fail(e); }
+      } else $('[data-dupbox]', main).innerHTML = '<div class="note-box warn">อ่านข้อมูลจากบิลนี้อัตโนมัติไม่ได้ ไฟล์แนบไว้แล้ว กรุณากรอกข้อมูลเอง</div>';
+    }
     main.addEventListener('input', (e) => {
       if (e.target.name === 'date') { doc.date = e.target.value; if (!fromInvoice && type === 'RE' && payDraft) { payDraft.date = e.target.value; const pd = $('[data-p=date]', main); if (pd) pd.value = e.target.value; } }
       if (e.target.name === 'due_date') doc.due_date = e.target.value;
@@ -1183,6 +1307,14 @@
         if (type === 'RE') body.pay = payDraft;
         if (isEx) body.pay = paidNow ? payDraft : null;
         const r = editId ? await put(`/docs/${editId}`, body) : await post('/docs', body);
+        if (scanItem) {
+          Object.assign(scanItem, { status: 'saved', doc: { id: r.doc.id, number: r.doc.number } });
+          const next = scans().find((x) => x.status === 'ready' || x.status === 'manual');
+          const left = scans().filter((x) => x.status !== 'saved' && x.status !== 'failed').length;
+          toast(`สร้าง ${r.doc.number} แล้ว${left ? ` · เหลืออีก ${left} ใบ` : ''}`);
+          location.hash = next ? `#/new/EX?scan=${next.id}` : left ? '#/scan' : `#/doc/${r.doc.id}`;
+          return;
+        }
         toast(editId ? 'บันทึกการแก้ไขแล้ว' : `สร้าง ${r.doc.number} แล้ว`);
         location.hash = `#/doc/${r.doc.id}`;
       } catch (e) { fail(e); } finally { btn.disabled = false; }
@@ -1199,7 +1331,7 @@
   // Images are shrunk to about 2000px JPEG before upload; PDFs go as they are.
   async function fileToUpload(f) {
     if (f.type === 'application/pdf') {
-      if (f.size > 8 * 1024 * 1024) throw new Error('ไฟล์ PDF ใหญ่เกิน 8 MB');
+      if (f.size > 7 * 1024 * 1024) throw new Error('ไฟล์ PDF ใหญ่เกิน 7 MB');
       const buf = new Uint8Array(await f.arrayBuffer());
       let bin = '';
       for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
@@ -1213,11 +1345,110 @@
     return { data: c.toDataURL('image/jpeg', 0.85).split(',')[1], mediaType: 'image/jpeg' };
   }
 
+  /* ---------- Scan purchase bills (#/scan) ---------- */
+
+  // Scanned bills wait here until each is reviewed and saved. They live in this tab only.
+  const scans = () => (S.scans ||= []);
+  const newScan = (f) => ({ id: Math.random().toString(36).slice(2, 10), name: f.name || 'bill', file: f, url: URL.createObjectURL(f), pdf: f.type === 'application/pdf', status: 'wait' });
+  async function readScan(it) {
+    it.status = 'reading';
+    try {
+      const { data, mediaType } = await fileToUpload(it.file);
+      const r = await post('/scan', { data, mediaType });
+      Object.assign(it, { attachment: r.attachment, result: r.result, duplicate: r.duplicate || null, status: r.result ? 'ready' : 'manual', error: '' });
+    } catch (e) {
+      Object.assign(it, { status: 'failed', error: e.message === 'too_large' ? 'ไฟล์ใหญ่เกินไป' : e.message });
+    }
+    return it;
+  }
+  let scanBusy = 0;
+  function pumpScans() {
+    for (const it of scans()) {
+      if (scanBusy >= 2) break;
+      if (it.status !== 'wait') continue;
+      scanBusy++;
+      const p = readScan(it);
+      S.scanTick?.();
+      p.finally(() => { scanBusy--; S.scanTick?.(); pumpScans(); });
+    }
+  }
+  function addScans(files) {
+    const ok = [...files].filter((f) => /^image\//.test(f.type) || f.type === 'application/pdf');
+    if (!ok.length) { toast('เลือกได้เฉพาะรูปภาพหรือ PDF', true); return; }
+    const room = 30 - scans().filter((x) => x.status !== 'saved').length;
+    if (ok.length > room) toast(`สแกนค้างได้ครั้งละ 30 ใบ รับไว้ ${Math.max(room, 0)} ใบ`, true);
+    ok.slice(0, Math.max(room, 0)).forEach((f) => scans().push(newScan(f)));
+    pumpScans();
+  }
+
+  function viewScan(main) {
+    main.innerHTML = `<div class="page-h"><div><h1>สแกนบิลซื้อ</h1><div class="sub">อ่านบิล ใบกำกับภาษี ใบเสร็จ จากรูปหรือ PDF ด้วย AI แล้วตรวจก่อนบันทึกเป็นค่าใช้จ่าย</div></div>
+      <div class="actions"><a class="btn ghost" href="#/docs/EX">ค่าใช้จ่ายทั้งหมด</a><a class="btn" href="#/new/EX">${ICON.plus}กรอกเอง</a></div></div>
+      <div class="scan-drop big" data-drop>${ICON.scan}<b>ลากไฟล์มาวาง หรือแตะเพื่อเลือกรูป / PDF</b>
+        <span class="muted">ถ่ายรูปบิลจากมือถือได้ เลือกได้หลายไฟล์พร้อมกัน หรือกด Ctrl+V วางรูปที่คัดลอกไว้ · PDF ไม่เกิน 7 MB</span>
+        <input type="file" accept="image/*,application/pdf" multiple hidden></div>
+      <div data-head></div><div class="scan-list" data-list></div>`;
+    const drop = $('[data-drop]', main);
+    const fi = $('input', drop);
+    drop.onclick = (e) => { if (e.target !== fi) fi.click(); };
+    fi.onchange = () => { addScans(fi.files); fi.value = ''; };
+    main.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+    main.addEventListener('dragleave', (e) => { if (!main.contains(e.relatedTarget)) drop.classList.remove('over'); });
+    main.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); addScans(e.dataTransfer.files); });
+    const onPaste = (e) => {
+      if (!main.isConnected) { document.removeEventListener('paste', onPaste); return; }
+      const files = [...(e.clipboardData?.files || [])];
+      if (files.length) { e.preventDefault(); addScans(files); }
+    };
+    document.addEventListener('paste', onPaste);
+
+    const STATE = {
+      wait: ['', 'รอคิว'], reading: ['info', 'กำลังอ่าน…'], ready: ['accent', 'พร้อมตรวจ'], manual: ['warn', 'อ่านไม่ได้ กรอกเอง'],
+      failed: ['bad', 'ส่งไม่สำเร็จ'], saved: ['good', 'บันทึกแล้ว'],
+    };
+    const draw = () => {
+      if (!main.isConnected) { if (S.scanTick === draw) S.scanTick = null; return; }
+      const all = scans();
+      const n = (s) => all.filter((x) => x.status === s).length;
+      const todo = n('ready') + n('manual');
+      const first = all.find((x) => x.status === 'ready' || x.status === 'manual');
+      $('[data-head]', main).innerHTML = all.length ? `<div class="scan-head"><span>${all.length} ไฟล์ · พร้อมตรวจ ${todo}${n('reading') + n('wait') ? ` · กำลังอ่าน ${n('reading') + n('wait')}` : ''} · บันทึกแล้ว ${n('saved')}</span>
+        <span class="actions">${n('saved') ? '<button class="btn sm ghost" data-clear>ล้างที่บันทึกแล้ว</button>' : ''}${first ? `<a class="btn sm primary" href="#/new/EX?scan=${first.id}">ตรวจและบันทึก${todo > 1 ? 'ทีละใบ' : ''}</a>` : ''}</span></div>` : '';
+      $('[data-list]', main).innerHTML = all.length ? all.map((it) => {
+        const r = it.result;
+        const [tone, label] = STATE[it.status];
+        const name = r?.vendor?.name || it.name;
+        const meta = r ? [r.date && T.thDate(r.date), r.doc_no && `เลขที่ ${r.doc_no}`, r.tax_invoice ? 'ใบกำกับภาษี' : 'บิล / ใบเสร็จ', r.vat ? `VAT ${money(r.vat)}` : ''].filter(Boolean).join(' · ') : it.status === 'failed' ? it.error : it.name;
+        const chips = `<span class="chip ${tone}">${it.status === 'reading' ? '<i class="spin"></i>' : ''}${label}${it.status === 'saved' ? ` <a href="#/doc/${it.doc.id}">${esc(it.doc.number)}</a>` : ''}</span>`
+          + (it.status !== 'saved' && it.duplicate ? ` <span class="chip bad" title="บิลเลขที่นี้เคยบันทึกแล้ว">อาจซ้ำ ${esc(it.duplicate.number)}</span>` : '')
+          + (it.status === 'ready' && r?.confidence === 'low' ? ' <span class="chip warn">ภาพไม่ชัด</span>' : '');
+        const btns = it.status === 'ready' || it.status === 'manual' ? `<a class="btn sm primary" href="#/new/EX?scan=${it.id}">ตรวจและบันทึก</a>`
+          : it.status === 'failed' ? '<button class="btn sm" data-retry>ลองใหม่</button>'
+            : it.status === 'saved' ? `<a class="btn sm ghost" href="#/doc/${it.doc.id}">ดูเอกสาร</a>` : '';
+        return `<div class="card scan-item${it.status === 'saved' ? ' done' : ''}" data-id="${it.id}">
+          <a class="scan-thumb" href="${it.url}" target="_blank" rel="noopener">${it.pdf ? '<span>PDF</span>' : `<img src="${it.url}" alt="">`}</a>
+          <div class="scan-info"><b>${esc(name)}</b><div class="muted">${esc(meta)}</div><div class="scan-chips">${chips}</div></div>
+          <div class="scan-amt">${r?.total != null ? `<b>${money(r.total)}</b><small>${r.paid ? 'จ่ายแล้ว' : 'รอจ่าย'}</small>` : ''}</div>
+          <div class="scan-act">${btns}${it.status !== 'reading' ? '<button class="rm" data-rm aria-label="นำออก">✕</button>' : ''}</div></div>`;
+      }).join('') : '<div class="empty"><b>ยังไม่มีบิลที่สแกน</b>เลือกรูปหรือ PDF ของบิลซื้อ ใบกำกับภาษี หรือใบเสร็จจากผู้ขาย ระบบจะอ่านผู้ขาย เลขประจำตัวผู้เสียภาษี เลขที่บิล วันที่ รายการ VAT และยอดรวมให้ แล้วคุณตรวจก่อนบันทึก</div>';
+    };
+    S.scanTick = draw;
+    main.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-id]');
+      const it = card && scans().find((x) => x.id === card.dataset.id);
+      if (e.target.closest('[data-clear]')) { S.scans = scans().filter((x) => x.status !== 'saved'); draw(); return; }
+      if (!it) return;
+      if (e.target.closest('[data-rm]')) { URL.revokeObjectURL(it.url); S.scans = scans().filter((x) => x !== it); draw(); }
+      if (e.target.closest('[data-retry]')) { it.status = 'wait'; pumpScans(); draw(); }
+    });
+    draw();
+  }
+
   /* ---------- Document view ---------- */
 
   async function viewDoc(main, id) {
-    const { doc, ref, children, journal } = await get(`/docs/${id}`);
-    const b = biz();
+    const { doc, ref, children, journal, issuer } = await get(`/docs/${id}`);
+    const b = signedBy(issuer);
     const printable = { ...doc, ref };
     const t = doc.type;
     const live = doc.status !== 'void';
@@ -1225,7 +1456,7 @@
     if (live && t === 'QT') acts.push(`<a class="btn primary" href="#/new/IV?from=${doc.id}">แปลงเป็นใบแจ้งหนี้</a>`, `<a class="btn" href="#/new/RE?from=${doc.id}">ออกใบเสร็จ (ขายสด)</a>`);
     if (live && t === 'IV' && doc.status === 'open') acts.push(`<a class="btn primary" href="#/new/RE?from=${doc.id}">รับชำระเงิน</a>`);
     if (live && t === 'EX' && doc.status === 'open') acts.push('<button class="btn primary" data-act="pay">บันทึกจ่ายเงิน</button>');
-    if (live && t === 'EX' && doc.status === 'paid' && doc.wht > 0) acts.push('<button class="btn" data-act="wht">พิมพ์ 50 ทวิ</button>');
+    if (live && t === 'EX' && doc.status === 'paid' && doc.wht > 0) acts.push('<button class="btn" data-act="wht">หนังสือรับรองหัก ณ ที่จ่าย</button>');
     const more = [];
     if (live && !(t === 'IV' && doc.status === 'paid')) more.push(`<a class="btn" href="#/edit/${doc.id}">แก้ไข</a>`);
     if (t !== 'EX') more.push(`<button class="btn" data-act="share">${ICON.link}${doc.public_token ? 'คัดลอกลิงก์' : 'สร้างลิงก์ให้ลูกค้า'}</button>`);
@@ -1236,7 +1467,7 @@
 
     const canSign = !!(b.signature || b.stamp);
     const billing = t === 'QT' || t === 'IV';
-    const P = printPrefs();
+    const P = printPrefs(b);
     main.innerHTML = `<div class="page-h"><div><h1><span class="mono">${esc(doc.number)}</span></h1><div class="sub">${esc(T.docTitle(doc)[0])} · ${statusChip(t, doc.status)}</div></div>
       <div class="actions">${acts.join('')}<button class="btn" data-act="pdf">ดาวน์โหลด PDF</button><button class="btn dark" data-act="print">${ICON.print}พิมพ์</button></div></div>
       <div class="view">
@@ -1300,7 +1531,7 @@
           try { await T.downloadPdf(T.renderSet(printable, b, opts()), `${doc.number}.pdf`); } finally { a.disabled = false; a.textContent = label; }
         }
         if (act === 'print') printHtml(T.renderSet(printable, b, opts()));
-        if (act === 'wht') printHtml(T.renderWht(doc, b));
+        if (act === 'wht') whtDialog(doc, b);
         if (act === 'share') { await shareDoc(doc); render(); }
         if (act === 'pay' && await payExpense(doc)) { toast('บันทึกจ่ายเงินแล้ว'); render(); }
         if (act === 'unpay' && await confirmBox('ยกเลิกการจ่ายเงิน', 'รายการจะกลับเป็นรอจ่าย และรายการบัญชีการจ่ายจะถูกลบ')) { await post(`/docs/${doc.id}/pay`, { pay: null }); render(); }
@@ -1309,6 +1540,67 @@
         if (act === 'file') { const { url } = await get(`/attachment?key=${encodeURIComponent(doc.attachment)}`); window.open(url, '_blank', 'noopener'); }
       } catch (err) { fail(err); }
     };
+  }
+
+  // หนังสือรับรองการหักภาษี ณ ที่จ่าย on the official RD form (wht50.js): preview, PDF, print.
+  function whtDialog(doc, b) {
+    const W = window.Wht50;
+    const canSign = !!(b.signature || b.stamp);
+    const opts = (el) => ({
+      copies: [1, 2].filter((n) => $(`[data-wc="${n}"]`, el).checked),
+      sign: canSign && $('[data-ws]', el).checked,
+    });
+    const make = async (el) => {
+      const o = opts(el);
+      if (!o.copies.length) throw new Error('เลือกอย่างน้อย 1 ฉบับ');
+      return W.pdf(doc, b, o);
+    };
+    const name = `${doc.wht_cert?.number || doc.number}-50ทวิ.pdf`;
+    return dialog({
+      title: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย', wide: true, ok: '', cancel: 'ปิด',
+      extra: '<button class="btn" data-wpdf>ดาวน์โหลด PDF</button><button class="btn dark" data-wprint>พิมพ์</button>',
+      body: `<div class="wht50">
+        <div class="wht50-paper" data-wp><div class="muted">กำลังสร้างตัวอย่าง…</div></div>
+        <div class="wht50-side">
+          <p class="muted" style="margin-top:0">แบบฟอร์มของกรมสรรพากร (50 ทวิ) ระบบเติมข้อมูลให้ในช่องเท่านั้น</p>
+          <label class="check"><input type="checkbox" data-wc="1" checked> ฉบับที่ 1 (ให้ผู้ถูกหัก)</label>
+          <label class="check"><input type="checkbox" data-wc="2" checked> ฉบับที่ 2 (เก็บเป็นหลักฐาน)</label>
+          <label class="sw-row${canSign ? '' : ' off'}"><span>ลายเซ็นและตราประทับ${canSign ? '' : '<small>อัปโหลดได้ที่ <a href="#/settings">ตั้งค่า</a></small>'}</span><input type="checkbox" class="sw" data-ws ${canSign && b.settings?.signAuto ? 'checked' : ''} ${canSign ? '' : 'disabled'}></label>
+          ${b.settings?.signer ? '' : '<p class="muted" style="font-size:12px">ใส่ชื่อผู้ลงนามได้ที่ <a href="#/settings">ตั้งค่า</a> › ชื่อผู้มีอำนาจลงนาม</p>'}
+        </div></div>`,
+      onOpen: (el) => {
+        const draw = async () => {
+          const o = opts(el);
+          try {
+            const cv = await W.canvas(doc, b, { ...o, copy: o.copies[0] || 1, background: 'forms/50tawi.png', scale: 2 });
+            const box = $('[data-wp]', el);
+            box.innerHTML = '';
+            box.appendChild(cv);
+          } catch (err) { fail(err); }
+        };
+        draw();
+        el.addEventListener('change', (e) => { if (e.target.closest('[data-wc],[data-ws]')) draw(); });
+        const busy = async (btn, fn) => {
+          const label = btn.textContent;
+          btn.disabled = true; btn.textContent = 'กำลังสร้าง PDF…';
+          try { await fn(); } catch (err) { fail(err); } finally { btn.disabled = false; btn.textContent = label; }
+        };
+        $('[data-wpdf]', el).onclick = (e) => busy(e.target, async () => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(await make(el));
+          a.download = name;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        });
+        $('[data-wprint]', el).onclick = (e) => {
+          const w = window.open('', '_blank');
+          busy(e.target, async () => {
+            const url = URL.createObjectURL(await make(el));
+            if (w) w.location.href = url; else window.location.href = url;
+          }).then(() => { if (w && w.location.href === 'about:blank') w.close(); });
+        };
+      },
+    });
   }
 
   // Scales the A4 paper down to fit narrow screens.
@@ -1453,8 +1745,9 @@
 
   const REPORTS = {
     vat_summary: ['สรุปภาษีมูลค่าเพิ่ม (ภ.พ.30)', 'ภาษีขาย ภาษีซื้อ และยอดที่ต้องชำระของเดือน', 'month', 'tax'],
-    vat_sales: ['รายงานภาษีขาย', 'ใบกำกับภาษีที่ออกในเดือน', 'month', 'tax'],
-    vat_purchase: ['รายงานภาษีซื้อ', 'ใบกำกับภาษีที่ได้รับในเดือน', 'month', 'tax'],
+    vat_sales: ['รายงานภาษีขายตามเอกสาร', 'ใบกำกับภาษีและใบเสร็จขายของเดือน พร้อมเลขผู้เสียภาษี สาขา', 'month', 'tax'],
+    vat_purchase: ['รายงานภาษีซื้อตามเอกสาร', 'ค่าใช้จ่ายของเดือน แยกสถานะใบกำกับภาษี', 'month', 'tax'],
+    vat_pp36: ['รายงานภาษีซื้อ ภ.พ.36', 'บริการจากต่างประเทศที่ต้องนำส่งภาษีเอง', 'month', 'tax'],
     wht_pnd3: ['ภ.ง.ด.3', 'หัก ณ ที่จ่ายบุคคลธรรมดา', 'month', 'tax'],
     wht_pnd53: ['ภ.ง.ด.53', 'หัก ณ ที่จ่ายนิติบุคคล', 'month', 'tax'],
     wht_recv: ['ภาษีถูกหัก ณ ที่จ่าย', 'ที่ลูกค้าหักไว้ ใช้เครดิตภาษีปลายปี', 'range', 'tax'],
@@ -1470,11 +1763,12 @@
   function viewReports(main) {
     const groups = [['sales', 'ขาย'], ['tax', 'ภาษี'], ['fs', 'งบการเงิน'], ['books', 'สมุดบัญชีและติดตามหนี้']];
     main.innerHTML = `<div class="page-h"><div><h1>รายงาน</h1><div class="sub">ดาวน์โหลดเป็น Excel หรือพิมพ์ได้ทุกรายงาน</div></div></div>
-      ${groups.map(([g, h]) => `<div class="rep-h">${h}</div><div class="rep-grid">${Object.entries(REPORTS).filter(([, r]) => r[3] === g && (g !== 'tax' || biz().vat_registered || !r[0].includes('ภาษีมูลค่าเพิ่ม') && !r[0].includes('ภาษีขาย') && !r[0].includes('ภาษีซื้อ'))).map(([k, r]) => `<a class="card" href="#/report/${k}"><b>${r[0]}</b><small>${r[1]}</small></a>`).join('')}</div>`).join('')}`;
+      ${groups.map(([g, h]) => `<div class="rep-h">${h}</div><div class="rep-grid">${g === 'tax' && biz().vat_registered ? '<a class="card" href="#/vat/purchases"><b>จัดการเอกสารภาษีซื้อ</b><small>สถานะใบกำกับภาษี รอใบกำกับ รอใช้สิทธิ์</small></a><a class="card" href="#/vat/returns"><b>เตรียมแบบภาษีรายเดือน</b><small>ภ.พ.30 และ ภ.พ.36 จากเอกสารของเดือน</small></a>' : ''}${Object.entries(REPORTS).filter(([, r]) => r[3] === g && (g !== 'tax' || biz().vat_registered || !r[0].includes('ภาษีมูลค่าเพิ่ม') && !r[0].includes('ภาษีขาย') && !r[0].includes('ภาษีซื้อ'))).map(([k, r]) => `<a class="card" href="#/report/${k}"><b>${r[0]}</b><small>${r[1]}</small></a>`).join('')}</div>`).join('')}`;
   }
 
   async function viewReport(main, name, q) {
     if (name === 'sales') return viewSales(main, q);
+    if (name === 'vat_sales' || name === 'vat_purchase' || name === 'vat_pp36') return viewVatReport(main, name, q);
     const R = REPORTS[name];
     if (!R) { main.innerHTML = '<div class="empty"><b>ไม่พบรายงาน</b></div>'; return; }
     const [title, , mode] = R;
@@ -1509,6 +1803,326 @@
     $('[data-csv]', main).onclick = () => excel(`${title}-${mode === 'month' ? month : to}`, csvRows, title);
     $('[data-print]', main).onclick = () => printHtml(`<div class="print-report"><h2 style="margin:0">${esc(title)}</h2><div>${esc(biz().name)}${biz().tax_id ? ` · เลขประจำตัวผู้เสียภาษี ${esc(T.taxIdFmt(biz().tax_id))}` : ''}</div><div style="margin-bottom:10px">${esc(periodText)}</div>${extra}<table>${$('[data-tbl]', main).innerHTML}</table></div>`);
     main.querySelector('tbody').onclick = (e) => { const tr = e.target.closest('[data-doc]'); if (tr) location.hash = `#/doc/${tr.dataset.doc}`; };
+  }
+
+  /* ---------- VAT: reports by document, purchase tax documents, monthly returns ---------- */
+
+  const TH_MONTH_NAMES = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  const taxMonthText = (ym) => `${TH_MONTH_NAMES[Number(ym.slice(5, 7)) - 1]} ปี ${Number(ym.slice(0, 4)) + 543}`;
+  const shiftMonth = (ym, n) => { const d = new Date(`${ym}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+  // How an expense stands for input VAT.
+  const VAT_ST = {
+    got: ['ได้รับใบกำกับภาษีแล้ว', 'good'], wait: ['รอใบกำกับภาษี', 'warn'],
+    none: ['ไม่มีใบกำกับภาษี', ''], pp36: ['บริการต่างประเทศ (ภ.พ.36)', 'info'],
+  };
+  const SALE_ST = { '': 'แสดงทั้งหมด', open: 'รอชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิก' };
+  const BUY_ST = { '': 'แสดงทั้งหมด', got: 'ใช้สิทธิ์ภาษีซื้อเดือนนี้', wait: 'รอใบกำกับภาษี', none: 'ไม่มีใบกำกับภาษี', pp36: 'บริการต่างประเทศ (ภ.พ.36)' };
+  const VAT_TITLE = { vat_sales: 'รายงานภาษีขายตามเอกสาร', vat_purchase: 'รายงานภาษีซื้อตามเอกสาร', vat_pp36: 'รายงานภาษีซื้อ ภ.พ.36' };
+
+  // The business lines printed under a tax report's title.
+  function taxpayerLines(ym) {
+    const b = biz();
+    return [
+      `เดือนภาษี ${taxMonthText(ym)}`,
+      `ชื่อผู้ประกอบการ ${b.name}${b.tax_id ? ` เลขประจำตัวผู้เสียภาษีอากร ${T.taxIdFmt(b.tax_id)}` : ''} (${T.branchFmt(b.branch || '00000')})`,
+      ...(b.address ? [`ชื่อสถานประกอบการ ${String(b.address).replace(/\s*\n\s*/g, ' ')}`] : []),
+    ];
+  }
+
+  async function viewVatReport(main, name, q) {
+    const now = ymNow();
+    const month = /^\d{4}-\d{2}$/.test(q.get('month') || '') ? q.get('month') : now;
+    const isSale = name === 'vat_sales';
+    const isPp36 = name === 'vat_pp36';
+    const ST = isSale ? SALE_ST : BUY_ST;
+    const status = !isPp36 && Object.keys(ST).includes(q.get('s') || '') ? q.get('s') || '' : '';
+    const d = await get(`/reports/${name}?month=${month}${status ? `&status=${status}` : ''}`);
+    const title = VAT_TITLE[name];
+    const preset = month === now ? 'cur' : month === shiftMonth(now, -1) ? 'last' : 'pick';
+    const n = (v) => `<td class="num">${money(v)}</td>`;
+    const rateLine = (r) => `<div class="vat-rate"><span>${r.rate}%</span><span>${money(r.rate ? r.base : r.value)}</span></div>`;
+    let cols; let body; let foot; let raw;
+    if (isPp36) {
+      cols = ['ลำดับ', 'วันที่จ่าย', 'เลขที่เอกสาร', 'เลขที่อ้างอิง', 'ผู้ให้บริการ', 'จำนวนเงินที่จ่าย', 'ภาษี 7%'];
+      body = d.rows.map((r, i) => `<tr class="click" data-doc="${r.id}"><td>${i + 1}</td><td class="nowrap">${T.slashDate(r.date)}</td><td><span class="doc-no">${esc(r.number)}</span>${r.paid ? '' : ' <span class="chip warn">ยังไม่จ่าย</span>'}</td><td>${esc(r.ref_no)}</td><td>${esc(r.name)}</td>${n(r.base)}${n(r.vat)}</tr>`).join('');
+      foot = `<tr><td colspan="5">รวม ${d.totals.count} รายการ</td>${n(d.totals.base)}${n(d.totals.vat)}</tr>`;
+      raw = [cols, ...d.rows.map((r, i) => [i + 1, T.slashDate(r.date), r.number, r.ref_no, r.name, r.base, r.vat]), ['', '', '', '', 'รวม', d.totals.base, d.totals.vat]];
+    } else if (isSale) {
+      cols = ['ลำดับ', 'วันที่', 'เลขที่เอกสาร', 'เอกสารอ้างอิง', 'ชื่อลูกค้า', 'เลขผู้เสียภาษี', 'สาขา', 'มูลค่า', 'ภาษีมูลค่าเพิ่ม', ''];
+      body = d.rows.map((r, i) => `<tr class="click${r.void ? ' void' : ''}" data-doc="${r.id}"><td>${i + 1}</td><td class="nowrap">${T.slashDate(r.date)}</td>
+        <td class="nowrap"><span class="dot ${r.void ? 'bad' : r.status === 'paid' ? 'good' : 'warn'}"></span><span class="doc-no">${esc(r.number)}</span>${r.void ? ' <span class="chip bad">ยกเลิก</span>' : ''}</td>
+        <td>${esc(r.ref_no)}</td><td>${esc(r.name)}</td><td class="mono nowrap">${esc(T.taxIdFmt(r.tax_id))}</td><td>${esc(T.branchFmt(r.branch))}</td>
+        <td class="num">${money(r.value)}${r.void ? '' : rateLine(r)}</td>${n(r.vat)}<td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`).join('');
+      foot = `<tr><td colspan="7">รวม ${d.shown.count} เอกสาร</td>${n(d.shown.value)}${n(d.shown.vat)}<td></td></tr>`;
+      raw = [cols.slice(0, 9).concat(['อัตราภาษี', 'ฐานภาษี 7%', 'อัตรา 0 / ยกเว้น', 'สถานะ']),
+        ...d.rows.map((r, i) => [i + 1, T.slashDate(r.date), r.number, r.ref_no, r.name, r.tax_id, T.branchFmt(r.branch), r.value, r.vat, r.void ? '' : `${r.rate}%`, r.base, r.zero, SALE_ST[r.status] || r.status]),
+        ['', '', '', '', 'รวม', '', '', d.shown.value, d.shown.vat, '', d.shown.base, d.shown.zero, '']];
+    } else {
+      cols = ['ลำดับ', 'วันที่', 'เลขที่เอกสาร', 'เลขที่ใบกำกับภาษี', 'ชื่อผู้จำหน่าย', 'เลขผู้เสียภาษี', 'สาขา', 'มูลค่า', 'ภาษีมูลค่าเพิ่ม', 'สถานะ', ''];
+      body = d.rows.map((r, i) => `<tr class="click" data-doc="${r.id}"><td>${i + 1}</td><td class="nowrap">${T.slashDate(r.date)}</td>
+        <td class="nowrap"><span class="doc-no">${esc(r.number)}</span>${r.deferred ? `<div class="muted" style="font-size:12px">ยกมาจาก ${esc(T.thMonth(r.doc_date.slice(0, 7)))}</div>` : ''}</td>
+        <td>${esc(r.ref_no)}</td><td>${esc(r.name)}</td><td class="mono nowrap">${esc(T.taxIdFmt(r.tax_id))}</td><td>${esc(T.branchFmt(r.branch))}</td>
+        <td class="num">${money(r.value)}${r.vat ? rateLine(r) : ''}</td>${n(r.vat)}<td><span class="chip ${VAT_ST[r.state][1]}">${esc(VAT_ST[r.state][0])}</span></td>
+        <td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`).join('');
+      foot = `<tr><td colspan="7">รวม ${d.shown.count} เอกสาร</td>${n(d.shown.value)}${n(d.shown.vat)}<td colspan="2"></td></tr>`;
+      raw = [cols.slice(0, 10), ...d.rows.map((r, i) => [i + 1, T.slashDate(r.date), r.number, r.ref_no, r.name, r.tax_id, T.branchFmt(r.branch), r.value, r.vat, VAT_ST[r.state][0]]),
+        ['', '', '', '', 'รวม', '', '', d.shown.value, d.shown.vat, '']];
+    }
+    const sums = isPp36 ? [['ภาษีที่ต้องนำส่ง ภ.พ.36', d.totals.vat]]
+      : isSale ? [['ยอดขายทั้งหมด', d.totals.value], ['ยอดขายที่ต้องเสียภาษี', d.totals.base], ['อัตรา 0 / ได้รับยกเว้น', d.totals.zero], ['ภาษีขาย', d.totals.vat]]
+        : [['ยอดซื้อที่ใช้สิทธิ์', d.totals.base], ['ภาษีซื้อที่ใช้สิทธิ์', d.totals.vat], ['เอกสารที่ใช้สิทธิ์', `${d.totals.count} ใบ`]];
+    const note = !isSale && !isPp36 && d.waiting.count
+      ? `<div class="note-box warn" style="margin:0 0 14px">มีเอกสารรอใบกำกับภาษี ${d.waiting.count} ใบ (ภาษี ${money(d.waiting.vat)} บาท) ยังไม่นับเป็นภาษีซื้อ · <a href="#/vat/purchases?s=wait">จัดการเอกสารภาษีซื้อ</a></div>` : '';
+    const lines = taxpayerLines(month);
+    const table = `<table class="tbl vat-tbl" data-tbl><thead><tr>${cols.map((c, i) => `<th class="${['มูลค่า', 'ภาษีมูลค่าเพิ่ม', 'จำนวนเงินที่จ่าย', 'ภาษี 7%'].includes(c) ? 'num' : ''}">${c}</th>`).join('')}</tr></thead>
+      <tbody>${body || `<tr><td colspan="${cols.length}"><div class="empty"><b>ไม่มีเอกสารในเดือนนี้</b>${isSale ? 'ใบแจ้งหนี้ที่เป็นใบกำกับภาษี และใบเสร็จรับเงินของเดือนจะแสดงที่นี่' : isPp36 ? 'ตั้งค่าใช้จ่ายเป็น “บริการต่างประเทศ (ภ.พ.36)” ได้ที่หน้าจัดการเอกสารภาษีซื้อ' : 'ค่าใช้จ่ายของเดือนจะแสดงที่นี่'}</div></td></tr>`}</tbody>
+      ${d.rows.length ? `<tfoot>${foot}</tfoot>` : ''}</table>`;
+    const head = `<div class="vat-head"><h2>${esc(title)}</h2>${lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+    const sumBox = `<div class="vat-sums">${sums.map(([k, v]) => `<div><span>${k}</span><b>${typeof v === 'number' ? money(v) : esc(v)}</b></div>`).join('')}</div>`;
+    main.innerHTML = `<div class="page-h"><div><a href="#/reports" class="muted" style="text-decoration:none">← รายงาน</a><h1>${esc(title)}</h1><div class="sub">${esc(biz().name)} · เดือนภาษี ${esc(T.thMonth(month))}</div></div>
+      <div class="actions"><button class="btn primary" data-xls>ดาวน์โหลดเป็น Excel</button><button class="btn dark" data-print>${ICON.print}พิมพ์</button></div></div>
+      <div class="card vat-filter">
+        <label class="field"><span>ช่วงเวลา</span><span class="row-in"><select data-c="r">${[['cur', 'เดือนปัจจุบัน'], ['last', 'เดือนก่อน'], ['pick', 'เลือกเดือน']].map(([v, l]) => `<option value="${v}" ${v === preset ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <input type="month" value="${month}" data-c="month"></span></label>
+        ${isPp36 ? '' : `<label class="field"><span>สถานะ</span><select data-c="s">${Object.entries(ST).map(([v, l]) => `<option value="${v}" ${v === status ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`}
+        <span style="flex:1"></span>
+        ${isSale ? '' : '<a class="btn ghost" href="#/vat/purchases">จัดการเอกสารภาษีซื้อ</a>'}<a class="btn ghost" href="#/vat/returns">เตรียมแบบภาษีรายเดือน</a>
+      </div>
+      ${note}
+      <div class="card card-pad">${head}${sumBox}<div class="tbl-wrap">${table}</div></div>`;
+    const go = (patch) => {
+      const p = new URLSearchParams({ month, ...(status ? { s: status } : {}), ...patch });
+      if (!p.get('s')) p.delete('s');
+      location.hash = `#/report/${name}?${p}`;
+    };
+    main.addEventListener('change', (e) => {
+      const c = e.target.dataset.c; if (!c) return;
+      if (c === 'r') { if (e.target.value === 'cur') go({ month: now }); else if (e.target.value === 'last') go({ month: shiftMonth(now, -1) }); else $('[data-c=month]', main).showPicker?.(); return; }
+      if (c === 'month' && /^\d{4}-\d{2}$/.test(e.target.value)) go({ month: e.target.value });
+      if (c === 's') go({ s: e.target.value });
+    });
+    $('[data-xls]', main).onclick = () => excel(`${title}-${month}`, [[title], ...lines.map((l) => [l]), [], raw[0], ...raw.slice(1), [], ...sums], title.replace('รายงาน', ''));
+    $('[data-print]', main).onclick = () => printHtml(`<div class="print-report">${head}${table}</div>`);
+    main.querySelector('tbody').onclick = (e) => {
+      const tr = e.target.closest('[data-doc]'); if (!tr) return;
+      const more = e.target.closest('[data-more]');
+      if (!more) { location.hash = `#/doc/${tr.dataset.doc}`; return; }
+      const items = [['ดูเอกสาร', () => { location.hash = `#/doc/${tr.dataset.doc}`; }], ['ดาวน์โหลด PDF', async () => { try { toast('กำลังสร้าง PDF…'); await downloadDocs([tr.dataset.doc], printPrefs()); } catch (err) { fail(err); } }]];
+      if (!isSale) items.push(['เปลี่ยนสถานะใบกำกับภาษี', () => { location.hash = `#/vat/purchases?m=${month}`; }]);
+      popMenu(more, items);
+    };
+  }
+
+  // จัดการเอกสารภาษีซื้อ: every expense with the status of its tax invoice and the month it is claimed in.
+  async function viewVatPurchases(main, q) {
+    const now = ymNow();
+    const m = /^\d{4}-\d{2}$/.test(q.get('m') || '') ? q.get('m') : '';
+    const period = m ? 'pick' : q.get('p') || 'all';
+    const ranges = {
+      all: null, month: monthRange(now), last: monthRange(shiftMonth(now, -1)),
+      year: [`${now.slice(0, 4)}-01-01`, `${now.slice(0, 4)}-12-31`], pick: m ? monthRange(m) : null,
+    };
+    const range = ranges[period];
+    const { docs } = await get(`/vat/purchases${range ? `?from=${range[0]}&to=${range[1]}` : ''}`);
+    const FILTER = { '': 'ทั้งหมด', wait: 'รอใบกำกับภาษี', got: 'ได้รับแล้ว', defer: 'รอใช้สิทธิ์', none: 'ไม่มีใบกำกับภาษี', pp36: 'ภ.พ.36' };
+    let status = Object.keys(FILTER).includes(q.get('s') || '') ? q.get('s') || '' : '';
+    let rate = '';
+    let shown = 50;
+    const sel = new Set();
+    const deferred = (d) => d.claim_month !== d.date.slice(0, 7);
+    main.innerHTML = `<div class="page-h"><div><h1>จัดการเอกสารภาษีซื้อ</h1><div class="sub">สถานะใบกำกับภาษีของค่าใช้จ่าย และเดือนที่ใช้สิทธิ์ภาษีซื้อ</div></div>
+      <div class="actions"><a class="btn efiling" href="https://efiling.rd.go.th/rd-efiling-web/login" target="_blank" rel="noopener" title="ยื่นแบบ ภ.พ.30 ทางเว็บไซต์กรมสรรพากร (เปิดแท็บใหม่)" aria-label="ยื่น E-Filing กรมสรรพากร"><img src="img/efiling.png" alt="E-Filing"></a><button class="btn" data-xls>ดาวน์โหลด Excel</button><a class="btn" href="#/report/vat_purchase">รายงานภาษีซื้อ</a><a class="btn" href="#/scan">${ICON.scan}สแกนบิลซื้อ</a><a class="btn primary" href="#/new/EX">${ICON.plus}บันทึกค่าใช้จ่าย</a></div></div>
+      <div class="card">
+        <div class="filters">
+          <input type="search" placeholder="ค้นหา เลขที่เอกสาร ชื่อผู้จำหน่าย เลขที่ใบกำกับภาษี" data-q style="flex:1;max-width:none;min-width:200px">
+          <select data-p>${[['all', 'ทุกช่วงเวลา'], ['month', 'เดือนนี้'], ['last', 'เดือนก่อน'], ['year', 'ปีนี้'], ...(m ? [['pick', T.thMonth(m)]] : [])].map(([v, l]) => `<option value="${v}" ${v === period ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <select data-rate><option value="">อัตรา VAT ทั้งหมด</option><option value="7">อัตรา VAT 7%</option><option value="0">ไม่มี VAT</option></select>
+        </div>
+        <div class="filters"><div class="seg" data-s>${Object.entries(FILTER).map(([v, l]) => `<button data-v="${v}" class="${v === status ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+        <div class="bulk" data-bulk hidden><b data-bn></b><button class="btn sm" data-set="got">ได้รับใบกำกับภาษีแล้ว</button><button class="btn sm" data-set="wait">รอใบกำกับภาษี</button><button class="btn sm" data-set="defer">ใช้สิทธิ์เดือนอื่น</button><button class="btn sm" data-set="pp36">ภ.พ.36</button><button class="btn sm ghost" data-bc>ล้างที่เลือก</button></div>
+        <div class="vat-count" data-count></div>
+        <div class="tbl-wrap"><table class="tbl doc-tbl ex"><thead><tr>
+          <th class="ck"><input type="checkbox" data-all aria-label="เลือกทั้งหมด"></th><th></th><th>วันที่เอกสาร</th><th>เลขที่เอกสาร</th><th>ชื่อผู้จำหน่าย</th>
+          <th class="num">มูลค่า / ภาษีมูลค่าเพิ่ม</th><th>สถานะใบกำกับภาษี</th><th>ใช้สิทธิ์เดือน</th><th></th></tr></thead>
+        <tbody data-body></tbody></table></div>
+        <div class="pager" data-more-wrap></div>
+      </div>`;
+    const filtered = () => {
+      const s = $('[data-q]', main).value.trim().toLowerCase();
+      return docs.filter((d) => (!status || (status === 'defer' ? deferred(d) : d.state === status))
+        && (!rate || (rate === '7' ? d.vat > 0 : !(d.vat > 0)))
+        && (!s || d.number.toLowerCase().includes(s) || (d.contact_name || '').toLowerCase().includes(s) || (d.ref_no || '').toLowerCase().includes(s) || (d.tax_id || '').includes(s)));
+    };
+    const stCell = (d) => {
+      const hasVat = d.state === 'got' || d.state === 'wait';
+      const opts = hasVat ? [['wait', 'รอใบกำกับภาษี'], ['got', 'ได้รับใบกำกับภาษีแล้ว'], ['defer', 'ใช้สิทธิ์เดือนอื่น…']] : [['none', 'ไม่มีใบกำกับภาษี'], ['pp36', 'บริการต่างประเทศ (ภ.พ.36)']];
+      return `<label class="st ${VAT_ST[d.state][1]} pick"><select data-st="${d.id}" aria-label="สถานะใบกำกับภาษี">${opts.map(([v, l]) => `<option value="${v}" ${v === d.state ? 'selected' : ''}>${l}</option>`).join('')}</select>${CHEV}</label>`;
+    };
+    const draw = () => {
+      const rows = filtered();
+      const view = rows.slice(0, shown);
+      $('[data-count]', main).innerHTML = `รายการทั้งหมด <b>${rows.length}</b> รายการ · ภาษีซื้อ ${money(rows.reduce((a, d) => a + (d.state === 'got' ? d.vat : 0), 0))} บาท${rows.some((d) => d.state === 'wait') ? ` · รอใบกำกับภาษี ${money(rows.reduce((a, d) => a + (d.state === 'wait' ? d.vat : 0), 0))} บาท` : ''}`;
+      $('[data-body]', main).innerHTML = view.length ? view.map((d) => `<tr class="click${sel.has(d.id) ? ' sel' : ''}" data-id="${d.id}">
+        <td class="ck"><input type="checkbox" data-ck ${sel.has(d.id) ? 'checked' : ''} aria-label="เลือก"></td>
+        <td class="th-cell"><div class="thumb">${d.thumb ? `<img src="${esc(d.thumb)}" alt="" loading="lazy">` : d.attachment ? '<span>PDF</span>' : ICON.ex}</div></td>
+        <td class="nowrap">${T.thDate(d.date)}</td>
+        <td class="nowrap"><span class="dot ${statusTone(d.status, 'EX')}"></span><span class="doc-no">${esc(d.number)}</span>${d.ref_no ? `<div class="muted" style="font-size:12px">ใบกำกับ ${esc(d.ref_no)}</div>` : ''}</td>
+        <td>${esc(d.contact_name || '')}${d.tax_id ? `<div class="muted mono" style="font-size:12px">${esc(T.taxIdFmt(d.tax_id))}</div>` : ''}</td>
+        <td class="num"><b>${money(d.value)}</b><div class="muted" style="font-size:12px">${d.vat > 0 ? money(d.vat) : d.state === 'pp36' ? `ภ.พ.36 ${money(Math.round(d.value * 7) / 100)}` : '–'}</div></td>
+        <td>${stCell(d)}</td>
+        <td class="nowrap">${d.state === 'got' || d.state === 'wait' ? `${esc(T.thMonth(d.claim_month))}${deferred(d) ? ' <span class="chip info">รอใช้สิทธิ์</span>' : ''}` : '<span class="muted">–</span>'}</td>
+        <td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`).join('')
+        : '<tr><td colspan="9"><div class="empty"><b>ไม่มีเอกสาร</b>ลองเปลี่ยนช่วงเวลาหรือสถานะ</div></td></tr>';
+      $('[data-more-wrap]', main).innerHTML = rows.length > shown ? `<button class="btn sm" data-showmore>แสดงเพิ่ม (${rows.length - shown})</button>` : '';
+      $('[data-all]', main).checked = view.length > 0 && view.every((d) => sel.has(d.id));
+      $('[data-bulk]', main).hidden = !sel.size;
+      $('[data-bn]', main).textContent = `เลือก ${sel.size} รายการ`;
+    };
+    draw();
+    // Ask for the claim month: the document's month up to six months later.
+    const pickMonth = async (list) => {
+      const own = list.map((d) => d.date.slice(0, 7)).sort().pop();
+      const first = list.map((d) => d.date.slice(0, 7)).sort()[0];
+      const max = shiftMonth(first, 6);
+      return dialog({
+        title: 'ใช้สิทธิ์ภาษีซื้อเดือนอื่น', ok: 'บันทึก',
+        body: `<p style="margin:0 0 12px">เลือกเดือนภาษีที่จะนำภาษีซื้อไปหัก (ใช้สิทธิ์ได้ภายใน 6 เดือนนับจากเดือนที่ออกใบกำกับภาษี)</p>
+          <label class="field"><span>ใช้สิทธิ์ในเดือนภาษี</span><input type="month" name="month" min="${own}" max="${max}" value="${list.length === 1 ? list[0].claim_month : shiftMonth(own, 1) > max ? own : shiftMonth(own, 1)}"></label>`,
+        onOk: (el) => { const v = $('[name=month]', el).value; if (!v || v < own || v > max) { toast(`เลือกเดือน ${T.thMonth(own)} ถึง ${T.thMonth(max)}`, true); return false; } return v; },
+      });
+    };
+    const setStatus = async (list, v) => {
+      if (!list.length) return;
+      let body = { ids: list.map((d) => d.id), status: v };
+      if (v === 'defer') {
+        const month = await pickMonth(list.filter((d) => d.state === 'got' || d.state === 'wait'));
+        if (!month) { draw(); return; }
+        body = { ...body, status: 'got', month };
+      } else if (v === 'wait') body.month = list.length === 1 ? list[0].vat_month : null;
+      const r = await post('/vat/purchases', body);
+      for (const d of list) {
+        if (r.skipped.includes(d.id)) continue;
+        if (body.status === 'got' || body.status === 'wait') { d.state = body.status; d.vat_month = body.month || null; d.claim_month = body.month || d.date.slice(0, 7); } else d.state = body.status;
+      }
+      toast(r.skipped.length ? `เปลี่ยนแล้ว ${r.updated} รายการ · ข้าม ${r.skipped.length} รายการที่ใช้สถานะนี้ไม่ได้` : `เปลี่ยนสถานะแล้ว ${r.updated} รายการ`);
+      draw();
+    };
+    $('[data-q]', main).oninput = () => { shown = 50; draw(); };
+    $('[data-rate]', main).onchange = (e) => { rate = e.target.value; draw(); };
+    $('[data-p]', main).onchange = (e) => { location.hash = `#/vat/purchases?p=${e.target.value}${status ? `&s=${status}` : ''}`; };
+    $('[data-s]', main).onclick = (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      status = b.dataset.v; shown = 50;
+      $$('[data-s] button', main).forEach((x) => x.classList.toggle('on', x === b));
+      draw();
+    };
+    $('[data-all]', main).onchange = (e) => { filtered().slice(0, shown).forEach((d) => (e.target.checked ? sel.add(d.id) : sel.delete(d.id))); draw(); };
+    $('[data-bc]', main).onclick = () => { sel.clear(); draw(); };
+    $('[data-bulk]', main).onclick = async (e) => {
+      const b = e.target.closest('[data-set]'); if (!b) return;
+      try { await setStatus(docs.filter((d) => sel.has(d.id)), b.dataset.set); sel.clear(); draw(); } catch (err) { fail(err); }
+    };
+    $('[data-more-wrap]', main).onclick = (e) => { if (e.target.closest('[data-showmore]')) { shown += 50; draw(); } };
+    $('[data-xls]', main).onclick = () => excel(`เอกสารภาษีซื้อ-${T.today()}`, [
+      ['วันที่เอกสาร', 'เลขที่เอกสาร', 'เลขที่ใบกำกับภาษี', 'ชื่อผู้จำหน่าย', 'เลขผู้เสียภาษี', 'มูลค่า', 'ภาษีมูลค่าเพิ่ม', 'สถานะใบกำกับภาษี', 'ใช้สิทธิ์เดือน'],
+      ...filtered().map((d) => [d.date, d.number, d.ref_no || '', d.contact_name || '', d.tax_id || '', d.value, d.vat, VAT_ST[d.state][0], d.state === 'got' || d.state === 'wait' ? d.claim_month : '']),
+    ], 'เอกสารภาษีซื้อ');
+    const body = $('[data-body]', main);
+    body.addEventListener('change', async (e) => {
+      const ck = e.target.closest('[data-ck]');
+      if (ck) { const id = ck.closest('[data-id]').dataset.id; if (ck.checked) sel.add(id); else sel.delete(id); draw(); return; }
+      const st = e.target.closest('[data-st]'); if (!st) return;
+      try { await setStatus([docs.find((x) => x.id === st.dataset.st)], st.value); } catch (err) { fail(err); draw(); }
+    });
+    body.addEventListener('click', (e) => {
+      if (e.target.closest('.ck, .st')) return;
+      const tr = e.target.closest('[data-id]'); if (!tr) return;
+      const d = docs.find((x) => x.id === tr.dataset.id);
+      const more = e.target.closest('[data-more]');
+      if (!more) { location.hash = `#/doc/${d.id}`; return; }
+      const items = [['ดูเอกสาร', () => { location.hash = `#/doc/${d.id}`; }], ['แก้ไข', () => { location.hash = `#/edit/${d.id}`; }]];
+      if (d.attachment) items.push(['ดูไฟล์บิล', async () => { try { const { url } = await get(`/attachment?key=${encodeURIComponent(d.attachment)}`); window.open(url, '_blank', 'noopener'); } catch (err) { fail(err); } }]);
+      if (d.state === 'got' || d.state === 'wait') items.push(null, ['ใช้สิทธิ์เดือนอื่น…', () => setStatus([d], 'defer').catch(fail)]);
+      if (deferred(d)) items.push(['ใช้สิทธิ์เดือนของเอกสาร', () => setStatus([d], 'got').catch(fail)]);
+      popMenu(more, items);
+    });
+  }
+
+  // เตรียมแบบภาษีรายเดือน: ภ.พ.30 and ภ.พ.36 worked out from the documents, marked filed when sent to the RD.
+  const PP30_LINES = [
+    ['l1', '1. ยอดขายในเดือนนี้'], ['l2', '2. ลบ ยอดขายที่เสียภาษีในอัตราร้อยละ 0 และที่ได้รับยกเว้น'], ['l4', '4. ยอดขายที่ต้องเสียภาษี'],
+    ['l5', '5. ภาษีขายเดือนนี้'], ['l6', '6. ยอดซื้อที่มีสิทธิ์นำภาษีซื้อมาหักในการคำนวณภาษีเดือนนี้'], ['l7', '7. ภาษีซื้อเดือนนี้'],
+    ['l8', '8. ภาษีที่ต้องชำระเดือนนี้ (5 มากกว่า 7)'], ['l9', '9. ภาษีที่ชำระเกินเดือนนี้ (5 น้อยกว่า 7)'], ['l10', '10. ภาษีที่ชำระเกินยกมา'],
+    ['l11', '11. ภาษีสุทธิที่ต้องชำระ'], ['l12', '12. ภาษีสุทธิที่ชำระเกิน'],
+  ];
+  const FORM_NAME = { PP30: 'ภ.พ.30', PP36: 'ภ.พ.36' };
+  async function newReturn(form) {
+    const month = await dialog({
+      title: `เตรียมแบบ ${FORM_NAME[form]}`, ok: 'สร้าง',
+      body: `<label class="field"><span>เดือนภาษี</span><input type="month" name="month" value="${shiftMonth(ymNow(), -1)}" max="${ymNow()}"></label>
+        <p class="muted" style="margin:10px 0 0;font-size:13px">${form === 'PP30' ? 'คำนวณจากรายงานภาษีขายและภาษีซื้อตามเอกสารของเดือนนั้น พร้อมภาษีชำระเกินยกมาจากเดือนก่อน' : 'คำนวณจากค่าใช้จ่ายที่ตั้งเป็นบริการต่างประเทศ (ภ.พ.36) ที่จ่ายในเดือนนั้น'}</p>`,
+      onOk: (el) => $('[name=month]', el).value || false,
+    });
+    if (!month) return;
+    const r = await post('/vat/returns', { form, month });
+    location.hash = `#/vat/returns/${r.return.id}`;
+  }
+  async function viewVatReturns(main, q, id) {
+    const { returns } = await get('/vat/returns');
+    if (id) return viewVatReturn(main, returns.find((r) => r.id === id));
+    const tab = ['PP30', 'PP36'].includes(q.get('f')) ? q.get('f') : '';
+    const list = returns.filter((r) => !tab || r.form === tab);
+    const net = (r) => (r.form === 'PP36' ? r.data.vat : r.data.l11 ? r.data.l11 : -r.data.l12);
+    main.innerHTML = `<div class="page-h"><div><h1>เตรียมแบบภาษีรายเดือน</h1><div class="sub">ภ.พ.30 ภาษีมูลค่าเพิ่ม และ ภ.พ.36 บริการจากต่างประเทศ</div></div>
+      <div class="actions"><button class="btn primary" data-new>${ICON.plus}สร้างใหม่ ${CHEV}</button></div></div>
+      <div class="seg" style="margin-bottom:14px" data-tab>${[['', 'แสดงทั้งหมด'], ['PP30', 'ภ.พ.30'], ['PP36', 'ภ.พ.36']].map(([v, l]) => `<button data-v="${v}" class="${v === tab ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>วันที่ชำระภาษี</th><th>เดือนที่ยื่นแบบภาษี</th><th>แบบฟอร์มภาษี</th><th class="num">มูลค่าภาษีขาย</th><th class="num">มูลค่าภาษีซื้อ</th><th class="num">ต้องชำระ / ชำระเกิน</th><th>สถานะ</th></tr></thead>
+        <tbody data-body>${list.length ? list.map((r) => `<tr class="click" data-id="${r.id}"><td class="nowrap">${r.status === 'filed' ? T.thDate(r.filed_at) : `ภายใน ${T.thDate(r.due.online)}`}</td>
+          <td>${esc(T.thMonth(r.month))}</td><td><b>${FORM_NAME[r.form]}</b></td>
+          <td class="num">${r.form === 'PP30' ? money(r.data.l5) : '–'}</td><td class="num">${r.form === 'PP30' ? money(r.data.l7) : money(r.data.vat)}</td>
+          <td class="num" style="color:${net(r) < 0 ? 'var(--good)' : 'inherit'}">${net(r) < 0 ? `เกิน ${money(-net(r))}` : money(net(r))}</td>
+          <td>${r.status === 'filed' ? '<span class="chip good">ยื่นแล้ว</span>' : '<span class="chip warn">ร่าง</span>'}</td></tr>`).join('')
+    : `<tr><td colspan="7"><div class="empty"><b>ยังไม่มีแบบภาษี</b>กดปุ่ม ‘สร้างใหม่’ เพื่อเตรียมแบบยื่น ภ.พ.30 หรือ ภ.พ.36</div></td></tr>`}</tbody></table></div></div>`;
+    $('[data-new]', main).onclick = (e) => popMenu(e.currentTarget, [['ภ.พ.30 ภาษีมูลค่าเพิ่ม', () => newReturn('PP30').catch(fail)], ['ภ.พ.36 บริการจากต่างประเทศ', () => newReturn('PP36').catch(fail)]]);
+    $('[data-tab]', main).onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) location.hash = `#/vat/returns${b.dataset.v ? `?f=${b.dataset.v}` : ''}`; };
+    $('[data-body]', main).onclick = (e) => { const tr = e.target.closest('[data-id]'); if (tr) location.hash = `#/vat/returns/${tr.dataset.id}`; };
+  }
+  function viewVatReturn(main, r) {
+    if (!r) { main.innerHTML = '<div class="empty"><b>ไม่พบแบบภาษี</b></div>'; return; }
+    const pp30 = r.form === 'PP30';
+    const draft = r.status === 'draft';
+    const rows = pp30 ? PP30_LINES.map(([k, l]) => [l, r.data[k] || 0, k])
+      : [['ค่าบริการที่จ่ายให้ผู้ประกอบการต่างประเทศ', r.data.base, 'base'], ['ภาษีมูลค่าเพิ่มที่ต้องนำส่ง (7%)', r.data.vat, 'vat'], ['จำนวนรายการ', r.data.count, 'count']];
+    const strong = ['l5', 'l7', 'l11', 'l12', 'vat'];
+    const title = `แบบ ${FORM_NAME[r.form]} เดือนภาษี ${T.thMonth(r.month)}`;
+    const lines = taxpayerLines(r.month);
+    const table = `<table class="tbl" data-tbl><thead><tr><th>รายการ</th><th class="num">จำนวนเงิน (บาท)</th></tr></thead><tbody>${rows.map(([l, v, k]) => `<tr${strong.includes(k) ? ' style="font-weight:700"' : ''}><td>${esc(l)}</td><td class="num">${k === 'count' ? v : money(v)}</td></tr>`).join('')}</tbody></table>`;
+    const waiting = pp30 && r.data.waiting?.count ? `<div class="note-box warn" style="margin-bottom:14px">มีค่าใช้จ่ายรอใบกำกับภาษี ${r.data.waiting.count} ใบ (ภาษี ${money(r.data.waiting.vat)} บาท) ยังไม่รวมในภาษีซื้อ · <a href="#/vat/purchases?m=${r.month}&s=wait">ดูเอกสาร</a></div>` : '';
+    main.innerHTML = `<div class="page-h"><div><a href="#/vat/returns" class="muted" style="text-decoration:none">← เตรียมแบบภาษีรายเดือน</a><h1>${esc(title)}</h1>
+        <div class="sub">${draft ? `ร่าง · ยื่นภายใน ${T.thDate(r.due.paper)} (ยื่นออนไลน์ภายใน ${T.thDate(r.due.online)})` : `ยื่นแล้ว ${T.thDate(r.filed_at)}${r.filed_ref ? ` · ${esc(r.filed_ref)}` : ''}`}</div></div>
+      <div class="actions">${draft ? '<button class="btn" data-refresh>คำนวณใหม่</button><button class="btn" data-del>ลบร่าง</button><button class="btn primary" data-file>บันทึกว่ายื่นแล้ว</button>' : '<button class="btn" data-unfile>กลับเป็นร่าง</button>'}
+        <button class="btn" data-xls>ดาวน์โหลด Excel</button><button class="btn dark" data-print>${ICON.print}พิมพ์</button></div></div>
+      ${waiting}
+      <div class="card card-pad"><div class="vat-head"><h2>${esc(title)}</h2>${lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>
+        <div class="tbl-wrap">${table}</div>
+        <div class="vat-links">${pp30 ? `<a href="#/report/vat_sales?month=${r.month}">รายงานภาษีขาย (${r.data.salesCount} ใบ)</a><a href="#/report/vat_purchase?month=${r.month}">รายงานภาษีซื้อ (${r.data.purchaseCount} ใบ)</a>` : `<a href="#/report/vat_pp36?month=${r.month}">รายงานภาษีซื้อ ภ.พ.36</a>`}
+          <a href="https://efiling.rd.go.th/" target="_blank" rel="noopener">ยื่นแบบออนไลน์ที่ efiling.rd.go.th ↗</a></div>
+        <p class="muted" style="font-size:13px;margin:12px 0 0">${draft ? 'ร่างจะคำนวณจากเอกสารล่าสุดเมื่อกด “คำนวณใหม่” เมื่อบันทึกว่ายื่นแล้ว ตัวเลขจะคงที่' : 'แบบที่ยื่นแล้วจะไม่เปลี่ยนตามเอกสาร ถ้าต้องแก้ ให้กลับเป็นร่างแล้วคำนวณใหม่'}${pp30 ? ' · ยอดอัตรา 0 และยอดที่ได้รับยกเว้นรวมอยู่ในข้อ 2 ให้แยกข้อ 3 ตอนยื่นถ้ามี' : ''}</p></div>`;
+    const act = (sel, fn) => { const b = $(sel, main); if (b) b.onclick = () => fn().catch(fail); };
+    act('[data-refresh]', async () => { await post('/vat/returns', { form: r.form, month: r.month }); toast('คำนวณใหม่แล้ว'); render(); });
+    act('[data-del]', async () => { if (await confirmBox('ลบร่างแบบภาษี', `ลบ ${esc(title)}`)) { await api('DELETE', A(`/vat/returns/${r.id}`)); location.hash = '#/vat/returns'; } });
+    act('[data-file]', async () => {
+      const ok = await dialog({
+        title: 'บันทึกว่ายื่นแบบแล้ว', ok: 'บันทึก',
+        body: `<div class="grid g2"><label class="field"><span>วันที่ยื่น / ชำระภาษี</span><input type="date" name="filed_at" value="${T.today()}"></label>
+          <label class="field"><span>เลขที่อ้างอิง (ถ้ามี)</span><input type="text" name="filed_ref" placeholder="เลขที่ใบเสร็จกรมสรรพากร"></label></div>`,
+        onOk: async (el) => { await post(`/vat/returns/${r.id}/file`, formData(el)); return true; },
+      });
+      if (ok) { toast('บันทึกแล้ว'); render(); }
+    });
+    act('[data-unfile]', async () => { await post(`/vat/returns/${r.id}/file`, { filed: false }); render(); });
+    $('[data-xls]', main).onclick = () => excel(`${FORM_NAME[r.form]}-${r.month}`, [[title], ...lines.map((l) => [l]), [], ['รายการ', 'จำนวนเงิน'], ...rows.map(([l, v]) => [l, v])], FORM_NAME[r.form]);
+    $('[data-print]', main).onclick = () => printHtml(`<div class="print-report"><div class="vat-head"><h2>${esc(title)}</h2>${lines.map((l) => `<div>${esc(l)}</div>`).join('')}</div>${table}</div>`);
   }
 
   /* ---------- Sales summary ---------- */
@@ -1580,16 +2194,6 @@
     const m = (v) => money(v);
     const n = (v) => `<td class="num">${m(v)}</td>`;
     const docRow = (id) => (id ? ` class="click" data-doc="${id}"` : '');
-    if (name === 'vat_sales' || name === 'vat_purchase') {
-      const s = name === 'vat_sales';
-      const cols = ['ลำดับ', 'วันที่', 'เลขที่', s ? 'ชื่อผู้ซื้อ' : 'ชื่อผู้ขาย', 'เลขประจำตัวผู้เสียภาษี', 'สาขา', 'มูลค่าสินค้า/บริการ', 'ภาษีมูลค่าเพิ่ม'];
-      return {
-        head: `<tr>${cols.map((c, i) => `<th${i >= 6 ? ' class="num"' : ''}>${c}</th>`).join('')}</tr>`,
-        body: d.rows.map((r, i) => `<tr${docRow(r.id)}><td>${i + 1}</td><td>${T.slashDate(r.date)}</td><td class="mono">${esc(s ? r.number : r.ref_no || r.number)}</td><td>${esc(r.name)}${r.void ? ' <span class="chip bad">ยกเลิก</span>' : ''}</td><td class="mono">${esc(T.taxIdFmt(r.tax_id))}</td><td>${esc(T.branchFmt(r.branch))}</td>${n(r.base)}${n(r.vat)}</tr>`).join(''),
-        foot: `<tr><td colspan="6">รวม</td>${n(d.totals.base)}${n(d.totals.vat)}</tr>`,
-        rows: [cols, ...d.rows.map((r, i) => [i + 1, T.slashDate(r.date), s ? r.number : r.ref_no || r.number, r.name + (r.void ? ' (ยกเลิก)' : ''), r.tax_id, T.branchFmt(r.branch), r.base, r.vat]), ['', '', '', 'รวม', '', '', d.totals.base, d.totals.vat]],
-      };
-    }
     if (name === 'vat_summary') {
       const rows = [['ยอดขาย (ฐานภาษี)', d.sales.base], ['ภาษีขาย', d.sales.vat], ['ยอดซื้อ (ฐานภาษี)', d.purchase.base], ['ภาษีซื้อ', d.purchase.vat], [d.payable >= 0 ? 'ภาษีที่ต้องชำระ' : 'ภาษีที่ชำระเกิน', Math.abs(d.payable)]];
       return {
@@ -1681,7 +2285,7 @@
   function viewSettings(main) {
     const b = biz(); const s = b.settings || {};
     const P = s.prefixes || {};
-    main.innerHTML = `<div class="page-h"><div><h1>ตั้งค่า</h1><div class="sub">ข้อมูลกิจการและรูปแบบเอกสาร</div></div><div class="actions"><button class="btn primary" data-save>บันทึก</button></div></div>
+    main.innerHTML = `<div class="page-h"><div><h1>ตั้งค่า</h1><div class="sub">ข้อมูลกิจการและรูปแบบเอกสาร${can('settings', 2) ? '' : ' · ดูอย่างเดียว'}</div></div><div class="actions">${can('settings', 2) ? '<button class="btn primary" data-save>บันทึก</button>' : ''}</div></div>
       <div class="grid" style="max-width:860px">
         <div class="card card-pad"><h2>ข้อมูลกิจการ</h2>
           <div class="logo-pick" style="margin-bottom:14px"><div class="lp" data-lp>${b.logo ? `<img src="${esc(b.logo)}" alt="">` : 'โลโก้'}</div>
@@ -1692,6 +2296,7 @@
         </div>
         <div class="card card-pad"><h2>เอกสาร</h2><div class="grid g2">
           <div class="field span2"><span>ตัวอักษรนำหน้าเลขที่เอกสาร</span><div class="grid g4">${[['QT', 'ใบเสนอราคา'], ['IV', 'ใบแจ้งหนี้'], ['RE', 'ใบเสร็จ'], ['EX', 'ค่าใช้จ่าย'], ['JV', 'สมุดรายวัน'], ['WHT', '50 ทวิ']].map(([k, l]) => `<label class="field"><small>${l}</small><input type="text" data-prefix="${k}" value="${esc(P[k] || k)}" maxlength="8"></label>`).join('')}</div><small>เลขที่จะเป็น ตัวนำหน้า + ปี ค.ศ. + เดือน + ลำดับ เช่น IV2026110001</small></div>
+          <label class="field"><span>เล่มที่ หนังสือรับรอง 50 ทวิ</span><input type="text" data-s="whtBook" maxlength="20" value="${esc(s.whtBook || '')}" placeholder="ว่างไว้ = ปี พ.ศ. ที่จ่าย"></label>
           <label class="field"><span>เครดิตเทอมเริ่มต้น (วัน)</span><input type="number" data-s="creditDays" min="0" value="${esc(s.creditDays ?? 30)}"></label>
           <label class="field"><span>ราคาสินค้าเริ่มต้น</span><select data-s="priceMode"><option value="excl" ${s.priceMode !== 'incl' ? 'selected' : ''}>ไม่รวม VAT</option><option value="incl" ${s.priceMode === 'incl' ? 'selected' : ''}>รวม VAT แล้ว</option></select></label>
           <label class="field"><span>เดือนเริ่มรอบบัญชี</span><select data-s="fyStart">${T.TH_MONTHS_LONG.map((mn, i) => `<option value="${i + 1}" ${(s.fyStart || 1) === i + 1 ? 'selected' : ''}>${mn}</option>`).join('')}</select></label>
@@ -1714,7 +2319,7 @@
             <label class="field"><span>พร้อมเพย์ (เบอร์มือถือ / เลขผู้เสียภาษี / เลขบัตรประชาชน)</span><input type="text" inputmode="numeric" data-pp="id" value="${esc(s.promptpay?.id || '')}" placeholder="0812345678 หรือ 0105567012345"><small data-pp-hint></small></label>
             <label class="field"><span>ชื่อบัญชีพร้อมเพย์</span><input type="text" data-pp="name" value="${esc(s.promptpay?.name || '')}" placeholder="${esc(b.name)}"></label>
             <label class="check span2"><input type="checkbox" data-pp="qr" ${s.promptpay?.qr === false ? '' : 'checked'}> แสดง QR พร้อมเพย์ในเอกสาร</label>
-            <div class="field span2"><span>บัญชีธนาคาร</span><div class="grid" data-banks></div><div><button type="button" class="btn sm" data-addbank>${ICON.plus}เพิ่มบัญชีธนาคาร</button></div></div>
+            <div class="field span2"><span>บัญชีธนาคารและช่องทางอื่น</span><a class="ch-link" href="#/channels">${(s.banks || []).filter((x) => x.active !== false).map((x) => `<span class="ch-name">${channelBadge(x)}<span>${esc(x.kind === 'other' ? x.name || x.bank : `${x.bank} ${x.number}`)}</span></span>`).join('') || '<span class="muted">ยังไม่มีบัญชีธนาคาร</span>'}<span class="muted nowrap" style="margin-left:auto">จัดการช่องทางการเงิน ›</span></a></div>
             <label class="field span2"><span>ข้อความเพิ่มเติม (ไม่บังคับ)</span><textarea data-s="payment" rows="2" placeholder="เช่น กรุณาส่งสลิปมาที่ LINE @example">${esc(s.payment || '')}</textarea></label>
           </div></div>
         <a class="card card-pad int-card" href="#/integrations"><span class="int-logo">CC</span><div style="flex:1"><h2 style="margin:0 0 2px">เชื่อมต่อระบบ</h2><div class="muted">CapCourt Admin: ออกใบแจ้งหนี้รายเดือนให้สนามอัตโนมัติ และแจ้งผลการชำระกลับ</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
@@ -1740,21 +2345,7 @@
         if (!b.signature && !b.stamp) $('[data-sign-auto]', main).checked = true;
       } catch (err) { fail(err); }
     };
-    // Bank accounts and PromptPay
-    const BANKS = ['ธนาคารกสิกรไทย', 'ธนาคารไทยพาณิชย์', 'ธนาคารกรุงเทพ', 'ธนาคารกรุงไทย', 'ธนาคารกรุงศรีอยุธยา', 'ธนาคารทหารไทยธนชาต (ttb)', 'ธนาคารออมสิน', 'ธนาคารยูโอบี', 'ธนาคารซีไอเอ็มบี ไทย', 'ธนาคารเกียรตินาคินภัทร', 'ธนาคารแลนด์ แอนด์ เฮ้าส์', 'ธ.ก.ส.'];
-    const banks = (s.banks || []).map((x) => ({ ...x }));
-    const drawBanks = () => {
-      $('[data-banks]', main).innerHTML = banks.map((x, i) => `<div class="grid g4" data-bi="${i}" style="align-items:end">
-        <label class="field"><small>ธนาคาร</small><input type="text" list="bank-dl" data-bf="bank" value="${esc(x.bank || '')}"></label>
-        <label class="field"><small>เลขที่บัญชี</small><input type="text" inputmode="numeric" data-bf="number" value="${esc(x.number || '')}" placeholder="123-4-56789-0"></label>
-        <label class="field"><small>ชื่อบัญชี</small><input type="text" data-bf="name" value="${esc(x.name || '')}" placeholder="${esc(b.name)}"></label>
-        <div style="display:flex;gap:6px;align-items:end"><label class="field" style="flex:1"><small>สาขา</small><input type="text" data-bf="branch" value="${esc(x.branch || '')}"></label><button type="button" class="btn sm ghost danger" data-rmbank style="height:38px">ลบ</button></div>
-      </div>`).join('') + `<datalist id="bank-dl">${BANKS.map((n) => `<option value="${n}">`).join('')}</datalist>`;
-    };
-    drawBanks();
-    $('[data-banks]', main).addEventListener('input', (e) => { const r = e.target.closest('[data-bi]'); if (r && e.target.dataset.bf) banks[Number(r.dataset.bi)][e.target.dataset.bf] = e.target.value; });
-    $('[data-banks]', main).addEventListener('click', (e) => { if (e.target.closest('[data-rmbank]')) { banks.splice(Number(e.target.closest('[data-bi]').dataset.bi), 1); drawBanks(); } });
-    $('[data-addbank]', main).onclick = () => { if (banks.length < 4) { banks.push({ bank: '', number: '', name: '', branch: '' }); drawBanks(); } };
+    // PromptPay
     const ppHint = () => {
       const d = $('[data-pp=id]', main).value.replace(/\D/g, '');
       const ok = (d.length === 10 && d[0] === '0') || d.length === 13 || d.length === 15;
@@ -1777,13 +2368,12 @@
       if (logo.length > 380000) logo = c.toDataURL('image/jpeg', 0.85);
       $('[data-lp]', main).innerHTML = `<img src="${logo}" alt="">`;
     };
-    $('[data-save]', main).onclick = async (e) => {
+    if ($('[data-save]', main)) $('[data-save]', main).onclick = async (e) => {
       const d = formData(main);
       const settings = { ...s, prefixes: {}, notes: { ...(s.notes || {}) } };
       $$('[data-prefix]', main).forEach((i) => { settings.prefixes[i.dataset.prefix] = i.value; });
       $$('[data-s]', main).forEach((i) => { settings[i.dataset.s] = i.value; });
       $$('[data-note]', main).forEach((i) => { settings.notes[i.dataset.note] = i.value; });
-      settings.banks = banks;
       settings.signAuto = $('[data-sign-auto]', main).checked;
       settings.promptpay = { id: $('[data-pp=id]', main).value, name: $('[data-pp=name]', main).value, qr: $('[data-pp=qr]', main).checked };
       e.target.disabled = true;
@@ -1814,11 +2404,296 @@
   const CC_KINDS = [['package', 'แพ็กเกจเว็บรายเดือน'], ['slips', 'ค่าตรวจสลิป'], ['gp', 'GP จากยอดขายคลิป']];
   const thDateTime = (iso) => { if (!iso) return ''; const d = new Date(new Date(iso).getTime() + 7 * 3600e3).toISOString(); return `${T.thDate(d.slice(0, 10))} ${d.slice(11, 16)}`; };
 
+  /* ---------- Payment channels (ช่องทางการเงิน) ---------- */
+  // Bank accounts and other ways to pay, kept in business settings.banks. Active ones print on
+  // quotations and invoices; switching one to ไม่ใช้งานแล้ว hides it without losing it.
+
+  // Short name and brand tone for the bank badge (initials in a coloured circle, not the banks' logos).
+  const BANK_INFO = [
+    ['ธนาคารกสิกรไทย', 'KBank', '#138F2D'], ['ธนาคารไทยพาณิชย์', 'SCB', '#4E2A84'], ['ธนาคารกรุงเทพ', 'BBL', '#1E4598'],
+    ['ธนาคารกรุงไทย', 'KTB', '#1BA5E1'], ['ธนาคารกรุงศรีอยุธยา', 'BAY', '#C9A100'], ['ธนาคารทหารไทยธนชาต (ttb)', 'ttb', '#0050F0'],
+    ['ธนาคารออมสิน', 'GSB', '#EB198D'], ['ธนาคารยูโอบี', 'UOB', '#0B3979'], ['ธนาคารซีไอเอ็มบี ไทย', 'CIMB', '#7E2F36'],
+    ['ธนาคารเกียรตินาคินภัทร', 'KKP', '#635D96'], ['ธนาคารแลนด์ แอนด์ เฮ้าส์', 'LH', '#6D6E71'], ['ธ.ก.ส.', 'BAAC', '#4B9B3D'],
+    ['ธนาคารทิสโก้', 'TISCO', '#12306B'], ['ธนาคารไอซีบีซี (ไทย)', 'ICBC', '#C4161C'], ['ธนาคารอาคารสงเคราะห์', 'GHB', '#F7941D'],
+  ];
+  const BANK_NAMES = BANK_INFO.map((x) => x[0]);
+  const ACCT_TYPE = { savings: 'ออมทรัพย์', current: 'กระแสรายวัน', fixed: 'ฝากประจำ' };
+  const OTHER_KINDS = ['ช่องทางรับชำระออนไลน์ (Payment Gateway)', 'บัตรเครดิต / เดบิต', 'วอลเล็ต (TrueMoney, ShopeePay …)', 'เช็ค', 'อื่นๆ'];
+  const fmtAcct = (n) => { const d = String(n || '').replace(/\D/g, ''); return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 4)}-${d.slice(4, 9)}-${d.slice(9)}` : String(n || ''); };
+  function channelBadge(c) {
+    if (c.kind === 'other') return `<span class="ch-badge other">${ICON.swap}</span>`;
+    const info = BANK_INFO.find((x) => x[0] === c.bank);
+    return `<span class="ch-badge" style="--c:${info ? info[2] : '#6C717B'}">${esc(info ? info[1] : (c.bank || '?').replace(/^ธนาคาร/, '').slice(0, 3))}</span>`;
+  }
+
+  async function saveChannels(list) {
+    const s = biz().settings || {};
+    await put('', { settings: { ...s, banks: list } });
+    await loadBoot();
+  }
+
+  // idx is the entry's place in settings.banks: entries saved before ids existed have no id, so
+  // editing, deleting and switching go by position, not id.
+  function editChannel(c, kind, idx) {
+    const isNew = !c;
+    c = c || { kind, active: true, acctType: 'savings', bank: kind === 'bank' ? BANK_NAMES[0] : OTHER_KINDS[0] };
+    const bank = c.kind !== 'other';
+    const body = bank
+      ? `<div class="form-rows">
+          <label><span>ธนาคาร</span><select name="bank">${[...new Set([...BANK_NAMES, c.bank].filter(Boolean))].map((n) => `<option ${n === c.bank ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+          <label><span>เลขที่บัญชี</span><input type="text" name="number" inputmode="numeric" value="${esc(c.number || '')}" placeholder="123-4-56789-0"></label>
+          <label><span>สาขาธนาคาร</span><input type="text" name="branch" value="${esc(c.branch || '')}"></label>
+          <label><span>ชื่อบัญชี</span><input type="text" name="name" value="${esc(c.name || biz().name)}"></label>
+          <div class="fr"><span>ประเภทบัญชี</span><div class="radios">${Object.entries(ACCT_TYPE).map(([k, l]) => `<label class="check"><input type="radio" name="acctType" value="${k}" ${(c.acctType || 'savings') === k ? 'checked' : ''}> ${l}</label>`).join('')}</div></div>
+        </div>`
+      : `<div class="form-rows">
+          <label><span>ประเภท</span><select name="bank">${[...new Set([...OTHER_KINDS, c.bank].filter(Boolean))].map((n) => `<option ${n === c.bank ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+          <label><span>ชื่อผู้ให้บริการ</span><input type="text" name="name" value="${esc(c.name || '')}" placeholder="เช่น Stripe, 2C2P, Omise"></label>
+          <label><span>รายละเอียด</span><input type="text" name="number" value="${esc(c.number || '')}" placeholder="เช่น ลิงก์ชำระเงิน หรือเลขบัญชีร้านค้า (ไม่บังคับ)"></label>
+        </div>`;
+    return dialog({
+      title: `${isNew ? 'เพิ่ม' : 'แก้ไข'}${bank ? 'บัญชีธนาคาร' : 'ช่องทางชำระอื่นๆ'}`, body, ok: 'บันทึกและปิด',
+      onOk: async (el) => {
+        const d = formData(el);
+        if (bank && !String(d.number || '').replace(/\D/g, '')) { toast('กรอกเลขที่บัญชี', true); return false; }
+        if (!bank && !d.name) { toast('กรอกชื่อผู้ให้บริการ', true); return false; }
+        const next = { ...c, ...d, number: bank ? fmtAcct(d.number) : d.number };
+        const list = (biz().settings?.banks || []).map((x) => ({ ...x }));
+        if (isNew) list.push(next); else list.splice(idx, 1, next);
+        await saveChannels(list);
+        toast('บันทึกแล้ว');
+        return true;
+      },
+    });
+  }
+
+  function viewChannels(main) {
+    const list = biz().settings?.banks || [];
+    const row = (c, i) => {
+      const bank = c.kind !== 'other';
+      const detail = bank
+        ? `<div>ประเภทบัญชี: ${ACCT_TYPE[c.acctType] || ACCT_TYPE.savings}</div>${c.branch ? `<div>สาขา: ${esc(c.branch)}</div>` : ''}`
+        : (c.number ? `<div>${esc(c.number)}</div>` : '');
+      const on = c.active !== false;
+      return `<tr data-i="${i}"${on ? '' : ' class="off"'}>
+        <td class="nowrap">${bank ? 'บัญชีธนาคาร' : 'ช่องทางชำระอื่นๆ'}</td>
+        <td><div class="ch-name">${channelBadge(c)}<div><div>${esc(bank ? `${c.bank} ${c.number}` : c.bank)}</div><div class="muted">${esc(c.name || '')}</div></div></div></td>
+        <td class="muted ch-detail">${detail}</td>
+        <td><label class="st ${on ? 'info' : ''} pick"><select data-active aria-label="สถานะ"><option value="1" ${on ? 'selected' : ''}>ใช้งานอยู่</option><option value="0" ${on ? '' : 'selected'}>ไม่ใช้งานแล้ว</option></select>${CHEV}</label></td>
+        <td class="act"><button type="button" class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`;
+    };
+    // Listeners go on a fresh wrapper so a redraw doesn't stack them on <main>.
+    main.innerHTML = `<div data-ch><div class="page-h"><div><div class="muted" style="font-size:13px"><a class="link" href="#/settings">ตั้งค่า</a> ›</div><h1>ช่องทางการเงิน</h1><div class="sub">บัญชีธนาคารและช่องทางรับชำระที่ใช้อยู่จะพิมพ์ในใบเสนอราคาและใบแจ้งหนี้</div></div>
+      <div class="actions"><div class="split"><button class="btn primary" data-add="bank">${ICON.plus}เพิ่มบัญชี</button><button class="btn primary" data-addmenu aria-label="เลือกประเภท">${CHEV}</button></div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="tbl ch-tbl"><thead><tr><th>ประเภท</th><th>ชื่อบัญชี</th><th>รายละเอียดเพิ่มเติม</th><th>สถานะ</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map(row).join('') : `<tr><td colspan="5"><div class="empty"><b>ยังไม่มีช่องทางการเงิน</b>เพิ่มบัญชีธนาคารเพื่อให้ลูกค้าโอนเงินตามใบแจ้งหนี้<div style="margin-top:12px"><button class="btn primary" data-add="bank">${ICON.plus}เพิ่มบัญชีธนาคาร</button></div></div></td></tr>`}</tbody></table></div></div>
+      ${biz().settings?.promptpay?.id ? '' : '<p class="muted" style="font-size:13px">ตั้งพร้อมเพย์เพื่อพิมพ์ QR รับเงินในใบแจ้งหนี้ได้ที่ <a class="link" href="#/settings">ตั้งค่า › รับชำระเงิน</a></p>'}</div>`;
+    const root = $('[data-ch]', main);
+    const redraw = () => viewChannels(main);
+    const all = () => biz().settings?.banks || [];
+    root.addEventListener('click', (e) => {
+      const add = e.target.closest('[data-add]');
+      if (add) return editChannel(null, add.dataset.add).then((r) => r && redraw());
+      const am = e.target.closest('[data-addmenu]');
+      if (am) return popMenu(am, [['บัญชีธนาคาร', () => editChannel(null, 'bank').then((r) => r && redraw())], ['ช่องทางชำระอื่นๆ', () => editChannel(null, 'other').then((r) => r && redraw())]]);
+      const more = e.target.closest('[data-more]');
+      if (more) {
+        const i = Number(more.closest('tr').dataset.i);
+        const c = all()[i];
+        if (!c) return;
+        popMenu(more, [['แก้ไข', () => editChannel(c, c.kind, i).then((r) => r && redraw())], null, ['ลบ', async () => {
+          if (!(await confirmBox('ลบช่องทางการเงิน', `ลบ ${esc(c.bank)} ${esc(c.number || c.name || '')} ออกจากรายการ? เอกสารที่ออกไปแล้วไม่เปลี่ยน`, 'ลบ'))) return;
+          try { await saveChannels(all().filter((_, j) => j !== i)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
+        }, { danger: true }]]);
+      }
+    });
+    root.addEventListener('change', async (e) => {
+      if (!e.target.matches('[data-active]')) return;
+      const i = Number(e.target.closest('tr').dataset.i);
+      try {
+        await saveChannels(all().map((x, j) => (j === i ? { ...x, active: e.target.value === '1' } : x)));
+        toast(e.target.value === '1' ? 'เปิดใช้งานแล้ว' : 'ปิดการใช้งานแล้ว'); redraw();
+      } catch (err) { fail(err); redraw(); }
+    });
+  }
+
+  /* ---------- Reminders through Centel (การแจ้งเตือน) ---------- */
+  // Deadlines (tax forms, paying suppliers, collecting from customers, anything else) delivered by
+  // the Centel app: the business is linked once to someone's Centel with a code, then each
+  // deadline becomes a to-do with a reminder there a week ahead (server/src/acc/centel.js).
+
+  const REM_CAT = { tax: ['ภาษี', 'warn'], pay: ['จ่ายคู่ค้า', 'bad'], collect: ['รับเงินลูกค้า', 'good'], other: ['อื่นๆ', ''] };
+  const REM_DAYS = [[0, 'วันกำหนด 09:00'], [1, 'ล่วงหน้า 1 วัน'], [2, 'ล่วงหน้า 2 วัน'], [3, 'ล่วงหน้า 3 วัน']];
+  const REM_PRESET_TAG = { pp30: 'ภ.พ.30', pnd1: 'ภ.ง.ด.1', pnd3: 'ภ.ง.ด.3', pnd53: 'ภ.ง.ด.53' };
+  const remWhen = (r) => (r.every === 'once' ? `ครั้งเดียว ${T.thDate(r.date)}`
+    : r.every === 'yearly' ? `ทุกปี ${r.day} ${T.TH_MONTHS[r.month - 1]}` : `ทุกเดือน วันที่ ${r.day}`);
+  const remDays = (n) => (REM_DAYS.find(([k]) => k === n) || REM_DAYS[2])[1];
+  const CENTEL_MARK = '<span class="cn-mark" aria-hidden="true">C</span>';
+
+  // The link dialog: a code to approve in Centel, closed by itself once Centel says yes.
+  async function linkCentel(before) {
+    const c = await post('/centel/code');
+    let timer;
+    const done = await dialog({
+      title: 'เชื่อมต่อกับแอป Centel', ok: null, cancel: 'ปิด',
+      body: `<div class="cn-link">
+        <p style="margin-top:0">อนุญาตใน Centel ที่ต้องการให้แจ้งเตือนเด้ง (iPhone, กลุ่ม LINE) โดยเข้าสู่ระบบ Centel บัญชีนั้นไว้</p>
+        <a class="btn primary cn-open" href="${esc(c.url)}" target="_blank" rel="noopener">${CENTEL_MARK}เปิด Centel เพื่ออนุญาต</a>
+        <div class="muted" style="margin:14px 0 6px">หรือพิมพ์รหัสนี้ใน Centel › บัญชี › การแจ้งเตือน › Centel Account</div>
+        <div class="cn-code">${esc(c.code)}</div>
+        <div class="muted cn-wait"><span class="cn-dot"></span>รอการอนุญาตจาก Centel · รหัสใช้ได้ 15 นาที</div></div>`,
+      onOpen: (el, close) => {
+        const tick = async () => {
+          if (!document.body.contains(el)) return;
+          try { const { links } = await get('/centel'); if (links.length > before) return close(links); } catch { /* try again */ }
+          timer = setTimeout(tick, 3000);
+        };
+        timer = setTimeout(tick, 3000);
+      },
+    });
+    clearTimeout(timer);
+    if (done) toast('เชื่อมต่อกับ Centel แล้ว');
+    return done;
+  }
+
+  function editReminder(r, preset) {
+    const isNew = !r;
+    r = r || (preset ? { kind: preset, category: 'tax', every: 'monthly', remind_days: 2, early: true }
+      : { kind: 'custom', category: 'pay', every: 'monthly', day: 1, remind_days: 2, early: true });
+    const tax = REM_PRESET_TAG[r.kind];
+    const contacts = (S.boot.contacts || []).filter((c) => !c.archived);
+    const body = `<div class="grid g2 rem-form">
+        ${tax ? `<div class="field span2"><span>แบบภาษี</span><div><span class="chip warn">${esc(tax)}</span> <span class="muted">ยื่นออนไลน์ภายในวันที่ ${S.remPresets?.[r.kind]?.day || r.day} ของเดือนถัดไป</span></div></div>`
+          : `<label class="field"><span>ประเภท</span><select name="category">${Object.entries(REM_CAT).map(([k, [l]]) => `<option value="${k}" ${r.category === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`}
+        <label class="field${tax ? ' span2' : ''}"><span>ชื่อการแจ้งเตือน</span><input type="text" name="title" maxlength="200" value="${esc(r.title || S.remPresets?.[r.kind]?.title || '')}" placeholder="เช่น จ่ายค่าเช่าโกดัง, ต่อประกันรถ"></label>
+        ${tax ? '' : `<label class="field"><span>คู่ค้า / ผู้ติดต่อ (ไม่บังคับ)</span><select name="contact_id"><option value="">ไม่ระบุ</option>${contacts.map((c) => `<option value="${c.id}" ${r.contact_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>จำนวนเงิน (ไม่บังคับ)</span><input type="number" name="amount" min="0" step="0.01" inputmode="decimal" value="${r.amount ?? ''}" placeholder="0.00"></label>
+        <label class="field"><span>รอบ</span><select name="every">${[['monthly', 'ทุกเดือน'], ['yearly', 'ทุกปี'], ['once', 'ครั้งเดียว']].map(([k, l]) => `<option value="${k}" ${r.every === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field" data-show="monthly yearly"><span>วันที่</span><select name="day">${Array.from({ length: 31 }, (_, i) => `<option ${Number(r.day) === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select><small>เดือนที่มีไม่ถึงวันนี้ ใช้วันสุดท้ายของเดือน</small></label>
+        <label class="field" data-show="yearly"><span>เดือน</span><select name="month">${T.TH_MONTHS.map((m, i) => `<option value="${i + 1}" ${Number(r.month) === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+        <label class="field" data-show="once"><span>วันที่ครบกำหนด</span><input type="date" name="date" value="${esc(r.date || '')}"></label>`}
+        <label class="field"><span>เตือนใน Centel</span><select name="remind_days">${REM_DAYS.map(([k, l]) => `<option value="${k}" ${r.remind_days === k ? 'selected' : ''}>${l}</option>`).join('')}</select><small>แจ้งเตือนเวลา 09:00 น.</small></label>
+        <label class="field span2 check" style="flex-direction:row"><input type="checkbox" name="early" ${r.early !== false ? 'checked' : ''}> ถ้าครบกำหนดวันเสาร์-อาทิตย์ ให้เตือนตามวันศุกร์ก่อนหน้า</label>
+        <label class="field span2"><span>หมายเหตุ (แสดงในสิ่งที่ต้องทำของ Centel)</span><input type="text" name="note" maxlength="500" value="${esc(r.note || '')}" placeholder="เช่น ใช้เอกสารจากแฟ้มภาษีซื้อ"></label>
+      </div>`;
+    return dialog({
+      title: isNew ? 'สร้างการแจ้งเตือน' : 'แก้ไขการแจ้งเตือน', body, ok: 'บันทึก', wide: true,
+      onOpen: (el) => {
+        const every = $('[name=every]', el);
+        const sync = () => { if (every) for (const f of $$('[data-show]', el)) f.hidden = !f.dataset.show.split(' ').includes(every.value); };
+        if (every) every.onchange = sync;
+        sync();
+      },
+      onOk: async (el) => {
+        const d = formData(el);
+        if (!d.title) { toast('กรอกชื่อการแจ้งเตือน', true); return false; }
+        const b = { ...d, kind: r.kind, remind_days: Number(d.remind_days) };
+        if (!tax) {
+          if (d.every === 'once' && !d.date) { toast('เลือกวันที่ครบกำหนด', true); return false; }
+          b.day = Number(d.day); b.month = Number(d.month);
+          if (d.every === 'once') { delete b.day; delete b.month; } else delete b.date;
+        }
+        return isNew ? post('/reminders', b) : put(`/reminders/${r.id}`, b);
+      },
+    });
+  }
+
+  async function viewReminders(main) {
+    const data = await get('/reminders');
+    S.remPresets = data.presets;
+    const { reminders: list, links, prefs } = data;
+    const has = (k) => list.some((r) => r.kind === k);
+    const contactName = (id) => (S.boot.contacts || []).find((c) => c.id === id)?.name;
+    const row = (r) => {
+      const [cl, tone] = REM_CAT[r.category] || REM_CAT.other;
+      const sub = [contactName(r.contact_id), r.amount ? `฿${money(r.amount)}` : '', r.note].filter(Boolean).map(esc).join(' · ');
+      return `<tr data-id="${r.id}"${r.active ? '' : ' class="off"'}>
+        <td><div class="rem-title"><b>${esc(r.title)}</b><span class="chip ${tone}">${cl}</span></div>${sub ? `<div class="muted" style="font-size:12px;margin-top:2px">${sub}</div>` : ''}</td>
+        <td class="nowrap">${remWhen(r)}</td>
+        <td class="nowrap">${remDays(r.remind_days)}</td>
+        <td class="nowrap">${r.next ? `<b>${T.thDate(r.next.date)}</b>${r.next.moved ? `<div class="muted" style="font-size:12px">กำหนดจริง ${T.thDate(r.next.due)}</div>` : ''}` : '<span class="muted">—</span>'}</td>
+        <td><label class="st ${r.active ? 'info' : ''} pick"><select data-active aria-label="สถานะ"><option value="1" ${r.active ? 'selected' : ''}>เปิดอยู่</option><option value="0" ${r.active ? '' : 'selected'}>ปิดไว้</option></select>${CHEV}</label></td>
+        <td class="act"><button type="button" class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`;
+    };
+    const linkRows = links.map((l) => `<div class="cn-person" data-link="${l.id}"><span class="cn-av">${esc(l.avatar || (l.name || l.email || '?').replace(/^[เแโใไ]/, '').slice(0, 1))}</span>
+      <div style="flex:1;min-width:0"><b>${esc(l.name || 'Centel')}</b><div class="muted" style="font-size:12px">${esc(l.email || '')} · เชื่อมต่อเมื่อ ${thDateTime(l.created_at)}</div></div>
+      <button class="btn sm ghost danger" data-unlink>ตัดการเชื่อมต่อ</button></div>`).join('');
+    main.innerHTML = `<div data-rem><div class="page-h"><div><h1>การแจ้งเตือน</h1><div class="sub">กำหนดยื่นภาษี จ่ายคู่ค้า รับเงินลูกค้า และเรื่องอื่นๆ ส่งไปเตือนในแอป Centel ของคุณ</div></div>
+      <div class="actions"><button class="btn primary" data-new>${ICON.plus}สร้างการแจ้งเตือน</button></div></div>
+      <div class="grid" style="max-width:980px">
+        <div class="card card-pad"><div class="int-status">${CENTEL_MARK}<div style="flex:1;min-width:200px"><b>แอป Centel</b> ${links.length ? '<span class="chip good">เชื่อมต่อแล้ว</span>' : '<span class="chip">ยังไม่เชื่อมต่อ</span>'}
+            <div class="muted" style="font-size:13px;margin-top:2px">${links.length ? 'ล่วงหน้า 7 วันก่อนครบกำหนด รายการจะขึ้นเป็นสิ่งที่ต้องทำใน Centel แล้วแจ้งเตือนบน iPhone และกลุ่ม LINE ตามที่ตั้งไว้ในแอป' : 'เชื่อมต่อครั้งเดียว แล้วการแจ้งเตือนทั้งหมดของกิจการนี้จะส่งไปที่ Centel'}</div></div>
+            <button class="btn ${links.length ? '' : 'primary'}" data-link-new>${links.length ? 'เพิ่มบัญชี Centel' : 'เชื่อมต่อกับ Centel'}</button></div>
+          ${linkRows ? `<div class="cn-people">${linkRows}</div>` : ''}</div>
+
+        <div class="card card-pad"><h2 style="margin-top:0">ภาษีรายเดือน</h2><p class="muted" style="margin-top:0">กดเพื่อเพิ่ม กำหนดยื่นออนไลน์ของเดือนถัดไป</p>
+          <div class="rem-presets">${Object.entries(REM_PRESET_TAG).map(([k, tag]) => `<button class="rem-preset${has(k) ? ' on' : ''}" data-preset="${k}" ${has(k) ? 'disabled' : ''}>
+            <b>${tag}</b><span>${k === 'pp30' ? 'ภาษีมูลค่าเพิ่ม' : k === 'pnd1' ? 'หัก ณ ที่จ่าย เงินเดือน' : k === 'pnd3' ? 'หัก ณ ที่จ่าย บุคคลธรรมดา' : 'หัก ณ ที่จ่าย นิติบุคคล'}</span>
+            <small>${has(k) ? '✓ เพิ่มแล้ว' : `ทุกวันที่ ${data.presets[k].day}`}</small></button>`).join('')}</div>
+          ${!biz().vat_registered && !has('pp30') ? '<p class="muted" style="font-size:12px;margin:8px 0 0">ภ.พ.30 ใช้เฉพาะกิจการที่จด VAT</p>' : ''}</div>
+
+        <div class="card"><div class="tbl-wrap"><table class="tbl rem-tbl"><thead><tr><th>การแจ้งเตือน</th><th>รอบ</th><th>เตือน</th><th>ครั้งถัดไป</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody>${list.length ? list.map(row).join('') : `<tr><td colspan="6"><div class="empty"><b>ยังไม่มีการแจ้งเตือน</b>เพิ่มภาษีรายเดือนจากด้านบน หรือสร้างการแจ้งเตือนจ่ายคู่ค้า รับเงิน และเรื่องอื่นๆ</div></td></tr>`}</tbody></table></div></div>
+
+        <div class="card card-pad"><h2 style="margin-top:0">เตือนจากเอกสาร</h2><p class="muted" style="margin-top:0">เอกสารที่ยังไม่ชำระและมีวันครบกำหนด จะขึ้นใน Centel ล่วงหน้า 7 วัน ชำระแล้วรายการที่ยังไม่ได้เตือนจะถูกเอาออกเอง</p>
+          <div class="rem-prefs">
+            <label class="check"><input type="checkbox" data-pref="ex_due" ${prefs.ex_due ? 'checked' : ''}> ค่าใช้จ่ายรอจ่าย ใกล้ครบกำหนดจ่ายคู่ค้า</label>
+            <label class="check"><input type="checkbox" data-pref="iv_due" ${prefs.iv_due ? 'checked' : ''}> ใบแจ้งหนี้รอรับชำระ ใกล้ครบกำหนด (ตามเก็บเงินลูกค้า)</label>
+            <label class="field" style="max-width:220px"><span>เตือนใน Centel</span><select data-pref="remind_days">${REM_DAYS.map(([k, l]) => `<option value="${k}" ${prefs.remind_days === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          </div></div>
+        <p class="muted" style="font-size:12px;margin:0">วันครบกำหนดภาษีที่ตรงวันหยุดราชการอาจเลื่อนตามประกาศกรมสรรพากร ระบบเตือนตามวันปกติ (หรือวันศุกร์ก่อนหน้าเมื่อตรงเสาร์-อาทิตย์) จึงไม่เตือนช้ากว่ากำหนด</p>
+      </div></div>`;
+    const root = $('[data-rem]', main);
+    const redraw = () => viewReminders(main);
+    const byId = (id) => list.find((x) => x.id === id);
+    const saved = (r) => { if (r) { toast(links.length ? 'บันทึกแล้ว จะขึ้นใน Centel ล่วงหน้า 7 วันก่อนครบกำหนด' : 'บันทึกแล้ว เชื่อมต่อกับ Centel เพื่อรับการแจ้งเตือน'); redraw(); } };
+    root.addEventListener('click', async (e) => {
+      try {
+        if (e.target.closest('[data-new]')) return saved(await editReminder(null));
+        const p = e.target.closest('[data-preset]');
+        if (p) return saved(await editReminder(null, p.dataset.preset));
+        if (e.target.closest('[data-link-new]')) { if (await linkCentel(links.length)) redraw(); return; }
+        const un = e.target.closest('[data-unlink]');
+        if (un) {
+          const l = links.find((x) => x.id === un.closest('[data-link]').dataset.link);
+          if (!(await confirmBox('ตัดการเชื่อมต่อ Centel', `หยุดส่งการแจ้งเตือนไปที่ Centel ของ ${esc(l.name || l.email)}? สิ่งที่ต้องทำที่ยังไม่ถึงเวลาเตือนจะถูกเอาออก`, 'ตัดการเชื่อมต่อ'))) return;
+          await api('DELETE', A(`/centel/${l.id}`)); toast('ตัดการเชื่อมต่อแล้ว'); redraw(); return;
+        }
+        const more = e.target.closest('[data-more]');
+        if (more) {
+          const r = byId(more.closest('tr').dataset.id);
+          popMenu(more, [['แก้ไข', async () => saved(await editReminder(r))],
+            ['ส่งทดสอบไปที่ Centel', async () => {
+              try { const x = await post(`/reminders/${r.id}/test`); toast(x.devices ? `ส่งแล้ว ${x.devices} เครื่อง` : 'ส่งแล้ว แต่ยังไม่มีเครื่องที่เปิดแจ้งเตือนใน Centel'); } catch (err) { fail(err); }
+            }], null,
+            ['ลบ', async () => {
+              if (!(await confirmBox('ลบการแจ้งเตือน', `ลบ ${esc(r.title)}?`, 'ลบ'))) return;
+              try { await api('DELETE', A(`/reminders/${r.id}`)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
+            }, { danger: true }]]);
+        }
+      } catch (err) { fail(err); }
+    });
+    root.addEventListener('change', async (e) => {
+      try {
+        if (e.target.matches('[data-active]')) {
+          await put(`/reminders/${e.target.closest('tr').dataset.id}`, { active: e.target.value === '1' });
+          toast(e.target.value === '1' ? 'เปิดการแจ้งเตือนแล้ว' : 'ปิดการแจ้งเตือนแล้ว'); redraw();
+        } else if (e.target.matches('[data-pref]')) {
+          const k = e.target.dataset.pref;
+          await put('/reminders/prefs', { [k]: k === 'remind_days' ? Number(e.target.value) : e.target.checked });
+          toast('บันทึกแล้ว');
+        }
+      } catch (err) { fail(err); redraw(); }
+    });
+  }
+
   async function viewIntegrations(main, which) {
     if (which === 'capcourt') return viewCapcourt(main);
     const { integration: cc } = await get('/integrations/capcourt');
     main.innerHTML = `<div class="page-h"><div><h1>เชื่อมต่อระบบ</h1><div class="sub">ให้ระบบอื่นออกเอกสารในกิจการนี้ให้อัตโนมัติ</div></div></div>
       <div class="grid" style="max-width:860px">
+        <a class="card card-pad int-card" href="#/reminders">${CENTEL_MARK}<div style="flex:1"><h2 style="margin:0 0 2px">แอป Centel</h2>
+          <div class="muted">ส่งการแจ้งเตือนยื่นภาษี จ่ายคู่ค้า รับเงินลูกค้า และเรื่องอื่นๆ ไปเตือนเป็นสิ่งที่ต้องทำในแอป Centel (iPhone, กลุ่ม LINE)</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
         <a class="card card-pad int-card" href="#/integrations/capcourt">${CC_LOGO}<div style="flex:1"><h2 style="margin:0 0 2px">CapCourt Admin</h2>
           <div class="muted">ออกใบแจ้งหนี้รายเดือนให้สนามที่ใช้บริการ CapCourt อัตโนมัติทุกวันที่ 1 ออกใบเสร็จ/ใบกำกับภาษีเมื่ออนุมัติการชำระ แล้วแจ้งผลกลับไปที่ CapCourt</div>
           <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${cc ? `<span class="chip good">เชื่อมต่อแล้ว</span><span class="chip">${esc(cc.base_url.replace(/^https?:\/\//, ''))}</span><span class="chip">${cc.settings.venues.length} สนาม</span>` : '<span class="chip">ยังไม่เชื่อมต่อ</span>'}</div></div><span class="muted nowrap">ตั้งค่า ›</span></a>
@@ -1927,14 +2802,294 @@
 
   /* ---------- Start ---------- */
 
-  async function start() {
+  /* ---------- Users: profile, users of the business, invites ---------- */
+
+  // The four areas a position reaches (server/src/acc/users.js), with their badge colour.
+  const AREAS = [
+    ['sales', 'รายรับ', 'ใบเสนอราคา ใบแจ้งหนี้ ใบเสร็จรับเงิน', '#2F7BEA', '<path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/>'],
+    ['purchase', 'รายจ่าย', 'ค่าใช้จ่าย สแกนบิล จ่ายเงิน', '#1F9D6B', '<path d="M12 4v16M17 8H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H6"/>'],
+    ['accounting', 'บัญชีและรายงาน', 'หน้าหลัก สมุดรายวัน ผังบัญชี รายงานภาษีและงบการเงิน', '#E5484D', '<path d="M7 9h10M7 15h10"/>'],
+    ['settings', 'ตั้งค่ากิจการ', 'ข้อมูลกิจการ รูปแบบเอกสาร การเชื่อมต่อระบบ', '#3EA8E0', '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z"/>'],
+  ];
+  const LEVEL = ['ไม่มีสิทธิ์', 'ดูอย่างเดียว', 'ดูและแก้ไข'];
+  const areaBadges = (p) => `<span class="perm-badges">${AREAS.filter(([k]) => p[k] > 0).map(([k, name, , color, path]) => `<span class="perm-b${p[k] === 1 ? ' ro' : ''}" style="--c:${color}" title="${esc(name)}: ${LEVEL[p[k]]}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${path}</svg></span>`).join('') || '<span class="muted">—</span>'}</span>`;
+  // Emails and names are masked on the list until "แสดงข้อมูล" is on (someone may be looking at the screen).
+  const maskEmail = (e) => { const [u, d] = String(e || '').split('@'); return d ? `${u.slice(0, 1)}${'*'.repeat(Math.max(3, u.length - 1))}@${d}` : esc(e || ''); };
+  const maskName = (n) => String(n || '').split(' ').filter(Boolean).map((w) => `${[...w][0]}${'*'.repeat(Math.max(2, [...w].length - 1))}`).join(' ');
+  const permTable = (p) => `<table class="tbl perm-tbl"><tbody>${AREAS.map(([k, name, desc]) => `<tr><td><b>${esc(name)}</b><div class="muted" style="font-size:12px">${esc(desc)}</div></td><td class="nowrap">${p[k] === 2 ? '<span class="chip good">ดูและแก้ไข</span>' : p[k] === 1 ? '<span class="chip info">ดูอย่างเดียว</span>' : '<span class="chip">ไม่มีสิทธิ์</span>'}</td></tr>`).join('')}</tbody></table>`;
+  const permPickers = (p, locked) => `<div class="perm-pick">${AREAS.map(([k, name, desc, color, path]) => `<label class="perm-row"><span class="perm-b" style="--c:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${path}</svg></span>
+    <span class="perm-t"><b>${esc(name)}</b><small>${esc(desc)}</small></span>
+    ${locked ? `<span class="perm-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>ดูและแก้ไข</span>`
+    : `<select data-perm="${k}">${LEVEL.map((l, i) => `<option value="${i}" ${p[k] === i ? 'selected' : ''}>${l}</option>`).join('')}</select>`}</label>`).join('')}</div>`;
+  // The line beside "สิทธิ์การเข้าถึง": owners always reach everything, other positions can be adjusted.
+  const permHint = (owner) => owner ? 'เจ้าของกิจการเข้าถึงได้ทุกส่วนเสมอ ปรับไม่ได้ ถ้าต้องการจำกัดสิทธิ์ ให้เลือกตำแหน่งอื่น' : 'ปรับได้ตามต้องการ';
+  const readPerms = (el) => Object.fromEntries($$('[data-perm]', el).map((x) => [x.dataset.perm, Number(x.value)]));
+
+  function rolesDialog(roles) {
+    return dialog({
+      title: 'รายละเอียดแต่ละตำแหน่ง', wide: true, ok: '', cancel: 'ปิด',
+      body: `<p class="muted" style="margin-top:0">สิทธิ์เริ่มต้นของแต่ละตำแหน่ง ปรับเพิ่มหรือลดให้แต่ละคนได้ตอนเชิญหรือแก้ไขภายหลัง เฉพาะเจ้าของกิจการเท่านั้นที่เพิ่มและจัดการผู้ใช้งานได้</p>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>ตำแหน่ง</th>${AREAS.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr></thead>
+        <tbody>${roles.map((r) => `<tr><td class="nowrap"><b>${esc(r.name)}</b></td>${AREAS.map(([k]) => `<td class="nowrap">${r.perms[k] === 2 ? '<span class="chip good">แก้ไข</span>' : r.perms[k] === 1 ? '<span class="chip info">ดู</span>' : '<span class="muted">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`,
+    });
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text).then(() => toast('คัดลอกลิงก์แล้ว'), () => prompt('คัดลอกลิงก์นี้', text));
+    prompt('คัดลอกลิงก์นี้', text);
+    return Promise.resolve();
+  }
+
+  // After an invite: the link to send, by email (their mail app), LINE or copy.
+  function inviteSent(email, roleName, link) {
+    const b = biz();
+    const subject = `เชิญเข้าร่วม ${b.name} บน Centel Account`;
+    const body = `สวัสดีครับ/ค่ะ\n\nคุณได้รับเชิญให้เข้าใช้งานระบบบัญชีของ ${b.name} ในตำแหน่ง ${roleName}\n\nกดลิงก์นี้แล้วเข้าสู่ระบบหรือสมัครด้วยอีเมล ${email}\n${link}\n\nลิงก์ใช้ได้ 14 วัน`;
+    return dialog({
+      title: 'สร้างคำเชิญแล้ว', ok: '', cancel: 'เสร็จสิ้น',
+      body: `<p style="margin-top:0">ส่งลิงก์นี้ให้ <b>${esc(email)}</b> เพื่อเข้าร่วมเป็น <b>${esc(roleName)}</b> ลิงก์ใช้ได้กับอีเมลนี้เท่านั้น และหมดอายุใน 14 วัน</p>
+        <div class="invite-link"><input type="text" readonly value="${esc(link)}" data-link><button class="btn" data-copy>คัดลอก</button></div>
+        <div class="actions" style="margin-top:12px">
+          <a class="btn primary" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}">ส่งทางอีเมล</a>
+          <a class="btn" target="_blank" rel="noopener" href="https://line.me/R/share?text=${encodeURIComponent(`${subject}\n${link}`)}">ส่งทาง LINE</a></div>
+        <p class="muted" style="font-size:12px;margin-bottom:0">ถ้าคนนี้เข้าสู่ระบบ Centel ด้วยอีเมลเดียวกันอยู่แล้ว จะเห็นคำเชิญเองทันทีโดยไม่ต้องกดลิงก์</p>`,
+      onOpen: (el) => {
+        $('[data-copy]', el).onclick = () => copyText(link);
+        $('[data-link]', el).onfocus = (e) => e.target.select();
+      },
+    });
+  }
+
+  async function viewUsers(main) {
+    const d = await get('/members');
+    let show = false;
+    const draw = () => {
+      const rows = [
+        ...d.members.map((m) => `<tr data-u="${m.user_id}">
+          <td><div class="u-cell"><span class="u-ic">${ICON.user}</span><div><div>${show ? esc(m.email) : maskEmail(m.email)}${m.me ? ' <span class="chip">คุณ</span>' : ''}</div><div class="muted" style="font-size:12px">${esc(show ? m.name : maskName(m.name))}</div></div></div></td>
+          <td>${esc(m.role_name)}${m.primary ? ' <span class="chip info crown">♛ เจ้าของหลัก</span>' : ''}${m.custom ? ' <span class="muted" style="font-size:12px">(ปรับสิทธิ์)</span>' : ''}</td>
+          <td class="nowrap">${m.disabled ? '<span class="chip bad">ระงับการใช้งาน</span>' : 'ปกติ'}<div class="u-ok">✓ ยืนยันแล้ว</div></td>
+          <td>${areaBadges(m.perms)}</td>
+          <td class="act">${(d.can_manage && !m.primary) || (m.me && !m.primary) ? `<button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button>` : ''}</td></tr>`),
+        ...d.invites.map((i) => `<tr data-inv="${i.id}">
+          <td><div class="u-cell"><span class="u-ic pend">${ICON.user}</span><div><div>${show ? esc(i.email) : maskEmail(i.email)}</div><div class="muted" style="font-size:12px">ส่งคำเชิญ ${T.thDate(String(i.created_at).slice(0, 10))}</div></div></div></td>
+          <td>${esc(i.role_name)}</td>
+          <td class="nowrap">${i.expired ? '<span class="chip bad">คำเชิญหมดอายุ</span>' : '<span class="chip warn">รอตอบรับคำเชิญ</span>'}</td>
+          <td>${areaBadges(i.perms)}</td>
+          <td class="act"><button class="icon-btn" data-more aria-label="เพิ่มเติม">${DOTS}</button></td></tr>`),
+      ];
+      main.innerHTML = `<div class="page-h"><div><h1>ผู้ใช้งานในระบบ</h1><div class="sub">ผู้ใช้งานใน${esc(biz().name)} · ${d.members.length} คน${d.invites.length ? ` · รอตอบรับ ${d.invites.length}` : ''}</div></div>
+        <div class="actions"><button class="btn ghost" data-show>${show ? 'ซ่อนข้อมูล' : 'แสดงข้อมูล'}</button><button class="btn ghost" data-roles>รายละเอียดแต่ละตำแหน่ง</button>${d.can_manage ? `<a class="btn primary" href="#/users/new">${ICON.plus}เพิ่มผู้ใช้งาน</a>` : ''}</div></div>
+        <div class="card"><div class="tbl-wrap"><table class="tbl users-tbl"><thead><tr><th>อีเมลที่ใช้งานในระบบ / ชื่อนามสกุล</th><th>ตำแหน่ง</th><th>สถานะ</th><th>สิทธิ์การเข้าถึง</th><th></th></tr></thead>
+        <tbody>${rows.join('')}</tbody></table></div></div>
+        <p class="muted perm-legend">${AREAS.map(([k, n]) => `<span class="nowrap">${areaBadges({ [k]: 2 })} ${esc(n)}</span>`).join('')}<span class="nowrap">สีจาง = ดูอย่างเดียว</span></p>`;
+    };
+    draw();
+    const reload = async () => { Object.assign(d, await get('/members')); draw(); };
+    main.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-show]')) { show = !show; draw(); return; }
+      if (e.target.closest('[data-roles]')) { rolesDialog(d.roles); return; }
+      const more = e.target.closest('[data-more]');
+      if (!more) return;
+      const tr = more.closest('tr');
+      const m = d.members.find((x) => x.user_id === tr.dataset.u);
+      const inv = d.invites.find((x) => x.id === tr.dataset.inv);
+      const items = [];
+      if (inv) {
+        items.push(['สร้างลิงก์เชิญใหม่', async () => { try { const r = await post(`/invites/${inv.id}/link`); await reload(); inviteSent(inv.email, inv.role_name, r.link); } catch (err) { fail(err); } }]);
+        items.push(null, ['ยกเลิกคำเชิญ', async () => {
+          if (!await confirmBox('ยกเลิกคำเชิญ', `ลิงก์ที่ส่งให้ ${esc(inv.email)} จะใช้ไม่ได้อีก`)) return;
+          try { await api('DELETE', A(`/invites/${inv.id}`)); await reload(); toast('ยกเลิกคำเชิญแล้ว'); } catch (err) { fail(err); }
+        }, { danger: true }]);
+      } else if (m && d.can_manage && !m.me) {
+        items.push(['แก้ไขตำแหน่งและสิทธิ์', () => editMember(m, d.roles).then((ok) => ok && reload())]);
+        items.push([m.disabled ? 'เปิดใช้งานอีกครั้ง' : 'ระงับการใช้งาน', async () => {
+          if (!m.disabled && !await confirmBox('ระงับการใช้งาน', `${esc(m.email)} จะเข้ากิจการนี้ไม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง`, 'ระงับ')) return;
+          try { await put(`/members/${m.user_id}`, { role: m.role, perms: m.perms, disabled: !m.disabled }); await reload(); } catch (err) { fail(err); }
+        }]);
+        items.push(null, ['ลบออกจากกิจการ', async () => {
+          if (!await confirmBox('ลบผู้ใช้งาน', `ลบ ${esc(m.email)} ออกจาก${esc(biz().name)} เอกสารที่คนนี้สร้างไว้ยังอยู่ครบ`, 'ลบ')) return;
+          try { await api('DELETE', A(`/members/${m.user_id}`)); await reload(); toast('ลบผู้ใช้งานแล้ว'); } catch (err) { fail(err); }
+        }, { danger: true }]);
+      } else if (m && m.me) {
+        items.push(['ออกจากกิจการนี้', () => leaveBusiness()]);
+      }
+      if (items.length) popMenu(more, items);
+    });
+  }
+
+  async function editMember(m, roles) {
+    return dialog({
+      title: 'แก้ไขตำแหน่งและสิทธิ์',
+      body: `<p class="muted" style="margin-top:0">${esc(m.email)}${m.name ? ` · ${esc(m.name)}` : ''}</p>
+        <label class="field"><span>ตำแหน่ง</span><select data-role>${roles.map((r) => `<option value="${r.key}" ${r.key === m.role ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
+        <div class="field" style="margin-top:14px"><span>สิทธิ์การเข้าถึง <small class="muted" data-ph>${permHint(m.role === 'owner')}</small></span><div data-pp>${permPickers(m.perms, m.role === 'owner')}</div></div>`,
+      onOpen: (el) => {
+        $('[data-role]', el).onchange = (e) => { const r = roles.find((x) => x.key === e.target.value); $('[data-pp]', el).innerHTML = permPickers(r.perms, r.key === 'owner'); $('[data-ph]', el).textContent = permHint(r.key === 'owner'); };
+      },
+      onOk: async (el) => {
+        await put(`/members/${m.user_id}`, { role: $('[data-role]', el).value, perms: readPerms(el) });
+        toast('บันทึกแล้ว');
+        return true;
+      },
+    });
+  }
+
+  async function leaveBusiness() {
+    if (!await confirmBox('ออกจากกิจการ', `คุณจะเข้า${esc(biz().name)}ไม่ได้อีกจนกว่าเจ้าของจะเชิญใหม่`, 'ออกจากกิจการ')) return;
     try {
-      const r = await api('GET', '/acc/businesses');
-      S.user = r.user; S.businesses = r.businesses;
+      const me = (await get('/members')).members.find((x) => x.me);
+      await api('DELETE', A(`/members/${me.user_id}`));
+      store.set('acc.biz', '');
+      location.hash = '#/';
+      start();
+    } catch (err) { fail(err); }
+  }
+
+  async function viewInvite(main) {
+    const d = await get('/members');
+    if (!d.can_manage) { main.innerHTML = '<div class="empty"><b>เฉพาะเจ้าของกิจการเท่านั้นที่เพิ่มผู้ใช้งานได้</b></div>'; return; }
+    main.innerHTML = `<div class="page-h"><div><a href="#/users" class="muted" style="text-decoration:none;font-size:13px">‹ หน้าผู้ใช้งานในกิจการทั้งหมด</a><h1>เพิ่มผู้ใช้งาน</h1></div>
+      <div class="actions"><a class="btn" href="#/users">ยกเลิก</a><button class="btn primary" data-send>ส่งคำเชิญผู้ใช้งาน</button></div></div>
+      <div class="card card-pad" style="max-width:760px"><h2>เชิญผู้ใช้งานในระบบใหม่</h2>
+        <p class="muted" style="margin-top:0">ระบุอีเมลและเลือกตำแหน่งเพื่อเชิญและเพิ่มผู้ใช้งาน</p>
+        <div class="grid g2">
+          <label class="field span2"><span>อีเมลผู้ใช้งาน</span><input type="email" data-email autocomplete="off" placeholder="name@example.com"></label>
+          <label class="field span2"><span>ตำแหน่ง <a href="#" class="link" data-roles style="float:right;font-weight:400">รายละเอียดแต่ละตำแหน่ง</a></span>
+            <select data-role><option value="">กรุณาเลือกตำแหน่ง</option>${d.roles.map((r) => `<option value="${r.key}">${esc(r.name)}</option>`).join('')}</select></label>
+        </div>
+        <div class="field" style="margin-top:16px" data-pwrap hidden><span>สิทธิ์การเข้าถึง <small class="muted" data-ph></small></span><div data-pp></div></div>
+      </div>`;
+    const roleSel = $('[data-role]', main);
+    roleSel.onchange = () => {
+      const r = d.roles.find((x) => x.key === roleSel.value);
+      $('[data-pwrap]', main).hidden = !r;
+      if (r) { $('[data-pp]', main).innerHTML = permPickers(r.perms, r.key === 'owner'); $('[data-ph]', main).textContent = permHint(r.key === 'owner'); }
+    };
+    $('[data-roles]', main).onclick = (e) => { e.preventDefault(); rolesDialog(d.roles); };
+    $('[data-send]', main).onclick = async (e) => {
+      const btn = e.currentTarget;
+      const email = $('[data-email]', main).value.trim();
+      const role = roleSel.value;
+      if (!email) { toast('กรุณากรอกอีเมล', true); return; }
+      if (!role) { toast('กรุณาเลือกตำแหน่ง', true); return; }
+      btn.disabled = true;
+      try {
+        const r = await post('/members/invite', { email, role, perms: readPerms(main) });
+        location.hash = '#/users';
+        inviteSent(email.toLowerCase(), d.roles.find((x) => x.key === role).name, r.link);
+      } catch (err) { fail(err); } finally { btn.disabled = false; }
+    };
+  }
+
+  async function viewProfile(main) {
+    const { profile: p } = await api('GET', '/acc/me');
+    const members = await get('/members').catch(() => null);
+    const me = members?.members.find((x) => x.me);
+    let sig = p.signature || null;
+    let sigName = sig ? 'ลายเซ็น.png' : '';
+    main.innerHTML = `<div class="page-h"><div><h1>ข้อมูลส่วนตัว</h1><div class="sub">ใช้กับทุกกิจการในบัญชีนี้</div></div><div class="actions"><button class="btn primary" data-save>บันทึก</button></div></div>
+      <div class="grid" style="max-width:760px">
+        <div class="card card-pad"><h2>ข้อมูลส่วนตัว</h2>
+          <div class="form-rows">
+            <label class="frow"><span>ชื่อ</span><input type="text" name="first_name" value="${esc(p.first_name || '')}" placeholder="${esc((p.display_name || '').split(' ')[0] || '')}"></label>
+            <label class="frow"><span>นามสกุล</span><input type="text" name="last_name" value="${esc(p.last_name || '')}"></label>
+            <label class="frow"><span>เบอร์ติดต่อ</span><input type="tel" name="phone" value="${esc(p.phone || '')}"></label>
+            <div class="frow"><span>อีเมล (ผู้ใช้ระบบ)</span><div class="frow-v"><input type="email" value="${esc(p.email || '')}" disabled><span class="u-ok nowrap">✓ ยืนยันแล้ว</span></div></div>
+            <div class="frow"><span>ตำแหน่ง</span><div><input type="text" value="${esc(me?.role_name || S.boot.role || '')}" disabled>
+              ${me ? `<details class="perm-mine"><summary class="link">ดูรายละเอียดสิทธิ์ของตนเอง</summary>${permTable(me.perms)}</details>` : ''}</div></div>
+          </div></div>
+        <div class="card card-pad"><h2>ลายเซ็นอิเล็กทรอนิกส์</h2>
+          <p class="muted" style="margin-top:0">ใส่ในช่องลงนามของกิจการ บนเอกสารที่คุณเป็นผู้ออก (เมื่อเปิด "ลายเซ็นและตราประทับ") ถ้ายังไม่มี ระบบใช้ลายเซ็นของกิจการในหน้าตั้งค่า ถ่ายรูปลายเซ็นบนกระดาษขาวได้ ระบบลบพื้นหลังให้</p>
+          <div class="frow"><span>แนบไฟล์ลายเซ็น</span><div>
+            <div class="sig-box" data-sig>${sig ? `<img src="${esc(sig)}" alt="ลายเซ็น">` : '<button type="button" class="btn" data-up>อัปโหลดลายเซ็น</button>'}</div>
+            <div class="sig-file" data-sf ${sig ? '' : 'hidden'}><span data-sn>${esc(sigName)}</span><button type="button" class="icon-btn" data-rm aria-label="เอาลายเซ็นออก">×</button></div>
+            <small class="muted">*ขนาดภาพที่แนะนำ 400×140 px และขนาดไม่เกิน 3MB</small><input type="file" accept="image/*" hidden data-f></div></div>
+        </div>
+        ${me && !me.primary ? `<div class="card card-pad"><h2>ออกจากกิจการ</h2><p class="muted" style="margin-top:0">เลิกเป็นผู้ใช้งานของ${esc(biz().name)}</p><button class="btn danger" data-leave>ออกจากกิจการนี้</button></div>` : ''}
+      </div>`;
+    const f = $('[data-f]', main);
+    const drawSig = () => {
+      $('[data-sig]', main).innerHTML = sig ? `<img src="${esc(sig)}" alt="ลายเซ็น">` : '<button type="button" class="btn" data-up>อัปโหลดลายเซ็น</button>';
+      $('[data-sf]', main).hidden = !sig;
+      $('[data-sn]', main).textContent = sigName;
+    };
+    main.addEventListener('click', (e) => {
+      if (e.target.closest('[data-up]') || (e.target.closest('[data-sig]') && sig)) { f.value = ''; f.click(); }
+      if (e.target.closest('[data-rm]')) { sig = null; sigName = ''; drawSig(); }
+      if (e.target.closest('[data-leave]')) leaveBusiness();
+    });
+    f.onchange = async () => {
+      const file = f.files[0]; if (!file) return;
+      if (file.size > 3 * 1024 * 1024) { toast('ไฟล์ใหญ่เกิน 3MB', true); return; }
+      try { sig = await cleanMark(file); sigName = file.name; drawSig(); } catch { toast('อ่านรูปไม่ได้ ลองไฟล์ PNG หรือ JPG', true); }
+    };
+    $('[data-save]', main).onclick = async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      try {
+        const d = formData(main);
+        await api('PUT', '/acc/me', { first_name: d.first_name, last_name: d.last_name, phone: d.phone, signature: sig });
+        toast('บันทึกแล้ว');
+      } catch (err) { fail(err); } finally { btn.disabled = false; }
+    };
+  }
+
+  // Invites to my email: join from a dialog (also shown when I have no business yet).
+  async function showInvites(invites, first) {
+    const joined = await dialog({
+      title: 'คุณได้รับคำเชิญ', ok: '', cancel: first ? 'สร้างกิจการของตัวเอง' : 'ภายหลัง',
+      body: `<div class="biz-list">${invites.map((i) => `<div class="inv-row">${i.logo ? `<img src="${esc(i.logo)}" width="36" height="36" style="object-fit:contain;border-radius:6px">` : `<span class="chip">${esc(i.business.slice(0, 2))}</span>`}
+        <span style="flex:1"><b>${esc(i.business)}</b><br><small class="muted">${esc(i.role_name)}${i.invited_by ? ` · เชิญโดย ${esc(i.invited_by)}` : ''}</small></span>
+        <button class="btn sm ghost" data-no="${i.id}">ปฏิเสธ</button><button class="btn sm primary" data-yes="${i.id}">เข้าร่วม</button></div>`).join('')}</div>`,
+      onOpen: (el, close) => el.addEventListener('click', async (e) => {
+        const yes = e.target.closest('[data-yes]'); const no = e.target.closest('[data-no]');
+        try {
+          if (yes) { const r = await api('POST', '/acc/invites/accept', { id: yes.dataset.yes }); close(r.business_id); }
+          if (no) { await api('POST', `/acc/invites/${no.dataset.no}/decline`); no.closest('.inv-row').remove(); if (!$('.inv-row', el)) close(null); }
+        } catch (err) { fail(err); }
+      }),
+    });
+    return joined;
+  }
+
+  // #/invite/<token>: the link from an invite email.
+  const inviteToken = () => { const m = location.hash.match(/^#\/invite\/([A-Za-z0-9_-]{32})/); return m ? m[1] : null; };
+
+  async function start() {
+    const token = inviteToken();
+    const load = async () => { const r = await api('GET', '/acc/businesses'); S.user = r.user; S.businesses = r.businesses; };
+    try {
+      await load();
     } catch (e) {
-      if (e.status === 401) return renderAuth();
+      if (e.status === 401) return renderAuth(token);
       app.innerHTML = `<div class="boot">เชื่อมต่อไม่สำเร็จ: ${esc(e.message)}</div>`;
       return;
+    }
+    S.boot = null;
+    if (token) {
+      history.replaceState(null, '', '#/');
+      try {
+        const j = await api('POST', '/acc/invites/accept', { token });
+        store.set('acc.biz', j.business_id);
+        await load();
+        toast('เข้าร่วมกิจการแล้ว');
+      } catch (e) {
+        app.innerHTML = '<div class="boot"></div>';
+        await dialog({ title: 'เปิดคำเชิญไม่ได้', body: `<p style="margin:0">${esc(e.message)}</p><p class="muted">เข้าสู่ระบบอยู่ด้วย ${esc(S.user?.email || '')}</p>`, ok: '', cancel: 'ตกลง',
+          extra: '<button class="btn" data-out>ออกจากระบบ</button>', onOpen: (el, close) => { $('[data-out]', el).onclick = async () => { await api('POST', '/auth/logout').catch(() => {}); close(); location.hash = `#/invite/${token}`; renderAuth(token); }; } });
+        if (!S.user) return;
+      }
+    }
+    // Invites to my email I have not answered yet (asked once per invite unless I have no business).
+    let invites = [];
+    try { invites = (await api('GET', '/acc/invites')).invites; } catch { /* older api */ }
+    const seen = (store.get('acc.invSeen') || '').split(',');
+    const fresh = S.businesses.length ? invites.filter((i) => !seen.includes(i.id)) : invites;
+    if (fresh.length) {
+      store.set('acc.invSeen', [...seen, ...fresh.map((i) => i.id)].slice(-50).join(','));
+      app.innerHTML = '<div class="boot"></div>';
+      const joined = await showInvites(fresh, !S.businesses.length);
+      if (joined) { store.set('acc.biz', joined); await load(); toast('เข้าร่วมกิจการแล้ว'); }
     }
     if (!S.businesses.length) {
       app.innerHTML = '<div class="boot"></div>';

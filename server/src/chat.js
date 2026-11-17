@@ -78,11 +78,46 @@ const isOpen = (id) => (streams.get(id)?.size || 0) > 0;
 // A phone that went to the background can keep its stream open for a while, so an open stream alone
 // does not mean the person would see a new message.
 const views = new Map(); // user id → { visible, at }
+const PING_MS = Number(process.env.CHAT_PING_MS || 15000);
 const VIEW_FRESH_MS = Number(process.env.CHAT_VIEW_FRESH_MS || 90000);
 const onScreen = (id) => { const v = views.get(id); return !!v && v.visible && isOpen(id) && Date.now() - v.at < VIEW_FRESH_MS; };
+// Every event gets an id "<boot>-<n>" and the last few minutes of them are kept per person, so a
+// device that reconnects (EventSource sends Last-Event-ID; our own reconnects pass ?last=) gets
+// exactly what it missed instead of waiting for a full reload. Typing is not kept: it is stale
+// a few seconds later. A device whose gap is older than the buffer, or from before a restart,
+// gets a "reset" event and reloads what is on screen.
+const BOOT = crypto.randomBytes(3).toString('hex');
+let seq = 0;
+const BACKLOG_MAX = 200;
+const BACKLOG_MS = Number(process.env.CHAT_BACKLOG_MS || 10 * 60000);
+const backlog = new Map(); // user id → { list: [{ n, at, data }], dropped: highest n trimmed }
+function keep(id, item) {
+  const b = backlog.get(id) || { list: [], dropped: 0 };
+  b.list.push(item);
+  const cutoff = Date.now() - BACKLOG_MS;
+  while (b.list.length > BACKLOG_MAX || (b.list.length && b.list[0].at < cutoff)) b.dropped = b.list.shift().n;
+  backlog.set(id, b);
+}
 function emit(userIds, ev) {
-  const data = `data: ${JSON.stringify(ev)}\n\n`;
-  for (const id of new Set(userIds)) for (const res of streams.get(id) || []) res.write(data);
+  const n = ++seq;
+  const data = `id: ${BOOT}-${n}\ndata: ${JSON.stringify(ev)}\n\n`;
+  const item = { n, at: Date.now(), data };
+  for (const id of new Set(userIds)) {
+    if (ev.type !== 'typing') keep(id, item);
+    for (const res of streams.get(id) || []) res.write(data);
+  }
+}
+// What a reconnecting device missed: the kept events after `last`, or null when it has to
+// reload (an id from before a restart, or a gap older than what is kept).
+export function missed(id, last) {
+  const m = /^([0-9a-f]+)-(\d+)$/.exec(String(last || ''));
+  if (!m || m[1] !== BOOT) return null;
+  const n = Number(m[2]);
+  if (n > seq) return null;
+  const b = backlog.get(id);
+  if (!b) return [];
+  if (b.dropped > n) return null;
+  return b.list.filter((x) => x.n > n);
 }
 
 router.use(requireUser);
@@ -98,10 +133,20 @@ router.get('/stream', (req, res) => {
     'X-Accel-Buffering': 'no',
   });
   res.flushHeaders();
-  res.write('retry: 3000\n\n');
+  req.socket.setNoDelay?.(true);
+  req.socket.setKeepAlive?.(true, 15000);
+  res.write('retry: 2000\n\n');
+  const last = req.get('last-event-id') || req.query.last;
+  if (last) {
+    const gap = missed(id, last);
+    if (gap) for (const x of gap) res.write(x.data);
+    else res.write(`id: ${BOOT}-${seq}\nevent: reset\ndata: {}\n\n`);
+  }
+  // Tells the device the stream is live and which event it is up to.
+  res.write(`id: ${BOOT}-${seq}\nevent: hello\ndata: ${JSON.stringify({ boot: BOOT, ping: PING_MS })}\n\n`);
   if (!streams.has(id)) streams.set(id, new Set());
   streams.get(id).add(res);
-  const ping = setInterval(() => res.write('event: ping\ndata: {}\n\n'), 20000);
+  const ping = setInterval(() => res.write('event: ping\ndata: {}\n\n'), PING_MS);
   req.on('close', () => {
     clearInterval(ping);
     streams.get(id)?.delete(res);

@@ -24,6 +24,10 @@ const chat = {
   open: null, // room on screen
   es: null,
   lastEvent: 0,
+  lastId: null, // id of the last stream event, to resume from
+  deadMs: 35000, // no event (not even a ping) for this long = the stream is dead
+  fails: 0,
+  polledAt: 0,
   partnerTyping: 0,
   typingSent: 0,
   reply: null, // message being replied to
@@ -71,22 +75,67 @@ function chatUpsert(room, m) {
   }
 }
 
+/* Live updates: one EventSource per device. Each event carries an id; when the stream drops,
+   the browser reconnects by itself with Last-Event-ID (and our own reconnects pass ?last=), and
+   the server replays what was missed, or sends "reset" when it cannot, and we reload what is on
+   screen. A stream that goes quiet past two pings is treated as dead. While there is no live
+   stream (no EventSource, a proxy that kills it, a flaky network) the open room is polled every
+   few seconds instead, so chat keeps working either way. */
+const CHAT_POLL_OPEN_MS = 4000;
+const CHAT_POLL_IDLE_MS = 30000;
+
+function chatLive() { return !!chat.es && chat.es.readyState === 1 && Date.now() - chat.lastEvent < chat.deadMs; }
+
 function chatConnect() {
   if (chat.es || !chatReady() || typeof EventSource === 'undefined') return;
-  const es = new EventSource('/api/chat/stream');
+  const es = new EventSource(`/api/chat/stream${chat.lastId ? `?last=${encodeURIComponent(chat.lastId)}` : ''}`);
   chat.es = es;
   chat.lastEvent = Date.now();
+  const seen = (e) => { chat.lastEvent = Date.now(); if (e && e.lastEventId) chat.lastId = e.lastEventId; };
   es.onmessage = (e) => {
-    chat.lastEvent = Date.now();
+    seen(e);
     let ev;
     try { ev = JSON.parse(e.data); } catch (err) { return; }
     chatEvent(ev);
   };
-  es.addEventListener('ping', () => { chat.lastEvent = Date.now(); });
-  es.onopen = () => { chat.lastEvent = Date.now(); chatView(); };
+  es.addEventListener('ping', () => seen());
+  es.addEventListener('hello', (e) => {
+    seen(e);
+    try { const h = JSON.parse(e.data); if (h.ping) chat.deadMs = h.ping * 2 + 5000; } catch (err) { /* keep default */ }
+    chat.fails = 0;
+  });
+  // The server could not tell what this device missed (restart, or away too long): reload.
+  es.addEventListener('reset', (e) => { seen(e); chatSync(); });
+  es.onopen = () => { seen(); chatView(); };
   es.onerror = () => {
-    if (es.readyState === 2) { chat.es = null; setTimeout(chatConnect, 5000); }
+    // readyState 0 = the browser is retrying by itself; 2 = it gave up (e.g. a 401 or 502).
+    if (es.readyState === 2 && chat.es === es) {
+      chat.es = null;
+      chat.fails = (chat.fails || 0) + 1;
+      setTimeout(chatConnect, Math.min(30000, 2000 * 2 ** Math.min(chat.fails, 4)));
+    }
   };
+}
+
+// Reload the room list and whatever is on screen from the server (no stream needed).
+async function chatSync() {
+  if (!chatReady()) return;
+  await chatLoadState();
+  if (chat.open && chat.rooms[chat.open]) {
+    const msgs = chat.rooms[chat.open].msgs.filter((m) => !m.sending);
+    const last = msgs.length ? msgs[msgs.length - 1].at : null;
+    try { await chatLoadRoom(chat.open, last ? { after: last } : {}); chatRenderWall(); chatMarkRead(); chatRenderHead(); } catch (e) { /* offline */ }
+  }
+}
+
+// Fallback: without a live stream, poll the open room often and the room list now and then.
+// Runs every CHAT_POLL_OPEN_MS.
+function chatPollTick() {
+  if (!chatReady() || document.visibilityState !== 'visible') return;
+  if (chatLive()) return;
+  if (chat.es && Date.now() - chat.lastEvent >= chat.deadMs) { chatDisconnect(); chatConnect(); }
+  else if (!chat.es) chatConnect();
+  if (chat.open || Date.now() - (chat.polledAt || 0) >= CHAT_POLL_IDLE_MS) { chat.polledAt = Date.now(); chatSync(); }
 }
 
 // Tell the server whether the app is on screen: when it is, new messages show as a banner here
@@ -120,16 +169,12 @@ function chatDisconnect() {
   chat.es = null;
 }
 
-// The stream can go quiet behind a proxy or after the phone sleeps: reconnect and catch up.
+// Coming back to the app: a phone that slept may hold a dead stream, so start a fresh one
+// (it replays what was missed) and reload what is on screen.
 async function chatCatchUp() {
   if (!chatReady()) return;
-  if (!chat.es || Date.now() - chat.lastEvent > 50000) { chatDisconnect(); chatConnect(); }
-  await chatLoadState();
-  if (chat.open && chat.rooms[chat.open]) {
-    const msgs = chat.rooms[chat.open].msgs.filter((m) => !m.sending);
-    const last = msgs.length ? msgs[msgs.length - 1].at : null;
-    try { await chatLoadRoom(chat.open, last ? { after: last } : {}); chatRenderWall(); chatMarkRead(); } catch (e) { /* offline */ }
-  }
+  if (!chatLive()) { chatDisconnect(); chatConnect(); }
+  await chatSync();
 }
 
 function chatEvent(ev) {
@@ -943,7 +988,8 @@ document.addEventListener('click', (e) => {
 document.addEventListener('visibilitychange', () => { chatView(); if (document.visibilityState === 'visible') chatCatchUp(); });
 window.addEventListener('pagehide', chatView);
 setInterval(() => { if (document.visibilityState === 'visible') chatView(); }, 60000);
-setInterval(() => { if (document.visibilityState === 'visible' && chatReady() && Date.now() - chat.lastEvent > 50000) chatCatchUp(); }, 20000);
+setInterval(chatPollTick, CHAT_POLL_OPEN_MS);
+window.addEventListener('online', chatCatchUp);
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => {
     const m = e.data && e.data.type === 'open' && /#chat-(couple|ai|sec)$/.exec(e.data.url || '');

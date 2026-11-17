@@ -1,6 +1,6 @@
 // Shared by the accounting app (app.js) and the public document page (doc.html):
 // Thai formatting, document totals (same rules as server/src/acc/ledger.js) and the
-// printable A4 layouts for sales documents and the 50 ทวิ withholding certificate.
+// printable A4 layouts for sales documents (the 50 ทวิ certificate is in wht50.js, on the official form).
 (function (g) {
   'use strict';
 
@@ -130,6 +130,7 @@
     EX: { open: 'รอจ่าย', paid: 'จ่ายแล้ว', void: 'ยกเลิก' },
   };
   const statusName = (type, s) => (STATUS[type] && STATUS[type][s]) || s;
+  const ACCT_TYPE = { th: { savings: 'ออมทรัพย์', current: 'กระแสรายวัน', fixed: 'ฝากประจำ' }, en: { savings: 'Savings', current: 'Current', fixed: 'Fixed deposit' } };
   const PAY_METHOD = { cash: 'เงินสด', transfer: 'โอนเงิน', cheque: 'เช็ค', card: 'บัตร', other: 'อื่น ๆ' };
 
   /* ---------- Printable document ---------- */
@@ -240,12 +241,15 @@
     const note = doc.notes || (s.notes && s.notes[doc.type]) || '';
     const billing = (doc.type === 'IV' || doc.type === 'QT') && doc.status !== 'void' && opts.pay !== false;
     const payInfo = billing && s.payment ? s.payment : '';
-    const banks = billing && Array.isArray(s.banks) ? s.banks.filter((b) => b && b.bank && b.number) : [];
+    // Active payment channels: bank accounts (bank + number) and other channels (e.g. a payment gateway).
+    const banks = billing && Array.isArray(s.banks) ? s.banks.filter((b) => b && b.active !== false && (b.kind === 'other' ? b.bank || b.name : b.bank && b.number)) : [];
     const pp = billing && doc.status !== 'paid' && s.promptpay && s.promptpay.id && s.promptpay.qr !== false && net > 0 ? s.promptpay : null;
     const qr = pp ? qrSvg(promptPayPayload(pp.id, net)) : '';
     const payBlock = banks.length || payInfo || pp ? `<section class="pp-pay">
         <div class="pp-pay-text"><div class="pp-label">${t.payTo}</div>
-          ${banks.map((b) => `<div class="pp-bank"><b>${esc(b.bank)}</b>${b.branch ? ` ${t.branch} ${esc(b.branch)}` : ''}<br><span class="pp-mono">${esc(b.number)}</span>${b.name ? ` · ${esc(b.name)}` : ''}</div>`).join('')}
+          ${banks.map((b) => (b.kind === 'other'
+            ? `<div class="pp-bank"><b>${esc(b.name || b.bank)}</b>${b.name && b.bank ? ` · ${esc(b.bank)}` : ''}${b.number ? `<br>${esc(b.number)}` : ''}</div>`
+            : `<div class="pp-bank"><b>${esc(b.bank)}</b>${b.branch ? ` ${t.branch} ${esc(b.branch)}` : ''}${b.acctType && ACCT_TYPE[lang] && ACCT_TYPE[lang][b.acctType] ? ` · ${ACCT_TYPE[lang][b.acctType]}` : ''}<br><span class="pp-mono">${esc(b.number)}</span>${b.name ? ` · ${esc(b.name)}` : ''}</div>`)).join('')}
           ${pp ? `<div class="pp-bank"><b>${t.promptpay}</b><br><span class="pp-mono">${esc(promptPayFmt(pp.id))}</span>${pp.name ? ` · ${esc(pp.name)}` : ''}</div>` : ''}
           ${payInfo ? `<div>${esc(payInfo).replace(/\n/g, '<br>')}</div>` : ''}
         </div>
@@ -347,39 +351,6 @@
     return kinds.map((k, i) => renderDoc(doc, business, { ...o, copy: k, page: kinds.length > 1 ? String(i + 1) : '' })).join('');
   }
 
-  // หนังสือรับรองการหักภาษี ณ ที่จ่าย ตามมาตรา 50 ทวิ, for a paid expense with WHT.
-  function renderWht(doc, business) {
-    const c = doc.wht_cert || {};
-    const box = (on) => `<span class="pp-box">${on ? '✓' : ''}</span>`;
-    const byRate = new Map();
-    for (const l of doc.lines || []) if (Number(l.wht) > 0) byRate.set(Number(l.wht), (byRate.get(Number(l.wht)) || 0) + Number(l.base || 0));
-    const rows = [...byRate].map(([rate, base]) => `<tr><td>5. ${esc(c.income || 'ค่าบริการ')} (อัตรา ${rate}%)<div class="pp-small">การจ่ายเงินได้ที่ต้องหักภาษี ณ ที่จ่าย ตามคำสั่งกรมสรรพากรที่ออกตามมาตรา 3 เตรส</div></td>
-      <td class="c">${slashDate(doc.pay?.date)}</td><td class="r">${money(base)}</td><td class="r">${money(Math.round(base * rate) / 100)}</td></tr>`).join('');
-    const base = [...byRate.values()].reduce((s, x) => s + x, 0);
-    return `<article class="paper pp-wht">
-      <div class="pp-copy">ฉบับที่ 1 (สำหรับผู้ถูกหักภาษี ณ ที่จ่าย ใช้แนบพร้อมกับแบบแสดงรายการภาษี)</div>
-      <h1 class="pp-wht-title">หนังสือรับรองการหักภาษี ณ ที่จ่าย</h1>
-      <div class="pp-wht-sub">ตามมาตรา 50 ทวิ แห่งประมวลรัษฎากร <span class="pp-wht-no">เลขที่ ${esc(c.number || '-')}</span></div>
-      <section class="pp-wht-party"><div class="pp-label">ผู้มีหน้าที่หักภาษี ณ ที่จ่าย</div>
-        <div class="pp-name">${esc(business.name)}</div><div class="pp-addr">${esc(business.address || '')}</div>
-        <div class="pp-small">เลขประจำตัวผู้เสียภาษีอากร ${esc(taxIdFmt(business.tax_id))}</div></section>
-      <section class="pp-wht-party"><div class="pp-label">ผู้ถูกหักภาษี ณ ที่จ่าย</div>
-        <div class="pp-name">${esc(doc.contact?.name)}</div><div class="pp-addr">${esc(doc.contact?.address || '')}</div>
-        <div class="pp-small">เลขประจำตัวผู้เสียภาษีอากร ${esc(taxIdFmt(doc.contact?.tax_id))}</div></section>
-      <div class="pp-wht-forms">ลำดับที่ ........ ในแบบ ${box(c.form === 'pnd3')} ภ.ง.ด.3 &nbsp; ${box(c.form === 'pnd53')} ภ.ง.ด.53</div>
-      <table class="pp-lines">
-        <thead><tr><th>ประเภทเงินได้พึงประเมินที่จ่าย</th><th class="c">วัน เดือน ปี ที่จ่าย</th><th class="r">จำนวนเงินที่จ่าย</th><th class="r">ภาษีที่หักและนำส่งไว้</th></tr></thead>
-        <tbody>${rows}<tr class="pp-grand"><td colspan="2" class="r">รวมเงินที่จ่ายและภาษีที่หักนำส่ง</td><td class="r">${money(base)}</td><td class="r">${money(doc.wht)}</td></tr></tbody>
-      </table>
-      <div class="pp-baht">รวมเงินภาษีที่หักนำส่ง (ตัวอักษร) (${esc(bahtText(doc.wht))})</div>
-      <div class="pp-wht-forms">ผู้จ่ายเงิน ${box(true)} (1) หัก ณ ที่จ่าย &nbsp; ${box(false)} (2) ออกให้ตลอดไป &nbsp; ${box(false)} (3) ออกให้ครั้งเดียว</div>
-      <footer class="pp-sign pp-sign-one"><div>
-        <div class="pp-small">ขอรับรองว่าข้อความและตัวเลขดังกล่าวข้างต้นถูกต้องตรงกับความจริงทุกประการ</div>
-        <div class="pp-line"></div><div>(${esc(business.settings?.signer || '.................................................')})</div>
-        <div class="pp-small">ผู้จ่ายเงิน · วันที่ ${esc(slashDate(doc.pay?.date))}</div></div></footer>
-    </article>`;
-  }
-
   /* ---------- PromptPay QR (EMVCo merchant-presented, Thai QR Payment) ---------- */
 
   function crc16(str) {
@@ -451,6 +422,6 @@
   g.Thai = {
     downloadPdf, promptPayPayload, promptPayFmt, qrSvg,
     esc, money, qtyFmt, thDate, slashDate, thMonth, today, taxIdFmt, branchFmt, bahtText, computeTotals, WHT_RATES,
-    docTitle, TYPE_NAME, TH_MONTHS, STATUS, statusName, PAY_METHOD, renderDoc, renderSet, renderWht, TH_MONTHS_LONG, bahtTextEn,
+    docTitle, TYPE_NAME, TH_MONTHS, STATUS, statusName, PAY_METHOD, renderDoc, renderSet, TH_MONTHS_LONG, bahtTextEn,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

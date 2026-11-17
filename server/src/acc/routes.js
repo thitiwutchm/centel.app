@@ -9,8 +9,10 @@ import { putReceipt, receiptUrl, storageEnabled } from '../storage.js';
 import {
   DEFAULT_ACCOUNTS, DEFAULT_PREFIX, DOC_TYPES, computeTotals, postingsFor, balanced, counterKey, docNumber,
 } from './ledger.js';
-import { report, REPORTS } from './reports.js';
+import { report, REPORTS, purchaseVatState, vatSales, vatPurchase, vatPp36 } from './reports.js';
 import { readPurchaseDoc } from './ai.js';
+import { mountUsers, guard, permsOf, inviteInfo, issuerOf } from './users.js';
+import { mountCentel, startReminderJob } from './centel.js';
 import { CC_KINDS, DEFAULT_BASE, ccFetch, cleanBase, cleanKey, reportFor, sinceMonth, toDocBody, venueContact } from './capcourt.js';
 
 const router = express.Router();
@@ -38,7 +40,20 @@ router.get('/public/:token', rateLimit(300, 60 * 60000), wrap(async (req, res) =
   if (!d) throw bad('not_found', 404);
   const b = (await pool.query('select * from acc_businesses where id = $1', [d.business_id])).rows[0];
   const ref = d.ref_id ? (await pool.query('select type, number, date from acc_docs where id = $1', [d.ref_id])).rows[0] : null;
-  res.set('Cache-Control', 'no-store').json({ doc: publicDoc(d, ref), business: publicBusiness(b) });
+  const business = publicBusiness(b);
+  // The person who issued the document signs it with their own signature when they have one.
+  if (b.settings?.signAuto) {
+    const sig = (await issuerOf(d.created_by))?.signature;
+    if (sig) business.signature = sig;
+  }
+  res.set('Cache-Control', 'no-store').json({ doc: publicDoc(d, ref), business });
+}));
+
+// What an invite link is for, shown on the sign-in page before the person signs in.
+router.get('/invite-info/:token', rateLimit(120, 60 * 60000), wrap(async (req, res) => {
+  const info = await inviteInfo(String(req.params.token));
+  if (!info) throw bad('invite_gone', 404);
+  res.set('Cache-Control', 'no-store').json(info);
 }));
 
 router.use(requireUser);
@@ -74,13 +89,16 @@ const biz = express.Router({ mergeParams: true });
 router.use('/b/:biz', wrap(async (req, _res, next) => {
   if (!isUuid(req.params.biz)) throw bad('not_found', 404);
   const row = await tx(req, async (db) => (await db.query(
-    `select b.*, m.role from acc_businesses b join acc_members m on m.business_id = b.id and m.user_id = app_uid()
+    `select b.*, m.role, m.perms from acc_businesses b join acc_members m on m.business_id = b.id and m.user_id = app_uid()
      where b.id = $1`, [req.params.biz])).rows[0]);
   if (!row) throw bad('not_found', 404);
+  row.perms = permsOf(row.role, row.perms);
   req.biz = row;
-  if (req.method !== 'GET' && row.role === 'viewer') throw bad('forbidden', 403);
+  await guard(req);
   next();
 }), biz);
+mountUsers(router, biz, { wrap, rateLimit });
+mountCentel(biz, { wrap });
 
 const B = (req) => req.biz.id;
 
@@ -116,13 +134,14 @@ async function updateBusiness(db, id, body) {
       prefixes,
       notes,
       payment: str(s.payment, 600),
-      // Bank accounts printed on quotations and invoices, and the PromptPay ID their QR pays into.
-      banks: (Array.isArray(s.banks) ? s.banks : []).slice(0, 4).map((b) => ({
-        bank: str(b?.bank, 100), number: str(b?.number, 40), name: str(b?.name, 200), branch: str(b?.branch, 100),
-      })).filter((b) => b.bank && b.number),
+      // Payment channels (ช่องทางการเงิน): bank accounts and other ways to pay, e.g. a payment gateway.
+      // Active ones are printed on quotations and invoices; the PromptPay ID is where their QR pays into.
+      banks: (Array.isArray(s.banks) ? s.banks : []).slice(0, 20).map(cleanChannel).filter(Boolean),
       promptpay: promptPayId(s.promptpay?.id) ? { id: promptPayId(s.promptpay.id), name: str(s.promptpay.name, 200), qr: s.promptpay.qr !== false } : null,
       signer: str(s.signer, 100),
       signerTitle: str(s.signerTitle, 100),
+      // เล่มที่ printed on 50 ทวิ certificates (blank = Buddhist year of the payment).
+      whtBook: str(s.whtBook, 20),
       // Put the signature and stamp on documents by default (the preview can turn it off per copy).
       signAuto: !!s.signAuto,
       lang: s.lang === 'en' ? 'en' : 'th',
@@ -141,8 +160,8 @@ biz.get('/', wrap(async (req, res) => {
     contacts: (await db.query('select * from acc_contacts where business_id = $1 order by name', [B(req)])).rows,
     items: (await db.query('select * from acc_items where business_id = $1 order by name', [B(req)])).rows,
   }));
-  const { role, ...business } = req.biz;
-  res.json({ business, role, ...out, ai: !!process.env.ANTHROPIC_API_KEY || !!process.env.ANTHROPIC_AUTH_TOKEN, storage: storageEnabled });
+  const { role, perms, ...business } = req.biz;
+  res.json({ business, role, perms, ...out, ai: !!process.env.ANTHROPIC_API_KEY || !!process.env.ANTHROPIC_AUTH_TOKEN, storage: storageEnabled });
 }));
 
 biz.put('/', wrap(async (req, res) => {
@@ -361,6 +380,12 @@ function cleanPay(p, acc, date) {
   };
 }
 
+// ภ.ง.ด.53 for a juristic person (13-digit tax ID starts with 0), ภ.ง.ด.3 for a person.
+const whtFormFor = (c) => {
+  const id = String(c?.tax_id || '').replace(/\D/g, '');
+  if (id.length === 13) return id[0] === '0' ? 'pnd53' : 'pnd3';
+  return c?.is_company === false ? 'pnd3' : 'pnd53';
+};
 const WHT_INCOME = ['ค่าบริการ', 'ค่าจ้างทำของ', 'ค่าเช่า', 'ค่าโฆษณา', 'ค่าขนส่ง', 'ค่าวิชาชีพอิสระ', 'ค่านายหน้า', 'ดอกเบี้ย', 'เงินปันผล', 'ค่ารางวัล', 'อื่น ๆ'];
 
 // Builds a document row from what the browser sent. `cur` is the stored document when editing.
@@ -423,7 +448,7 @@ async function buildDoc(db, req, body, cur) {
   if (type === 'EX' && t.wht > 0) {
     whtCert = {
       ...(whtCert || {}),
-      form: body.wht_form === 'pnd3' || body.wht_form === 'pnd53' ? body.wht_form : (contact.snap.is_company ? 'pnd53' : 'pnd3'),
+      form: body.wht_form === 'pnd3' || body.wht_form === 'pnd53' ? body.wht_form : whtFormFor(contact.snap),
       income: WHT_INCOME.includes(body.wht_income) ? body.wht_income : (whtCert?.income || 'ค่าบริการ'),
     };
   }
@@ -473,6 +498,7 @@ biz.get('/docs', wrap(async (req, res) => {
   const where = ['business_id = $1'];
   const p = [B(req)];
   if (DOC_TYPES.includes(q.type)) { p.push(q.type); where.push(`type = $${p.length}`); }
+  if (req.docTypes && req.docTypes.length < DOC_TYPES.length) { p.push(req.docTypes); where.push(`type = any($${p.length})`); }
   if (isDate(q.from)) { p.push(q.from); where.push(`date >= $${p.length}`); }
   if (isDate(q.to)) { p.push(q.to); where.push(`date <= $${p.length}`); }
   if (typeof q.status === 'string' && /^[a-z]{2,10}$/.test(q.status)) { p.push(q.status); where.push(`status = $${p.length}`); }
@@ -504,6 +530,7 @@ biz.get('/docs/:id', wrap(async (req, res) => {
        where e.doc_id = $1 order by e.date, l.debit desc, l.account`, [doc.id])).rows;
     return { doc, ref, children, journal };
   });
+  out.issuer = await issuerOf(out.doc.created_by);
   res.json(out);
 }));
 
@@ -619,7 +646,17 @@ biz.post('/scan', rateLimit(60, 60 * 60000), wrap(async (req, res) => {
   } catch (e) {
     console.error('acc scan failed', e.status || '', e.message);
   }
-  res.json({ attachment: key, result });
+  // The same vendor bill recorded before (same bill number, same vendor tax ID when known).
+  let duplicate = null;
+  if (result?.doc_no) {
+    const taxId = result.vendor?.tax_id || null;
+    duplicate = await tx(req, async (db) => (await db.query(
+      `select id, number, date from acc_docs
+        where business_id = $1 and type = 'EX' and status <> 'void' and lower(trim(ref_no)) = lower(trim($2))
+          and ($3::text is null or coalesce(contact->>'tax_id', '') in ('', $3))
+        order by created_at desc limit 1`, [B(req), String(result.doc_no).slice(0, 100), taxId])).rows[0] || null);
+  }
+  res.json({ attachment: key, result, duplicate });
 }));
 
 biz.get('/attachment', wrap(async (req, res) => {
@@ -694,6 +731,154 @@ biz.get('/reports/:name', wrap(async (req, res) => {
   if (!REPORTS.includes(req.params.name)) throw bad('not_found', 404);
   const out = await tx(req, (db) => report(db, req.biz, req.params.name, req.query));
   res.json(out);
+}));
+
+/* ---------- VAT: จัดการเอกสารภาษีซื้อ and เตรียมแบบภาษีรายเดือน ---------- */
+
+const isMonth = (s) => typeof s === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+const addMonths = (ym, n) => {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7);
+};
+const round2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
+
+// Every expense with its VAT state, for the purchase tax documents page.
+biz.get('/vat/purchases', wrap(async (req, res) => {
+  const q = req.query;
+  const where = ['business_id = $1', "type = 'EX'", "status <> 'void'"];
+  const p = [B(req)];
+  if (isDate(q.from)) { p.push(q.from); where.push(`date >= $${p.length}`); }
+  if (isDate(q.to)) { p.push(q.to); where.push(`date <= $${p.length}`); }
+  const rows = await tx(req, async (db) => (await db.query(
+    `select id, number, status, date, ref_no, ref_date, contact->>'name' as contact_name, contact->>'tax_id' as tax_id,
+            tax_invoice, vat_rate, vat_base, vat, total, vat_status, vat_month, attachment
+     from acc_docs where ${where.join(' and ')} order by date desc, number desc limit 3000`, p)).rows);
+  for (const d of rows) {
+    d.state = purchaseVatState(d);
+    d.claim_month = d.vat_month || d.date.slice(0, 7);
+    d.value = round2(d.total - d.vat);
+  }
+  if (storageEnabled) {
+    await Promise.all(rows.filter((d) => d.attachment && /\.(jpe?g|png|webp)$/.test(d.attachment)).map(async (d) => {
+      d.thumb = await receiptUrl(d.attachment).catch(() => null);
+    }));
+  }
+  res.json({ docs: rows });
+}));
+
+// Set the tax invoice status of one or more expenses:
+//   got / wait: only expenses with VAT on a tax invoice; month = the claim month (รอใช้สิทธิ์),
+//               from the document month up to six months after it.
+//   pp36 / none: expenses without a Thai tax invoice (a foreign service, or nothing to claim).
+biz.post('/vat/purchases', wrap(async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(isUuid).slice(0, 500) : [];
+  const status = ['got', 'wait', 'pp36', 'none'].includes(req.body?.status) ? req.body.status : null;
+  const month = req.body?.month == null || req.body.month === '' ? null : req.body.month;
+  if (!ids.length || !status) throw bad('bad_request');
+  if (month !== null && !isMonth(month)) throw bad('bad_month');
+  const out = await tx(req, async (db) => {
+    const docs = (await db.query(
+      "select id, date, tax_invoice, vat from acc_docs where business_id = $1 and type = 'EX' and status <> 'void' and id = any($2) for update",
+      [B(req), ids])).rows;
+    let updated = 0;
+    const skipped = [];
+    for (const d of docs) {
+      const hasVat = d.tax_invoice && Number(d.vat) > 0;
+      const own = d.date.slice(0, 7);
+      let vs = null;
+      let vm = null;
+      if (status === 'got' || status === 'wait') {
+        if (!hasVat) { skipped.push(d.id); continue; }
+        vs = status;
+        if (month && month !== own) {
+          if (month < own || month > addMonths(own, 6)) throw bad('claim_month_range');
+          vm = month;
+        }
+      } else {
+        if (hasVat) { skipped.push(d.id); continue; }
+        vs = status === 'pp36' ? 'pp36' : null;
+      }
+      await db.query('update acc_docs set vat_status = $2, vat_month = $3, updated_at = now() where id = $1', [d.id, vs, vm]);
+      updated += 1;
+    }
+    return { updated, skipped };
+  });
+  res.json({ ok: true, ...out });
+}));
+
+// The figures of a return, worked out from the documents of the month. ภ.พ.30 lines:
+// 1 sales, 2 at 0% or exempt, 4 taxable, 5 output VAT, 6 purchases claimed, 7 input VAT,
+// 8 payable / 9 overpaid this month, 10 overpaid carried in, 11 net payable / 12 net overpaid.
+async function returnFigures(db, biz, form, month) {
+  if (form === 'PP36') {
+    const p = await vatPp36(db, biz, { month });
+    return { base: p.totals.base, vat: p.totals.vat, count: p.totals.count };
+  }
+  const s = await vatSales(db, biz, { month });
+  const p = await vatPurchase(db, biz, { month });
+  const prev = (await db.query("select data from acc_vat_returns where business_id = $1 and form = 'PP30' and month = $2",
+    [biz.id, addMonths(month, -1)])).rows[0];
+  const carry = round2(prev?.data?.l12 || 0);
+  const l5 = s.totals.vat;
+  const l7 = p.totals.vat;
+  const net = round2(l5 - l7 - carry);
+  return {
+    l1: s.totals.value, l2: s.totals.zero, l3: 0, l4: s.totals.base, l5, l6: p.totals.base, l7,
+    l8: round2(Math.max(l5 - l7, 0)), l9: round2(Math.max(l7 - l5, 0)), l10: carry,
+    l11: round2(Math.max(net, 0)), l12: round2(Math.max(-net, 0)),
+    salesCount: s.totals.count, purchaseCount: p.totals.count, waiting: p.waiting,
+  };
+}
+// ภ.พ.30 is due on the 15th of the next month (23rd online); ภ.พ.36 on the 7th (15th online).
+const dueOf = (form, month) => {
+  const n = addMonths(month, 1);
+  return form === 'PP36' ? { paper: `${n}-07`, online: `${n}-15` } : { paper: `${n}-15`, online: `${n}-23` };
+};
+const returnOut = (r) => ({ ...r, due: dueOf(r.form, r.month) });
+
+biz.get('/vat/returns', wrap(async (req, res) => {
+  const rows = await tx(req, async (db) => (await db.query(
+    'select * from acc_vat_returns where business_id = $1 order by month desc, form', [B(req)])).rows);
+  res.json({ returns: rows.map(returnOut) });
+}));
+
+// Make a return for a month, or work its figures out again while it is still a draft.
+biz.post('/vat/returns', wrap(async (req, res) => {
+  const form = ['PP30', 'PP36'].includes(req.body?.form) ? req.body.form : null;
+  const month = isMonth(req.body?.month) ? req.body.month : null;
+  if (!form || !month) throw bad('bad_request');
+  if (form === 'PP30' && !req.biz.vat_registered) throw bad('not_vat_registered');
+  const row = await tx(req, async (db) => {
+    const cur = (await db.query('select * from acc_vat_returns where business_id = $1 and form = $2 and month = $3 for update', [B(req), form, month])).rows[0];
+    if (cur?.status === 'filed') throw bad('return_filed', 409);
+    const data = JSON.stringify(await returnFigures(db, req.biz, form, month));
+    if (cur) return (await db.query('update acc_vat_returns set data = $2, updated_at = now() where id = $1 returning *', [cur.id, data])).rows[0];
+    return (await db.query(
+      'insert into acc_vat_returns (business_id, form, month, data, created_by) values ($1, $2, $3, $4, app_uid()) returning *',
+      [B(req), form, month, data])).rows[0];
+  });
+  res.json({ return: returnOut(row) });
+}));
+
+// Mark a return as filed (its figures freeze) or take that back.
+biz.post('/vat/returns/:id/file', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const filed = req.body?.filed !== false;
+  const at = isDate(req.body?.filed_at) ? req.body.filed_at : bangkokToday();
+  const row = await tx(req, async (db) => (await db.query(
+    `update acc_vat_returns set status = $3, filed_at = $4, filed_ref = $5, updated_at = now()
+     where id = $1 and business_id = $2 returning *`,
+    [req.params.id, B(req), filed ? 'filed' : 'draft', filed ? at : null, filed ? str(req.body?.filed_ref, 100) : null])).rows[0]);
+  if (!row) throw bad('not_found', 404);
+  res.json({ return: returnOut(row) });
+}));
+
+biz.delete('/vat/returns/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const n = await tx(req, async (db) => (await db.query(
+    "delete from acc_vat_returns where id = $1 and business_id = $2 and status = 'draft'", [req.params.id, B(req)])).rowCount);
+  if (!n) throw bad('not_found', 404);
+  res.json({ ok: true });
 }));
 
 /* ---------- CapCourt Admin: monthly venue bills become invoices here ---------- */
@@ -874,6 +1059,7 @@ export function startAccJobs() {
   };
   setTimeout(tick, 30000);
   setInterval(tick, 60 * 60000);
+  startReminderJob();
 }
 
 /* ---------- Public shapes ---------- */
@@ -889,6 +1075,23 @@ function publicDoc(d, ref) {
   };
 }
 
+const ACCT_TYPES = ['savings', 'current', 'fixed'];
+function cleanChannel(b) {
+  if (!b || typeof b !== 'object') return null;
+  const kind = b.kind === 'other' ? 'other' : 'bank';
+  const c = {
+    id: /^[a-z0-9]{6,16}$/.test(b.id || '') ? b.id : Math.random().toString(36).slice(2, 10),
+    kind, active: b.active !== false,
+    bank: str(b.bank, 100), number: str(b.number, 40), name: str(b.name, 200), branch: str(b.branch, 100),
+  };
+  if (kind === 'bank') {
+    c.acctType = ACCT_TYPES.includes(b.acctType) ? b.acctType : 'savings';
+    return c.bank && c.number ? c : null;
+  }
+  // Other channels: bank = what it is (e.g. ช่องทางรับชำระออนไลน์), name = provider (e.g. Stripe), number = optional detail.
+  return c.bank || c.name ? c : null;
+}
+
 function publicBusiness(b) {
   return {
     name: b.name, name_en: b.name_en, tax_id: b.tax_id, branch: b.branch, address: b.address, phone: b.phone,
@@ -896,7 +1099,7 @@ function publicBusiness(b) {
     // The signature and stamp only leave the app when the business chose to sign documents automatically.
     signature: b.settings?.signAuto ? b.signature : null, stamp: b.settings?.signAuto ? b.stamp : null,
     settings: {
-      payment: b.settings?.payment || null, banks: b.settings?.banks || [], promptpay: b.settings?.promptpay || null, notes: b.settings?.notes || {}, signer: b.settings?.signer || null, signerTitle: b.settings?.signerTitle || null, signAuto: !!b.settings?.signAuto, lang: b.settings?.lang || 'th', color: b.settings?.color || null },
+      payment: b.settings?.payment || null, banks: (b.settings?.banks || []).filter((x) => x.active !== false), promptpay: b.settings?.promptpay || null, notes: b.settings?.notes || {}, signer: b.settings?.signer || null, signerTitle: b.settings?.signerTitle || null, signAuto: !!b.settings?.signAuto, lang: b.settings?.lang || 'th', color: b.settings?.color || null },
   };
 }
 

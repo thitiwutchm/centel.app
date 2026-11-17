@@ -8,6 +8,10 @@ import { oauthRouter, wellKnown } from './oauth.js';
 import { mcpRouter, aiRouter } from './mcp.js';
 import { udidReply } from './udid.js';
 import accRoutes, { startAccJobs } from './acc/routes.js';
+import { centelLinkRouter } from './acc/centel.js';
+import locationRoutes, { pingRouter as locationPing } from './location.js';
+import balanceRoutes from './balance.js';
+import investRoutes from './invest.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -32,6 +36,15 @@ app.use('/api/oauth', oauthRouter);
 app.use('/api/ai', loadUser, csrfGuard, aiRouter);
 // Accounting (account.centel.app): its own router so its public document links skip sign-in.
 app.use('/api/acc', loadUser, csrfGuard, accRoutes);
+// Centel's side of the account.centel.app link: approve a code, list and remove linked businesses.
+app.use('/api/acc-link', loadUser, csrfGuard, centelLinkRouter);
+// Partner location: the iOS app posts in the background with its own token, no cookie.
+app.use('/api/location/ping', locationPing);
+app.use('/api/location', loadUser, csrfGuard, locationRoutes);
+// Balance sharing: my money left, shown to my partner when I turn it on.
+app.use('/api/balance', loadUser, csrfGuard, balanceRoutes);
+// Investment portfolio (invest.centel.app): trades, and SET / US stock prices.
+app.use('/api/invest', loadUser, csrfGuard, investRoutes);
 app.use('/api', loadUser, csrfGuard, routes);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
 

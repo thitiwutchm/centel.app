@@ -480,7 +480,7 @@ function setGroup(title, rows) {
   return body ? `${title ? `<div class="section-title">${title}</div>` : ''}<div class="list set-list">${body}</div>` : '';
 }
 
-function remindLabel(n) { return n === 0 ? 'วันครบกำหนด' : `${n} วัน`; }
+function billRemindLabel(n) { return n === 0 ? 'วันครบกำหนด' : `${n} วัน`; }
 
 function renderSettings() {
   const s = state.settings;
@@ -506,16 +506,25 @@ function renderSettings() {
       setRow({ set: 'travel', ico: '✈️', color: '#00a3e0', name: 'โหมดนักเดินทาง', value: tr.on ? `${curFlag(tr.currency)} ${esc(tr.currency)}` : on(false) }),
     ])}
 
+    ${isCloud() && cloud.partner ? setGroup('คู่ของฉัน', [
+      setRow({ set: 'paydefault', ico: '💳', color: '#ff9f0a', name: 'ผู้จ่ายเริ่มต้น', value: partnerPaysDefault() ? `${esc(partnerName())} จ่ายให้` : 'ฉันจ่ายเอง' }),
+      window.balShareRow ? balShareRow() : '',
+      window.expShareRow ? expShareRow() : '',
+      window.partnerLocRow ? partnerLocRow() : '',
+    ]) : window.partnerLocRow ? setGroup('คู่ของฉัน', [partnerLocRow()]) : ''}
+
     ${setGroup('การแสดงผล', [
       setRow({ set: 'theme', ico: '🎨', color: '#ff7a45', name: 'ธีม', value: `<span class="set-sw tp-${theme.id}"><span class="tp-prev"></span></span>${theme.label}` }),
       window.appIconSettings ? setRow({ set: 'appicon', ico: '📱', color: '#ff4d8d', name: 'ไอคอนแอป' }) : '',
+      setRow({ action: 'home-order', ico: '↕️', color: '#00a37a', name: 'จัดลำดับหน้าหลัก' }),
       setRow({ set: 'lang', ico: '🌐', color: '#2f6bff', name: 'ภาษา · Language', value: LANG === 'en' ? 'English' : '<span translate="no">ไทย</span>' }),
     ])}
 
     ${setGroup('การแจ้งเตือน', [
-      setRow({ set: 'remind', ico: '⏰', color: '#ff9f0a', name: 'เตือนบิลล่วงหน้า', value: remindLabel(s.remindDays) }),
+      setRow({ set: 'remind', ico: '⏰', color: '#ff9f0a', name: 'เตือนบิลล่วงหน้า', value: billRemindLabel(s.remindDays) }),
       setRow({ set: 'push', ico: '🔔', color: '#ff3b30', name: 'แจ้งเตือนบนเครื่องนี้', value: on(push.on) }),
       setRow({ action: 'calfeed', ico: '📆', color: '#34c759', name: 'ปฏิทิน iPhone', value: cal ? 'ซิงก์อยู่' : on(false) }),
+      window.accLinkRow ? accLinkRow() : '',
       setRow({ set: 'line', ico: '💬', color: '#06c755', name: 'กลุ่ม LINE', value: !isCloud() ? '' : !line ? on(false) : !line.active ? on(false) : lineReady ? 'เปิดอยู่' : 'รอเชื่อม' }),
     ])}
 
@@ -565,12 +574,23 @@ const SET_SHEETS = {
     </div>
     <p class="hint">เมื่อกด "จ่ายแล้ว" ที่บิล แอปจะบันทึกเป็นรายจ่ายในกระเป๋าเงินนี้ให้อัตโนมัติ เพื่อให้ยอดเงินและงบประมาณตรงกัน</p>`;
   }],
+  paydefault: ['ผู้จ่ายเริ่มต้น', () => {
+    const pp = partnerPaysDefault();
+    return `<div class="seg pay-seg">
+      <button type="button" data-paydef="me" class="${pp ? '' : 'on'}" aria-pressed="${!pp}">ฉันจ่ายเอง</button>
+      <button type="button" data-paydef="partner" class="${pp ? 'on' : ''}" aria-pressed="${pp}">${esc(partnerName())} จ่ายให้</button></div>
+    <p class="hint">${pp ? `รายจ่ายใหม่จะเริ่มที่ ${esc(partnerName())} เป็นคนจ่าย และ${esc(partnerName())} รับผิดชอบทั้งหมด ไม่หักจากกระเป๋าเงินของคุณ` : 'รายจ่ายใหม่จะเริ่มที่ ส่วนตัว จ่ายจากกระเป๋าเงินของคุณ'} · เปลี่ยนได้ทุกครั้งตอนเพิ่มรายการ · ตั้งแยกของแต่ละคน</p>`;
+  }],
   travel: ['โหมดนักเดินทาง', () => travelSettings().replace(/<div class="section-title">[^<]*<\/div>/, '')],
   theme: ['ธีม', () => `
     <div class="theme-pick">${THEMES.map((t) => `<button class="tp tp-${t.id}${t.id === themeId() ? ' on' : ''}" data-theme-pick="${t.id}" aria-pressed="${t.id === themeId()}">
       <span class="tp-prev"><i></i><i></i></span><span class="tp-name">${t.label}</span></button>`).join('')}</div>
     <p class="hint">ธีมฟ้าเปลี่ยนสว่าง/มืดตามโหมดของเครื่อง · ธีมจำไว้ในเครื่องนี้ · บน iPhone สีแถบสถานะด้านบนจะเปลี่ยนตามเมื่อเปิดแอปใหม่</p>`],
   photoslips: ['ดึงสลิปจากรูปภาพ', () => (window.photoSlipsSettings ? photoSlipsSettings() : '')],
+  balshare: ['แชร์เงินคงเหลือให้คู่', () => (window.balShareSettings ? balShareSettings() : '')],
+  expshare: ['แชร์รายจ่ายให้คู่', () => (window.expShareSettings ? expShareSettings() : '')],
+  partnerloc: ['แชร์ตำแหน่งกับคู่', () => (window.partnerLocSettings ? partnerLocSettings() : '')],
+  special: ['ตั้งค่าพิเศษ', () => (window.specialSettings ? specialSettings() : '')],
   applock: ['ล็อกแอป', () => (window.appLockSettings ? appLockSettings() : '')],
   appver: ['เวอร์ชันแอป', () => (window.appUpdateSettings ? appUpdateSettings() : '')],
   appicon: ['ไอคอนแอป', () => (window.appIconSettings ? appIconSettings().replace(/<div class="section-title">[^<]*<\/div>/, '') : '')],
@@ -580,7 +600,7 @@ const SET_SHEETS = {
   remind: ['เตือนบิลล่วงหน้า', () => `
     <div class="form">
       <div class="field"><label for="remindDays">เตือนล่วงหน้า</label>
-        <select id="remindDays">${[0, 1, 2, 3, 5, 7].map((n) => `<option value="${n}" ${state.settings.remindDays === n ? 'selected' : ''}>${remindLabel(n)}</option>`).join('')}</select>
+        <select id="remindDays">${[0, 1, 2, 3, 5, 7].map((n) => `<option value="${n}" ${state.settings.remindDays === n ? 'selected' : ''}>${billRemindLabel(n)}</option>`).join('')}</select>
       </div>
     </div>
     <p class="hint">แอปจะแสดงบิลที่ใกล้ครบกำหนดเมื่อเปิดแอป และแสดงตัวเลขบนไอคอน (iOS 16.4 ขึ้นไป เมื่อติดตั้งที่หน้าจอโฮม) · ใช้กับการแจ้งเตือนบนเครื่องและปฏิทิน iPhone ด้วย</p>`],
@@ -604,6 +624,12 @@ function settingsSheet(key, again = false) {
   if (again) sheet.scrollTop = y;
   const bw = $('#billWallet');
   if (bw) bw.addEventListener('change', (e) => { money.prefs.billWallet = e.target.value; savePrefs(); toast('บันทึกแล้ว'); render(); });
+  sheet.querySelectorAll('[data-paydef]').forEach((b) => b.addEventListener('click', () => {
+    const v = b.dataset.paydef === 'partner' ? 'partner' : 'me';
+    if ((money.prefs.payDefault || 'me') === v) return;
+    money.prefs.payDefault = v;
+    savePrefs(); toast('บันทึกแล้ว'); render();
+  }));
   const rd = $('#remindDays');
   if (rd) rd.addEventListener('change', (e) => { state.settings.remindDays = Number(e.target.value); save(); toast('บันทึกแล้ว'); render(); });
   sheet.querySelectorAll('[data-theme-pick]').forEach((b) => b.addEventListener('click', () => {
@@ -618,6 +644,11 @@ function settingsSheet(key, again = false) {
   if (key === 'push') pushSettingsBind();
   if (key === 'chat') chatSettingsBind();
   if (key === 'photoslips' && window.photoSlipsBind) photoSlipsBind();
+  if (key === 'partnerloc' && window.partnerLocBind) partnerLocBind();
+  if (key === 'special' && window.specialBind) specialBind();
+  if (key === 'balshare' && window.balShareBind) balShareBind();
+  if (key === 'acclink' && window.accLinkBind) accLinkBind();
+  if (key === 'expshare' && window.expShareBind) expShareBind();
   if (key === 'applock' && window.appLockBind) appLockBind();
   if (key === 'appver' && window.appUpdateBind) appUpdateBind();
 }
@@ -1640,7 +1671,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // The iOS app's web view has no service worker, so it learns about a new version here: when the
 // app comes back to the screen, the deployed sw.js says which version is live (its CACHE name);
 // if that is not the one this page loaded with, the page reloads (only with no sheet open).
-const APP_BUILD = 'billplanner-v108'; // keep equal to CACHE in sw.js
+const APP_BUILD = 'billplanner-v125'; // keep equal to CACHE in sw.js
 let buildChecked = 0;
 function checkNewBuild() {
   if (location.protocol === 'file:' || Date.now() - buildChecked < 30000) return;

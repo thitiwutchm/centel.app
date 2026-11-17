@@ -357,3 +357,57 @@ test('chat: revoking the token stops the bridge', async () => {
   assert.equal((await bridge(token, 'GET', '/next?wait=0')).status, 401);
   assert.equal((await A('GET', '/chat/bridge')).set, false);
 });
+
+// Reads one SSE connection until `until` returns true or `ms` pass; returns the parsed frames.
+async function sse(who, { last, ms = 1500, until } = {}) {
+  const ac = new AbortController();
+  const frames = [];
+  const t = setTimeout(() => ac.abort(), ms);
+  try {
+    const res = await fetch(API + '/api/chat/stream', { headers: { cookie: who.cookie(), ...(last ? { 'last-event-id': last } : {}) }, signal: ac.signal });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, i); buf = buf.slice(i + 2);
+        const f = { event: 'message' };
+        for (const line of block.split('\n')) {
+          const m = /^(id|event|data): ?(.*)$/.exec(line);
+          if (m) f[m[1]] = m[2];
+        }
+        if (f.data !== undefined) { try { f.json = JSON.parse(f.data); } catch (e) { /* not json */ } frames.push(f); }
+        if (until && until(frames)) { ac.abort(); }
+      }
+    }
+  } catch (e) { /* aborted */ }
+  clearTimeout(t);
+  return frames;
+}
+
+test('chat stream: hello carries an id, a reconnect replays what was missed, an unknown id resets', async () => {
+  const first = await sse(B, { until: (f) => f.some((x) => x.event === 'hello') });
+  const hello = first.find((x) => x.event === 'hello');
+  assert.ok(hello && /^[0-9a-f]+-\d+$/.test(hello.id), 'hello has an id');
+  assert.ok(hello.json.ping > 0);
+  // While B is away, A writes twice.
+  await send(A, 'couple', 'ระหว่างที่หลุด 1');
+  await send(A, 'couple', 'ระหว่างที่หลุด 2');
+  const back = await sse(B, { last: hello.id, until: (f) => f.some((x) => x.event === 'hello') });
+  const texts = back.filter((x) => x.event === 'message' && x.json.type === 'msg').map((x) => x.json.msg.text);
+  assert.deepEqual(texts.slice(-2), ['ระหว่างที่หลุด 1', 'ระหว่างที่หลุด 2']);
+  assert.ok(!back.some((x) => x.event === 'reset'));
+  // Up to date: nothing is replayed.
+  const again = await sse(B, { last: back.find((x) => x.event === 'hello').id, until: (f) => f.some((x) => x.event === 'hello') });
+  assert.equal(again.filter((x) => x.event === 'message').length, 0);
+  // An id from another boot (a restart) tells the app to reload.
+  const reset = await sse(B, { last: 'ffffff-1', until: (f) => f.some((x) => x.event === 'hello') });
+  assert.ok(reset.some((x) => x.event === 'reset'));
+  // Pings keep a quiet stream alive (CHAT_PING_MS, 15 s by default).
+  const quiet = await sse(B, { ms: Number(process.env.CHAT_PING_MS || 15000) + 1500, until: (f) => f.some((x) => x.event === 'ping') });
+  assert.ok(quiet.some((x) => x.event === 'ping'));
+});

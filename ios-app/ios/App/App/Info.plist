@@ -80,7 +80,9 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>METANG ใช้ Face ID เพื่อล็อกแอปและปลดล็อกเมื่อคุณเปิดใช้ "ล็อกแอปด้วย Face ID"</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>METANG ใช้ตำแหน่งในโหมดนักเดินทาง เพื่อเลือกสกุลเงินของประเทศที่คุณอยู่</string>
+	<string>METANG ใช้ตำแหน่งในโหมดนักเดินทาง เพื่อเลือกสกุลเงินของประเทศที่คุณอยู่ และเมื่อคุณเปิด "แชร์ตำแหน่งกับคู่" เพื่อให้คู่ของคุณเห็นว่าคุณอยู่ที่ไหนและอากาศที่นั่น</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>เมื่อเปิด "แชร์ตำแหน่งกับคู่" METANG จะส่งตำแหน่งล่าสุดให้คู่ของคุณเห็นแม้ปิดแอปอยู่ เฉพาะตอนที่คุณย้ายที่ไปราว 500 เมตรขึ้นไป (ประหยัดแบต) ปิดได้ทุกเมื่อในแอป</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>METANG เปิดคลังรูปเพื่อเลือกสลิปหรือรูปโปรไฟล์ และเมื่อคุณเปิด "ดึงสลิปจากรูปภาพ" จะตรวจรูปใหม่บนเครื่องเพื่อหาสลิปโอนเงินและใบเสร็จ</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

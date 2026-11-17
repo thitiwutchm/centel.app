@@ -76,6 +76,8 @@ const defaultMoney = () => ({
   budgets: [],
   // labels: { id, name } — tags a transaction can carry several of (t.labels = [label ids])
   labels: [],
+  // ious: ติดเงิน records, never counted anywhere (see iou.js)
+  ious: [],
   prefs: { hideBalance: false },
 });
 
@@ -91,6 +93,7 @@ function loadMoney() {
       txns: Array.isArray(s.txns) ? s.txns.map((t) => (t.category ? { ...t, category: newCat(t.category) } : t)) : [],
       budgets: Array.isArray(s.budgets) ? s.budgets.map((bg) => ({ ...bg, category: newCat(bg.category) })) : [],
       labels: Array.isArray(s.labels) ? s.labels : [],
+      ious: Array.isArray(s.ious) ? s.ious : [],
       prefs: { ...d.prefs, ...(s.prefs || {}) },
     };
   } catch (e) {
@@ -527,6 +530,10 @@ function setTxnLabels(t, ids) {
   t.labels = ids;
   if (isCloud()) cloudCall('PUT', `/expenses/${t.id}/labels`, { labels: ids }); else saveMoney();
 }
+// Account › คู่ของฉัน › ผู้จ่ายเริ่มต้น: 'partner' when my partner pays for my expenses by default.
+// Kept in prefs, so it is per person (and per profile) and follows them to every device.
+function partnerPaysDefault() { return isCloud() && !!cloud.partner && money.prefs.payDefault === 'partner'; }
+
 function savePrefs() {
   if (isCloud()) cloudSavePrefs(); else saveMoney();
 }
@@ -862,6 +869,47 @@ function renderHome() {
   const recent = money.txns.filter((t) => t.date <= dateStr(new Date()) && t.type !== 'settle')
     .sort((a, b) => b.date.localeCompare(a.date) || added(b) - added(a)).slice(0, 4);
 
+  const secs = {
+    wallets: () => `
+    <div class="card list-card">
+      <div class="card-head"><b>กระเป๋าเงินของฉัน</b><button class="link-btn" data-action="wallets">ดูทั้งหมด</button></div>
+      ${wallets}
+    </div>`,
+    pkgs: () => pkgCard,
+    chat: () => chatCard(),
+    notes: () => notesCard(),
+    couple: () => coupleCard(),
+    partnerloc: () => (window.partnerLocCard ? partnerLocCard() : ''),
+    ious: () => iouCard(),
+    bills: () => (state.bills.length ? `
+    <div class="section-row"><span>บิลที่ต้องจ่ายเดือนนี้</span><button class="link-btn" data-goto="bills">ดูบิล</button></div>
+    <div class="card list-card">
+      <div class="card-head"><span class="muted">คงเหลือต้องจ่าย</span><b>${baht(billsLeft)}</b></div>
+      ${occ.length ? occ.slice(0, 3).map(occItem).join('') : '<div class="muted pad">🎉 จ่ายครบทุกบิลแล้วเดือนนี้</div>'}
+    </div>` : ''),
+    report: () => (money.txns.length ? `
+    <div class="section-row"><span>รายงานเดือนนี้</span><button class="link-btn" data-action="report" data-ym="${ym}">ดูรายงาน</button></div>
+    <div class="card" id="homeReport">${homeReport(ym, S)}</div>
+    ${insightCard(ym, S)}` : `
+    <div class="card empty-card">
+      <div class="e-ico">👛</div>
+      <b>เริ่มบันทึกรายรับรายจ่าย</b>
+      <div class="muted small">บันทึกทุกรายการเพื่อดูยอดเงินแต่ละกระเป๋า รายงานรายเดือน และตั้งงบประมาณ</div>
+      <button class="btn" data-action="add-tx" style="margin-top:14px">＋ เพิ่มรายการแรก</button>
+      ${state.bills.length || isCloud() ? '' : '<button class="btn ghost" data-action="sample">ลองใช้ข้อมูลตัวอย่าง</button>'}
+    </div>`),
+    recent: () => (money.txns.length ? `
+    <div class="section-row"><span>รายการล่าสุด</span><button class="link-btn" data-goto="txns">ดูทั้งหมด</button></div>
+    <div class="card list-card">${recent.map((t) => txItem(t, S)).join('') || '<div class="muted pad">ยังไม่มีรายการ</div>'}</div>` : ''),
+  };
+  // The person's order (Account › จัดลำดับหน้าหลัก). On a phone it is one list top to bottom;
+  // on a desktop each section keeps its usual column and the order applies within it.
+  const order = homeOrder().filter((id) => !homeHidden().includes(id));
+  const wide = window.matchMedia('(min-width: 1024px)').matches;
+  const homeCols = wide
+    ? [1, 2].map((c) => order.filter((id) => HOME_SECS.find((x) => x.id === id).col === c).map((id) => secs[id]()).join('\n'))
+    : [order.map((id) => secs[id]()).join('\n'), ''];
+
   view.innerHTML = `
     <div class="hero">
       <div class="hero-top">
@@ -873,7 +921,7 @@ function renderHome() {
         <div class="label">ยอดเงินรวม</div>
         <div class="hb-amt">${masked(sbaht(total))}
           <button class="eye" data-action="toggle-hide" aria-label="${hide ? 'แสดงยอดเงิน' : 'ซ่อนยอดเงิน'}">${svgIcon(hide ? 'eyeOff' : 'eye')}</button></div>
-        <button class="glass-pill" data-action="wallets">กระเป๋าเงิน ${money.wallets.length} ใบ</button>
+        <div class="hb-pills"><button class="glass-pill" data-action="wallets">กระเป๋าเงิน ${money.wallets.length} ใบ</button>${window.balShareBtn ? balShareBtn() : ''}</div>
       </div>
       <div class="qa-row">
         <button data-action="add-tx"><i>${svgIcon('plus')}</i><span>เพิ่มรายการ</span></button>
@@ -887,44 +935,114 @@ function renderHome() {
     ${window.appUpdateCard ? appUpdateCard() : ''}
     ${window.photoSlipsCard ? photoSlipsCard() : ''}
 
-    <div class="card list-card">
-      <div class="card-head"><b>กระเป๋าเงินของฉัน</b><button class="link-btn" data-action="wallets">ดูทั้งหมด</button></div>
-      ${wallets}
-    </div>
-
-    ${pkgCard}
-
-    ${chatCard()}
-
-    ${notesCard()}
-
-    ${coupleCard()}
-
-    ${state.bills.length ? `
-    <div class="section-row"><span>บิลที่ต้องจ่ายเดือนนี้</span><button class="link-btn" data-goto="bills">ดูบิล</button></div>
-    <div class="card list-card">
-      <div class="card-head"><span class="muted">คงเหลือต้องจ่าย</span><b>${baht(billsLeft)}</b></div>
-      ${occ.length ? occ.slice(0, 3).map(occItem).join('') : '<div class="muted pad">🎉 จ่ายครบทุกบิลแล้วเดือนนี้</div>'}
-    </div>` : ''}
-
-    </div><div class="home-col">
-    ${money.txns.length ? `
-    <div class="section-row"><span>รายงานเดือนนี้</span><button class="link-btn" data-action="report" data-ym="${ym}">ดูรายงาน</button></div>
-    <div class="card" id="homeReport">${homeReport(ym, S)}</div>
-    ${insightCard(ym, S)}
-    <div class="section-row"><span>รายการล่าสุด</span><button class="link-btn" data-goto="txns">ดูทั้งหมด</button></div>
-    <div class="card list-card">${recent.map((t) => txItem(t, S)).join('') || '<div class="muted pad">ยังไม่มีรายการ</div>'}</div>
-    ` : `
-    <div class="card empty-card">
-      <div class="e-ico">👛</div>
-      <b>เริ่มบันทึกรายรับรายจ่าย</b>
-      <div class="muted small">บันทึกทุกรายการเพื่อดูยอดเงินแต่ละกระเป๋า รายงานรายเดือน และตั้งงบประมาณ</div>
-      <button class="btn" data-action="add-tx" style="margin-top:14px">＋ เพิ่มรายการแรก</button>
-      ${state.bills.length || isCloud() ? '' : '<button class="btn ghost" data-action="sample">ลองใช้ข้อมูลตัวอย่าง</button>'}
-    </div>`}
+    ${homeCols.join('</div><div class="home-col">')}
     ${state.bills.length || money.txns.length ? '' : installTip()}
+    <button class="home-edit" data-action="home-order"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M8 4 4.5 7.5M8 4l3.5 3.5M16 20V4m0 16-3.5-3.5M16 20l3.5-3.5"/></svg><span>จัดลำดับหน้าหลัก</span></button>
     </div></div>
   `;
+}
+
+/* ---------- Home section order ----------
+   money.prefs.homeOrder = ['wallets', 'chat', …] (synced with the other prefs). Unknown ids are
+   dropped and sections added later slot in at their default place, so old saved orders keep working. */
+const HOME_SECS = [
+  { id: 'wallets', label: 'กระเป๋าเงินของฉัน', sub: 'ยอดคงเหลือแต่ละกระเป๋า', icon: '👛', color: '#ff7a45', col: 1 },
+  { id: 'pkgs', label: 'แพ็กเกจ', sub: 'แพ็กเกจที่ยังใช้ได้', icon: '🎟️', color: '#ff4d8d', col: 1 },
+  { id: 'chat', label: 'แชท', sub: 'ห้องแชทและผู้ช่วย', icon: '💬', color: '#2f6bff', col: 1 },
+  { id: 'notes', label: 'สิ่งที่ต้องทำ', sub: 'โน้ตเตือนความจำ', icon: '📝', color: '#ff9f0a', col: 1 },
+  { id: 'couple', label: 'รายจ่ายร่วมกับคู่', sub: 'ยอดร่วมเดือนนี้ และเงินคงเหลือของคู่', icon: '🤝', color: '#e8a33b', col: 1 },
+  { id: 'partnerloc', label: 'ตอนนี้อยู่ที่ไหน', sub: 'ตำแหน่งและอากาศของคู่', icon: '📍', color: '#ff3b30', col: 1 },
+  { id: 'ious', label: 'ติดเงิน', sub: 'ใครติดเงินใคร ยืมหรือสำรองจ่าย', icon: '🤝', color: '#14b8a6', col: 1 },
+  { id: 'bills', label: 'บิลที่ต้องจ่ายเดือนนี้', sub: 'บิลที่ยังไม่จ่าย', icon: '🧾', color: '#00a37a', col: 1 },
+  { id: 'report', label: 'รายงานเดือนนี้', sub: 'กราฟใช้จ่ายและข้อมูลเชิงลึก', icon: '📈', color: '#7a5cff', col: 2 },
+  { id: 'recent', label: 'รายการล่าสุด', sub: '4 รายการล่าสุด', icon: '🕘', color: '#00a3e0', col: 2 },
+];
+
+function homeOrder() {
+  const ids = HOME_SECS.map((x) => x.id);
+  const saved = Array.isArray(money.prefs.homeOrder) ? money.prefs.homeOrder.filter((id, i, a) => ids.includes(id) && a.indexOf(id) === i) : [];
+  const out = saved.slice();
+  ids.forEach((id, i) => {
+    if (out.includes(id)) return;
+    // Put a missing section right after the nearest section that comes before it by default.
+    const prev = ids.slice(0, i).reverse().find((p) => out.includes(p));
+    out.splice(prev ? out.indexOf(prev) + 1 : 0, 0, id);
+  });
+  return out;
+}
+
+function setHomeOrder(list) {
+  const def = HOME_SECS.map((x) => x.id);
+  money.prefs.homeOrder = list && list.join() !== def.join() ? list : null;
+  savePrefs();
+}
+
+// Sections switched off with the eye in จัดลำดับหน้าหลัก (money.prefs.homeHidden, synced).
+function homeHidden() {
+  const ids = HOME_SECS.map((x) => x.id);
+  return Array.isArray(money.prefs.homeHidden) ? money.prefs.homeHidden.filter((id) => ids.includes(id)) : [];
+}
+function setHomeHidden(id, hide) {
+  const set = new Set(homeHidden());
+  if (hide) set.add(id); else set.delete(id);
+  money.prefs.homeHidden = set.size ? [...set] : null;
+  savePrefs();
+}
+
+const HO_GRIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+
+function homeOrderSheet() {
+  const order = homeOrder();
+  const hidden = homeHidden();
+  const sec = (id) => HOME_SECS.find((x) => x.id === id);
+  openSheet(`
+    <div class="sheet-head"><span class="sheet-head-pad"></span><h2>จัดลำดับหน้าหลัก</h2><button class="link-btn strong" data-action="close">เสร็จ</button></div>
+    <p class="ho-intro">เลือกว่าอยากเห็นอะไรก่อนบนหน้าหลัก</p>
+    <div class="ho-list" id="hoList">${order.map((id) => `
+      <div class="ho-row${hidden.includes(id) ? ' off' : ''}" data-sort="${id}">
+        <span class="ho-ico" style="--c:${sec(id).color}">${sec(id).icon}</span>
+        <div class="main"><div class="name">${esc(sec(id).label)}</div><div class="sub">${hidden.includes(id) ? 'ซ่อนจากหน้าหลัก' : esc(sec(id).sub)}</div></div>
+        <button type="button" class="ho-eye" data-ho-eye="${id}" aria-pressed="${hidden.includes(id)}" aria-label="${hidden.includes(id) ? 'แสดงบนหน้าหลัก' : 'ซ่อนจากหน้าหลัก'}">${svgIcon(hidden.includes(id) ? 'eyeOff' : 'eye')}</button>
+        <span class="drag-h" aria-label="ลากเพื่อเรียง">${HO_GRIP}</span>
+      </div>`).join('')}
+    </div>
+    <div class="ho-foot">
+      <button type="button" class="ho-reset" id="hoReset" ${Array.isArray(money.prefs.homeOrder) || hidden.length ? '' : 'hidden'}>คืนค่าลำดับเดิม</button>
+      <p class="ho-hint">กดรูปตาเพื่อซ่อนหรือแสดงส่วนนั้น กดค้างที่จุดด้านขวาแล้วลากเพื่อย้าย ส่วนที่ยังไม่มีข้อมูลจะไม่แสดงบนหน้าหลัก${isCloud() ? ' ลำดับนี้ซิงก์กับบัญชีของคุณทุกเครื่อง' : ''}</p>
+    </div>
+  `);
+  const list = $('#hoList');
+  const rows = () => [...list.querySelectorAll('.ho-row')];
+  const commit = () => {
+    setHomeOrder(rows().map((x) => x.dataset.sort));
+    $('#hoReset').hidden = !Array.isArray(money.prefs.homeOrder) && !homeHidden().length;
+    if (ui.tab === 'home') render();
+  };
+  sortable(list, commit);
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ho-eye]');
+    if (!b) return;
+    const id = b.dataset.hoEye;
+    const hide = !homeHidden().includes(id);
+    setHomeHidden(id, hide);
+    const row = b.closest('.ho-row');
+    const s = HOME_SECS.find((x) => x.id === id);
+    row.classList.toggle('off', hide);
+    row.querySelector('.sub').textContent = hide ? 'ซ่อนจากหน้าหลัก' : s.sub;
+    b.innerHTML = svgIcon(hide ? 'eyeOff' : 'eye');
+    b.setAttribute('aria-pressed', String(hide));
+    b.setAttribute('aria-label', hide ? 'แสดงบนหน้าหลัก' : 'ซ่อนจากหน้าหลัก');
+    $('#hoReset').hidden = !Array.isArray(money.prefs.homeOrder) && !homeHidden().length;
+    if (ui.tab === 'home') render();
+  });
+  $('#hoReset').addEventListener('click', () => {
+    setHomeOrder(null);
+    money.prefs.homeHidden = null;
+    savePrefs();
+    if (ui.tab === 'home') render();
+    const y = $('#sheet').scrollTop; homeOrderSheet(); $('#sheet').scrollTop = y;
+    toast('คืนค่าแล้ว');
+  });
 }
 
 function homeReport(ym, S) {
@@ -1570,10 +1688,16 @@ function txnForm(t, preset = {}, opts = {}) {
   if (t && t.scope === 'shared') { d.amount = t.total; d.split = splitOf(t); }
   // A converted entry is edited in the currency on the slip; saving converts it again.
   if (t && t.fx) { d.amount = t.fx.amt; d.currency = t.fx.cur; }
+  // ผู้จ่ายเริ่มต้น (Account › คู่ของฉัน): when my partner pays for everything, a new expense
+  // starts as theirs, shared, with them covering it all. A preset (a slip, a + button) wins.
+  if (isNew && canShare && partnerPaysDefault() && !preset.payerId && preset.scope !== 'personal') {
+    d.scope = 'shared'; d.payerId = cloud.partner.id;
+    if (!preset.split) d.split = 'full';
+  }
   if (!d.payerId) d.payerId = me;
   if (!d.split) d.split = 'half';
-  // Who bears the cost under รับผิดชอบทั้งหมด: the payer, which is me for everything new.
-  const fullLabel = d.payerId === me ? 'รับผิดชอบทั้งหมด' : `${esc(partnerName())} รับผิดชอบทั้งหมด`;
+  // Who bears the cost under รับผิดชอบทั้งหมด: the payer.
+  const fullLabel = () => (d.payerId === me ? 'รับผิดชอบทั้งหมด' : `${esc(partnerName())} รับผิดชอบทั้งหมด`);
   if (d.scope === 'shared' && !canShare) d.scope = 'personal';
   const receipts = isCloud() && cloud.features.storage;
   // A new expense can be the payment of a bill still due (picked here or matched from a slip).
@@ -1594,6 +1718,7 @@ function txnForm(t, preset = {}, opts = {}) {
       <button type="button" data-ttype="expense">รายจ่าย</button>
       <button type="button" data-ttype="income">รายรับ</button>
       <button type="button" data-ttype="transfer">โอนเงิน</button>
+      ${isNew && !opts.noIou ? '<button type="button" data-ttype="iou">ติดเงิน</button>' : ''}
     </div>
     ${canShare ? `<div class="scope-row" id="txScope">
       <button type="button" data-scope="personal">ส่วนตัว</button>
@@ -1624,8 +1749,10 @@ function txnForm(t, preset = {}, opts = {}) {
       ${pend.length ? `<div class="tr" id="tBillRow"><div class="tr-ico">${svgIcon('bell')}</div>
         <div class="tr-body"><label for="tBill">ตัดบิล</label><select id="tBill"></select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>` : ''}
       <div class="tr" id="tShareRows"><div class="tr-ico">${svgIcon('people')}</div>
-        <div class="tr-body col"><span class="tr-lab">ต้นทุน</span>
-          <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel}</button><button type="button" data-split="half">หาร 2</button></div>
+        <div class="tr-body col"><span class="tr-lab">ใครจ่าย</span>
+          <div class="seg" id="tPayer"><button type="button" data-payer="me">ฉัน</button><button type="button" data-payer="partner">${esc(partnerName())}</button></div>
+          <span class="tr-lab">ต้นทุน</span>
+          <div class="seg" id="tSplit"><button type="button" data-split="full">${fullLabel()}</button><button type="button" data-split="half">หาร 2</button></div>
           <div class="kv"><span>ส่วนของฉัน</span><b id="tMine">-</b></div></div></div>
       <div class="tr" id="tWalletRow"><div class="tr-ico">${svgIcon('wallet')}</div>
         <div class="tr-body"><label for="tWallet" id="tWalletLab">กระเป๋าเงิน</label><select id="tWallet">${wOpts(d.walletId || defaultWalletId())}</select>${svgIcon('chev', 'svg-i sm tr-chev')}</div></div>
@@ -1673,7 +1800,10 @@ function txnForm(t, preset = {}, opts = {}) {
   const myShare = (total) => (d.split === 'full' ? (d.payerId === me ? total : 0) : Math.round((total / 2) * 100) / 100);
   const updateShares = () => {
     if (!shared()) return;
+    document.querySelectorAll('#tPayer button').forEach((x) => x.classList.toggle('on', (x.dataset.payer === 'me') === (d.payerId === me)));
     document.querySelectorAll('#tSplit button').forEach((x) => x.classList.toggle('on', x.dataset.split === d.split));
+    const full = $('#tSplit [data-split="full"]');
+    if (full) full.textContent = fullLabel();
     $('#tMine').textContent = baht(myShare(num($('#tAmount').value) || 0));
   };
   const pkgOn = () => !!$('#tPkg') && $('#tPkg').checked;
@@ -1797,6 +1927,12 @@ function txnForm(t, preset = {}, opts = {}) {
   $('#txType').addEventListener('click', (e) => {
     const b = e.target.closest('[data-ttype]');
     if (!b) return;
+    // ติดเงิน is its own form (iou.js): it never touches a wallet. What was typed comes along.
+    if (b.dataset.ttype === 'iou') {
+      const amt = num($('#tAmount').value);
+      iouForm(null, { ...(amt > 0 ? { amount: amt } : {}), note: $('#tNote').value.trim() || $('#tMerchant').value.trim(), date: $('#tDate').value || dateStr(new Date()) });
+      return;
+    }
     d.type = b.dataset.ttype;
     renderType();
   });
@@ -1822,6 +1958,12 @@ function txnForm(t, preset = {}, opts = {}) {
       paintInst();
     });
   }
+  if ($('#tPayer')) $('#tPayer').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-payer]');
+    if (!b) return;
+    d.payerId = b.dataset.payer === 'me' ? me : cloud.partner.id;
+    renderType();
+  });
   $('#tSplit').addEventListener('click', (e) => {
     const b = e.target.closest('[data-split]');
     if (!b) return;
@@ -2454,8 +2596,10 @@ function sortable(box, onDone) {
         const r = o.getBoundingClientRect();
         const mid = r.top + r.height / 2;
         const before = o.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
-        if (before && y < mid) { list.insertBefore(el, o); break; }
-        if (!before && y > mid) { list.insertBefore(el, o.nextSibling); break; }
+        // Move the neighbour, not the dragged row: taking the row out of the page drops the
+        // pointer capture, and the drag would stop after one step.
+        if (before && y < mid) { list.insertBefore(o, el.nextSibling); break; }
+        if (!before && y > mid) { list.insertBefore(o, el); break; }
       }
       el.style.transform = '';
       const now = el.getBoundingClientRect().top;
@@ -2627,7 +2771,7 @@ function sampleMoney() {
   ];
   wallets.forEach((w) => { w.name = tr(w.name); });
   txns.forEach((x) => { x.note = tr(x.note); });
-  money = { wallets, txns, budgets, labels: money.labels || [], prefs: { ...money.prefs, billWallet: bank } };
+  money = { wallets, txns, budgets, labels: money.labels || [], ious: money.ious || [], prefs: { ...money.prefs, billWallet: bank } };
   // Bills already paid in the sample show up as expenses from the bank account.
   const ym = ymOf(t);
   occurrences(ym).filter((o) => o.paid).forEach((o) => recordBillTxn(o.bill, ym, o.amount, bank, dateStr(o.due)));
@@ -2685,6 +2829,8 @@ function moneyAction(action, el) {
   switch (action) {
     case 'add-tx': txnForm(); break;
     case 'add-transfer': txnForm(null, { type: 'transfer' }); break;
+    case 'ious': iouListSheet(el.dataset.dir || ''); break;
+    case 'add-iou': iouForm(); break;
     case 'wallet-pick': walletSheet('pick'); break;
     case 'wallets': walletSheet('edit'); break;
     case 'add-wallet': walletForm(); break;
@@ -2698,6 +2844,7 @@ function moneyAction(action, el) {
     case 'tx-menu': txMenu(); break;
     case 'labels': labelsSheet(); break;
     case 'categories': catsSheet(); break;
+    case 'home-order': homeOrderSheet(); break;
     case 'add-cat': catForm(null, { type: ui.catType }); break;
     case 'add-label': labelForm(); break;
     case 'label-filter': labelFilterSheet(); break;
@@ -2712,3 +2859,6 @@ function moneyAction(action, el) {
   }
   return true;
 }
+
+// Home lays sections out in one list on a phone and two columns on a desktop; redo it when that changes.
+window.matchMedia('(min-width: 1024px)').addEventListener('change', () => { if (ui.tab === 'home') renderHome(); });
