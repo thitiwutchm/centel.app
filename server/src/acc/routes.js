@@ -11,6 +11,7 @@ import {
 } from './ledger.js';
 import { report, REPORTS, purchaseVatState, vatSales, vatPurchase, vatPp36 } from './reports.js';
 import { readPurchaseDoc } from './ai.js';
+import { CATS } from './cats.js';
 import { mountUsers, guard, permsOf, inviteInfo, issuerOf } from './users.js';
 import { mountCentel, startReminderJob } from './centel.js';
 import { CC_KINDS, DEFAULT_BASE, ccFetch, cleanBase, cleanKey, reportFor, sinceMonth, toDocBody, venueContact } from './capcourt.js';
@@ -161,7 +162,7 @@ biz.get('/', wrap(async (req, res) => {
     items: (await db.query('select * from acc_items where business_id = $1 order by name', [B(req)])).rows,
   }));
   const { role, perms, ...business } = req.biz;
-  res.json({ business, role, perms, ...out, ai: !!process.env.ANTHROPIC_API_KEY || !!process.env.ANTHROPIC_AUTH_TOKEN, storage: storageEnabled });
+  res.json({ business, role, perms, ...out, cats: CATS, ai: !!process.env.ANTHROPIC_API_KEY || !!process.env.ANTHROPIC_AUTH_TOKEN, storage: storageEnabled });
 }));
 
 biz.put('/', wrap(async (req, res) => {
@@ -459,12 +460,14 @@ async function buildDoc(db, req, body, cur) {
     subtotal: t.subtotal, vat_base: t.vat_base, vat: t.vat, total: t.total, wht: t.wht,
     ref_id: refId, ref_no: str(body.ref_no, 60), ref_date: isDate(body.ref_date) ? body.ref_date : null,
     pay, wht_cert: whtCert, notes: str(body.notes, 2000),
+    ref_title: type !== 'EX' ? null : body.ref_title !== undefined ? str(body.ref_title, 120) : (cur?.ref_title ?? null),
+    project: body.project !== undefined ? str(body.project, 80) : (cur?.project ?? null),
     attachment: typeof body.attachment === 'string' && body.attachment.startsWith(`acc/${bizId}/`) ? body.attachment.slice(0, 200) : (cur?.attachment || null),
   };
 }
 
 const COLS = ['type', 'date', 'due_date', 'status', 'contact_id', 'contact', 'tax_invoice', 'price_mode', 'vat_rate', 'lines', 'discount',
-  'subtotal', 'vat_base', 'vat', 'total', 'wht', 'ref_id', 'ref_no', 'ref_date', 'pay', 'wht_cert', 'notes', 'attachment'];
+  'subtotal', 'vat_base', 'vat', 'total', 'wht', 'ref_id', 'ref_no', 'ref_date', 'pay', 'wht_cert', 'notes', 'attachment', 'ref_title', 'project'];
 const jsonCols = new Set(['contact', 'lines', 'pay', 'wht_cert']);
 const val = (k, v) => (jsonCols.has(k) && v != null ? JSON.stringify(v) : v);
 
@@ -506,7 +509,7 @@ biz.get('/docs', wrap(async (req, res) => {
   const rows = await tx(req, async (db) => (await db.query(
     `select id, type, number, status, date, due_date, contact_id, contact->>'name' as contact_name, tax_invoice,
             subtotal, vat, total, wht, ref_id, (pay->>'date') as paid_date, created_at,
-            attachment, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared, ext_no
+            attachment, ref_title, project, lines->0->>'cat' as cat, lines->0->>'account' as account, jsonb_array_length(lines) as line_count, public_token is not null as shared, ext_no
      from acc_docs where ${where.join(' and ')} order by date desc, number desc limit 2000`, p)).rows);
   // Short-lived links to the scanned bill pictures, for the expense list thumbnails.
   if (storageEnabled) {
@@ -657,6 +660,13 @@ biz.post('/scan', rateLimit(60, 60 * 60000), wrap(async (req, res) => {
         order by created_at desc limit 1`, [B(req), String(result.doc_no).slice(0, 100), taxId])).rows[0] || null);
   }
   res.json({ attachment: key, result, duplicate });
+}));
+
+// Projects used so far, for the project picker on expenses.
+biz.get('/projects', wrap(async (req, res) => {
+  const rows = await tx(req, async (db) => (await db.query(
+    "select project, count(*)::int as n from acc_docs where business_id = $1 and project is not null group by project order by max(created_at) desc limit 100", [B(req)])).rows);
+  res.json({ projects: rows.map((r) => r.project) });
 }));
 
 biz.get('/attachment', wrap(async (req, res) => {

@@ -83,6 +83,7 @@ export function cleanLine(l) {
     vat: l?.vat !== false,
     wht: WHT_RATES.includes(wht) ? wht : 0,
     account: typeof l?.account === 'string' && /^[0-9A-Za-z.-]{1,20}$/.test(l.account) ? l.account : null,
+    ...(typeof l?.cat === 'string' && /^[a-z_]{1,30}$/.test(l.cat) ? { cat: l.cat } : {}),
   };
 }
 
