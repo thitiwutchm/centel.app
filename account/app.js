@@ -283,7 +283,7 @@
   const NAV = [
     ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home], ['reminders', 'การแจ้งเตือน', ICON.bell]]],
     ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
-    ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex]]],
+    ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex], ['scan', 'สแกนบิลซื้อ', ICON.scan]]],
     ['ภาษี', 'vat'],
     ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items]]],
     ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['channels', 'ช่องทางการเงิน', ICON.bank], ['settings', 'ตั้งค่า', ICON.settings]]],
@@ -294,7 +294,7 @@
   const can = (area, lvl = 1) => perms()[area] >= lvl;
   const PAGE_AREA = {
     dashboard: ['accounting'], 'docs/QT': ['sales', 'accounting'], 'docs/IV': ['sales', 'accounting'], 'docs/RE': ['sales', 'accounting'],
-    'docs/EX': ['purchase', 'accounting'], contacts: ['sales', 'purchase', 'accounting'], items: ['sales', 'purchase', 'accounting'],
+    'docs/EX': ['purchase', 'accounting'], scan: ['purchase', 'accounting'], contacts: ['sales', 'purchase', 'accounting'], items: ['sales', 'purchase', 'accounting'],
     journal: ['accounting'], accounts: ['accounting'], reports: ['accounting'],
     'vat/purchases': ['purchase', 'accounting'], 'vat/returns': ['accounting'], 'report/vat_sales': ['accounting'], 'report/vat_purchase': ['accounting'], integrations: ['settings'], channels: ['settings'], reminders: ['accounting', 'settings'], settings: ['settings'],
   };
@@ -351,7 +351,7 @@
     const { parts, q } = parseHash();
     if (!parts[0] || parts[0] === 'invite') { location.replace(`#/${homeRoute()}`); return; }
     const r = parts[0];
-    const key = r === 'docs' || r === 'new' ? `docs/${parts[1] || 'IV'}` : r === 'doc' || r === 'edit' ? null
+    const key = r === 'new' && q.get('scan') ? 'scan' : r === 'docs' || r === 'new' ? `docs/${parts[1] || 'IV'}` : r === 'doc' || r === 'edit' ? null
       : r === 'report' ? (NAV_VAT.some(([k]) => k === `report/${parts[1]}`) ? `report/${parts[1]}` : 'reports')
         : r === 'vat' ? `vat/${parts[1] === 'returns' ? 'returns' : 'purchases'}` : r;
     for (const a of $$('.nav a')) a.classList.toggle('on', a.dataset.r === key);
@@ -366,6 +366,7 @@
       if (r === 'dashboard') await viewDashboard(main, q);
       else if (r === 'docs') await viewDocs(main, parts[1] || 'IV', q);
       else if (r === 'new') await viewEditor(main, parts[1], null, q);
+      else if (r === 'scan') viewScan(main);
       else if (r === 'edit') await viewEditor(main, null, parts[1], q);
       else if (r === 'doc') await viewDoc(main, parts[1]);
       else if (r === 'contacts') viewContacts(main, q);
@@ -563,7 +564,8 @@
         <a href="#/new/QT"><span class="ic">QT</span><span><b>ใบเสนอราคา</b><small>เสนอราคาลูกค้า</small></span></a>
         <a href="#/new/IV"><span class="ic">IV</span><span><b>ใบแจ้งหนี้</b><small>วางบิล / ใบกำกับภาษี</small></span></a>
         <a href="#/new/RE"><span class="ic">RE</span><span><b>ใบเสร็จรับเงิน</b><small>ขายสด รับเงินทันที</small></span></a>
-        <a href="#/new/EX"><span class="ic">EX</span><span><b>ค่าใช้จ่าย</b><small>สแกนบิลด้วย AI ได้</small></span></a>
+        <a href="#/new/EX"><span class="ic">EX</span><span><b>ค่าใช้จ่าย</b><small>บันทึกค่าใช้จ่ายเอง</small></span></a>
+        <a href="#/scan"><span class="ic">${ICON.scan}</span><span><b>สแกนบิลซื้อ</b><small>รูปหรือ PDF อ่านด้วย AI</small></span></a>
       </div>
       <div class="kpis">
         <div class="card kpi"><div class="k">รายได้เดือนนี้</div><div class="v">${money(d.income)}</div><div class="d">ตามสมุดบัญชี ไม่รวม VAT</div></div>
@@ -618,7 +620,7 @@
     let showTotal = false;
     const sel = new Set();
     main.innerHTML = `<div class="page-h"><div><h1>${LIST_TITLE[type]}</h1><div class="sub">${docs.length} เอกสาร</div></div>
-      <div class="actions"><button class="btn" data-xls title="ดาวน์โหลด Excel">ดาวน์โหลด Excel</button><a class="btn primary" href="#/new/${type}">${ICON.plus}${NEW_LABEL[type]}</a></div></div>
+      <div class="actions"><button class="btn" data-xls title="ดาวน์โหลด Excel">ดาวน์โหลด Excel</button>${isEx ? `<a class="btn" href="#/scan">${ICON.scan}สแกนบิลซื้อ</a>` : ''}<a class="btn primary" href="#/new/${type}">${ICON.plus}${NEW_LABEL[type]}</a></div></div>
       <div class="card">
         <div class="filters">
           <div class="seg" data-s><button data-v="" class="${status ? '' : 'on'}">ทั้งหมด</button>${statuses.map((s) => `<button data-v="${s}" class="${s === status ? 'on' : ''}">${T.statusName(type, s)}</button>`).join('')}</div>
@@ -1018,12 +1020,17 @@
     let vatMode = Number(doc.vat_rate) > 0 ? doc.price_mode : 'none';
     if (isEx && !doc.tax_invoice) vatMode = 'none';
 
-    const title = editId ? `แก้ไข ${doc.number}` : src ? `${NEW_LABEL[type]} จาก ${src.number}` : NEW_LABEL[type];
+    // A bill from the scan page (#/scan) opened here for review.
+    let scanItem = isEx && !editId && q.get('scan') ? scans().find((x) => x.id === q.get('scan') && x.status !== 'saved') || null : null;
+    const scanAll = scans().filter((x) => x.status !== 'failed');
+    const title = editId ? `แก้ไข ${doc.number}` : src ? `${NEW_LABEL[type]} จาก ${src.number}` : scanItem ? `ตรวจบิลที่สแกน${scanAll.length > 1 ? ` ใบที่ ${scanAll.indexOf(scanItem) + 1} จาก ${scanAll.length}` : ''}` : NEW_LABEL[type];
     main.innerHTML = `<div class="page-h"><div><h1>${esc(title)}</h1><div class="sub">${esc(T.docTitle({ ...doc, tax_invoice: doc.tax_invoice || (type === 'RE' && vatReg) }).join(' · '))}</div></div>
-      <div class="actions"><a class="btn ghost" href="${editId ? `#/doc/${editId}` : `#/docs/${type}`}">ยกเลิก</a><button class="btn primary" data-save>บันทึก</button></div></div>
-      <div class="editor">
+      <div class="actions"><a class="btn ghost" href="${editId ? `#/doc/${editId}` : scanItem ? '#/scan' : `#/docs/${type}`}">${scanItem ? 'กลับไปรายการสแกน' : 'ยกเลิก'}</a><button class="btn primary" data-save>บันทึก</button></div></div>
+      <div class="editor${scanItem ? ' has-scan' : ''}">
+        ${isEx && !editId ? '<div class="scan-pane" data-scanbox hidden></div>' : ''}
         <div class="grid">
-          ${isEx && !editId ? `<div class="scan-drop" data-scan>${ICON.scan}<b>สแกนบิล / ใบกำกับภาษีด้วย AI</b><span class="muted">เลือกรูปหรือ PDF ระบบจะกรอกผู้ขาย รายการ และภาษีให้</span><input type="file" accept="image/*,application/pdf" hidden></div>` : ''}
+          ${isEx && !editId ? `<div class="scan-drop" data-scan ${scanItem ? 'hidden' : ''}>${ICON.scan}<b>สแกนบิล / ใบกำกับภาษีด้วย AI</b><span class="muted">แตะเพื่อเลือก หรือลากรูป / PDF มาวาง ระบบจะกรอกผู้ขาย รายการ และภาษีให้ · มีหลายใบ? <a href="#/scan">สแกนทีละหลายใบ</a></span><input type="file" accept="image/*,application/pdf" hidden></div>` : ''}
+          <div data-dupbox></div>
           <div class="card card-pad">
             <div class="grid g2">
               <div class="field span2"><span>${isEx ? 'ผู้ขาย / ผู้รับเงิน' : 'ลูกค้า'}</span><div class="contact-pick" data-cp></div></div>
@@ -1206,34 +1213,60 @@
       if (pc) pc.onchange = () => { paidNow = pc.checked; $('[data-pf]', box).hidden = !paidNow; };
     }
 
-    // Scan a purchase bill
+    // Scan a purchase bill: the drop box here reads one file; #/scan reads many.
     const scan = $('[data-scan]', main);
+    const showScan = (it) => {
+      const box = $('[data-scanbox]', main);
+      if (!box) return;
+      box.hidden = false;
+      $('.editor', main).classList.add('has-scan');
+      box.innerHTML = `<details class="card scan-preview" open><summary><b>ไฟล์บิลต้นฉบับ</b><span class="muted">${esc(it.name)}</span><a href="${it.url}" target="_blank" rel="noopener" class="btn sm ghost">เปิดเต็มจอ</a></summary>
+        <div class="sp-body">${it.pdf ? `<iframe src="${it.url}#view=FitH" title="ไฟล์บิล"></iframe>` : `<img src="${it.url}" alt="ไฟล์บิล">`}</div></details>`;
+      const dup = $('[data-dupbox]', main);
+      if (dup) dup.innerHTML = it.duplicate ? `<div class="note-box warn">บิลเลขที่ ${esc(it.result?.doc_no || '')} เคยบันทึกแล้วใน <a href="#/doc/${it.duplicate.id}" target="_blank">${esc(it.duplicate.number)}</a> (${T.thDate(String(it.duplicate.date).slice(0, 10))}) ตรวจก่อนบันทึกซ้ำ</div>` : '';
+    };
     if (scan) {
       const fi = $('input[type=file]', scan);
-      scan.onclick = (e) => { if (e.target !== fi) fi.click(); };
-      fi.onchange = async () => {
-        const f = fi.files[0]; if (!f) return;
+      const one = async (f) => {
+        if (!f || !(/^image\//.test(f.type) || f.type === 'application/pdf')) { toast('เลือกได้เฉพาะรูปภาพหรือ PDF', true); return; }
+        const it = newScan(f);
         scan.innerHTML = '<b>กำลังอ่านบิล…</b><span class="muted">ใช้เวลาประมาณ 5–15 วินาที</span>';
-        try {
-          const { data, mediaType } = await fileToUpload(f);
-          const r = await post('/scan', { data, mediaType });
-          doc.attachment = r.attachment;
-          if (!r.result) { scan.innerHTML = '<b>แนบไฟล์แล้ว</b><span class="muted">อ่านข้อมูลอัตโนมัติไม่ได้ กรุณากรอกเอง</span>'; return; }
-          applyScan(r.result);
-          scan.innerHTML = `<b>อ่านบิลแล้ว ✓</b><span class="muted">ตรวจสอบข้อมูลก่อนบันทึก${r.result.confidence === 'low' ? ' (ภาพไม่ชัด ตรวจละเอียดอีกครั้ง)' : ''}</span>`;
-        } catch (err) { fail(err); scan.innerHTML = '<b>สแกนไม่สำเร็จ</b><span class="muted">ลองอีกครั้ง หรือกรอกเอง</span>'; }
+        await readScan(it);
+        if (it.status === 'failed') { scan.innerHTML = `<b>สแกนไม่สำเร็จ</b><span class="muted">${esc(it.error || '')} ลองอีกครั้ง หรือกรอกเอง</span>`; return; }
+        doc.attachment = it.attachment;
+        showScan(it);
+        if (!it.result) { scan.innerHTML = '<b>แนบไฟล์แล้ว</b><span class="muted">อ่านข้อมูลอัตโนมัติไม่ได้ กรุณากรอกเอง</span>'; return; }
+        await applyScan(it.result);
+        scan.hidden = true;
+        if (it.result.confidence === 'low') toast('ภาพไม่ค่อยชัด ตรวจข้อมูลอีกครั้งก่อนบันทึก', true);
       };
+      scan.onclick = (e) => { if (e.target !== fi && !e.target.closest('a')) fi.click(); };
+      fi.onchange = () => one(fi.files[0]);
+      scan.addEventListener('dragover', (e) => { e.preventDefault(); scan.classList.add('over'); });
+      scan.addEventListener('dragleave', () => scan.classList.remove('over'));
+      scan.addEventListener('drop', (e) => { e.preventDefault(); scan.classList.remove('over'); one(e.dataTransfer.files[0]); });
     }
     async function applyScan(r) {
       if (r.date) { doc.date = r.date; $('[name=date]', main).value = r.date; }
+      if (r.due_date && !r.paid) { doc.due_date = r.due_date; const dd = $('[name=due_date]', main); if (dd) dd.value = r.due_date; }
       if (r.doc_no) $('[name=ref_no]', main).value = r.doc_no;
       if (r.tax_invoice && r.date) $('[name=ref_date]', main).value = r.date;
       doc.tax_invoice = !!r.tax_invoice && (r.vat || 0) > 0;
       vatMode = doc.tax_invoice ? r.price_mode : 'none';
-      if (Array.isArray(r.lines) && r.lines.length) doc.lines = r.lines.map((l) => ({ ...blankLine('EX'), name: l.name, qty: l.qty || 1, price: l.price || 0, account: r.account || sysAcc('other_expense') }));
-      else if (r.total) doc.lines = [{ ...blankLine('EX'), name: r.vendor?.name || 'ค่าใช้จ่าย', price: r.total, account: r.account || sysAcc('other_expense') }];
+      const okAcc = (c) => (c && S.boot.accounts.some((a) => a.code === c) ? c : null);
+      const main0 = okAcc(r.account) || sysAcc('other_expense');
+      const wht = T.WHT_RATES.includes(Number(r.wht_rate)) ? Number(r.wht_rate) : 0;
+      if (Array.isArray(r.lines) && r.lines.length) {
+        doc.lines = r.lines.map((l) => ({ ...blankLine('EX'), name: l.name, qty: l.qty || 1, unit: l.unit || '', price: l.price || 0, disc: l.disc || 0, wht, account: okAcc(l.account) || main0 }));
+      } else if (r.total) doc.lines = [{ ...blankLine('EX'), name: r.vendor?.name || 'ค่าใช้จ่าย', price: r.total, wht, account: main0 }];
+      doc.discount = Number(r.discount) || 0;
+      if (r.paid) {
+        paidNow = true;
+        if (r.date) payDraft.date = r.date;
+        const pb = $('[data-paybox]', main); if (pb) delete pb.dataset.drawn;
+      }
       if (r.vendor?.name) {
-        let c = S.boot.contacts.find((x) => (r.vendor.tax_id && x.tax_id === r.vendor.tax_id) || x.name === r.vendor.name);
+        let c = S.boot.contacts.find((x) => !x.archived && ((r.vendor.tax_id && x.tax_id === r.vendor.tax_id && (!r.vendor.branch || !x.branch || x.branch === r.vendor.branch)) || x.name === r.vendor.name));
         if (!c) {
           c = (await post('/contacts', { kind: 'vendor', name: r.vendor.name, tax_id: r.vendor.tax_id, branch: r.vendor.branch, address: r.vendor.address, is_company: r.vendor.is_company })).contact;
           S.boot.contacts.push(c);
@@ -1246,6 +1279,13 @@
 
     drawVat();
     drawLines();
+    if (scanItem) {
+      doc.attachment = scanItem.attachment;
+      showScan(scanItem);
+      if (scanItem.result) {
+        try { await applyScan(scanItem.result); } catch (e) { fail(e); }
+      } else $('[data-dupbox]', main).innerHTML = '<div class="note-box warn">อ่านข้อมูลจากบิลนี้อัตโนมัติไม่ได้ ไฟล์แนบไว้แล้ว กรุณากรอกข้อมูลเอง</div>';
+    }
     main.addEventListener('input', (e) => {
       if (e.target.name === 'date') { doc.date = e.target.value; if (!fromInvoice && type === 'RE' && payDraft) { payDraft.date = e.target.value; const pd = $('[data-p=date]', main); if (pd) pd.value = e.target.value; } }
       if (e.target.name === 'due_date') doc.due_date = e.target.value;
@@ -1265,6 +1305,14 @@
         if (type === 'RE') body.pay = payDraft;
         if (isEx) body.pay = paidNow ? payDraft : null;
         const r = editId ? await put(`/docs/${editId}`, body) : await post('/docs', body);
+        if (scanItem) {
+          Object.assign(scanItem, { status: 'saved', doc: { id: r.doc.id, number: r.doc.number } });
+          const next = scans().find((x) => x.status === 'ready' || x.status === 'manual');
+          const left = scans().filter((x) => x.status !== 'saved' && x.status !== 'failed').length;
+          toast(`สร้าง ${r.doc.number} แล้ว${left ? ` · เหลืออีก ${left} ใบ` : ''}`);
+          location.hash = next ? `#/new/EX?scan=${next.id}` : left ? '#/scan' : `#/doc/${r.doc.id}`;
+          return;
+        }
         toast(editId ? 'บันทึกการแก้ไขแล้ว' : `สร้าง ${r.doc.number} แล้ว`);
         location.hash = `#/doc/${r.doc.id}`;
       } catch (e) { fail(e); } finally { btn.disabled = false; }
@@ -1281,7 +1329,7 @@
   // Images are shrunk to about 2000px JPEG before upload; PDFs go as they are.
   async function fileToUpload(f) {
     if (f.type === 'application/pdf') {
-      if (f.size > 8 * 1024 * 1024) throw new Error('ไฟล์ PDF ใหญ่เกิน 8 MB');
+      if (f.size > 7 * 1024 * 1024) throw new Error('ไฟล์ PDF ใหญ่เกิน 7 MB');
       const buf = new Uint8Array(await f.arrayBuffer());
       let bin = '';
       for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
@@ -1293,6 +1341,105 @@
     c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     return { data: c.toDataURL('image/jpeg', 0.85).split(',')[1], mediaType: 'image/jpeg' };
+  }
+
+  /* ---------- Scan purchase bills (#/scan) ---------- */
+
+  // Scanned bills wait here until each is reviewed and saved. They live in this tab only.
+  const scans = () => (S.scans ||= []);
+  const newScan = (f) => ({ id: Math.random().toString(36).slice(2, 10), name: f.name || 'bill', file: f, url: URL.createObjectURL(f), pdf: f.type === 'application/pdf', status: 'wait' });
+  async function readScan(it) {
+    it.status = 'reading';
+    try {
+      const { data, mediaType } = await fileToUpload(it.file);
+      const r = await post('/scan', { data, mediaType });
+      Object.assign(it, { attachment: r.attachment, result: r.result, duplicate: r.duplicate || null, status: r.result ? 'ready' : 'manual', error: '' });
+    } catch (e) {
+      Object.assign(it, { status: 'failed', error: e.message === 'too_large' ? 'ไฟล์ใหญ่เกินไป' : e.message });
+    }
+    return it;
+  }
+  let scanBusy = 0;
+  function pumpScans() {
+    for (const it of scans()) {
+      if (scanBusy >= 2) break;
+      if (it.status !== 'wait') continue;
+      scanBusy++;
+      const p = readScan(it);
+      S.scanTick?.();
+      p.finally(() => { scanBusy--; S.scanTick?.(); pumpScans(); });
+    }
+  }
+  function addScans(files) {
+    const ok = [...files].filter((f) => /^image\//.test(f.type) || f.type === 'application/pdf');
+    if (!ok.length) { toast('เลือกได้เฉพาะรูปภาพหรือ PDF', true); return; }
+    const room = 30 - scans().filter((x) => x.status !== 'saved').length;
+    if (ok.length > room) toast(`สแกนค้างได้ครั้งละ 30 ใบ รับไว้ ${Math.max(room, 0)} ใบ`, true);
+    ok.slice(0, Math.max(room, 0)).forEach((f) => scans().push(newScan(f)));
+    pumpScans();
+  }
+
+  function viewScan(main) {
+    main.innerHTML = `<div class="page-h"><div><h1>สแกนบิลซื้อ</h1><div class="sub">อ่านบิล ใบกำกับภาษี ใบเสร็จ จากรูปหรือ PDF ด้วย AI แล้วตรวจก่อนบันทึกเป็นค่าใช้จ่าย</div></div>
+      <div class="actions"><a class="btn ghost" href="#/docs/EX">ค่าใช้จ่ายทั้งหมด</a><a class="btn" href="#/new/EX">${ICON.plus}กรอกเอง</a></div></div>
+      <div class="scan-drop big" data-drop>${ICON.scan}<b>ลากไฟล์มาวาง หรือแตะเพื่อเลือกรูป / PDF</b>
+        <span class="muted">ถ่ายรูปบิลจากมือถือได้ เลือกได้หลายไฟล์พร้อมกัน หรือกด Ctrl+V วางรูปที่คัดลอกไว้ · PDF ไม่เกิน 7 MB</span>
+        <input type="file" accept="image/*,application/pdf" multiple hidden></div>
+      <div data-head></div><div class="scan-list" data-list></div>`;
+    const drop = $('[data-drop]', main);
+    const fi = $('input', drop);
+    drop.onclick = (e) => { if (e.target !== fi) fi.click(); };
+    fi.onchange = () => { addScans(fi.files); fi.value = ''; };
+    main.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+    main.addEventListener('dragleave', (e) => { if (!main.contains(e.relatedTarget)) drop.classList.remove('over'); });
+    main.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); addScans(e.dataTransfer.files); });
+    const onPaste = (e) => {
+      if (!main.isConnected) { document.removeEventListener('paste', onPaste); return; }
+      const files = [...(e.clipboardData?.files || [])];
+      if (files.length) { e.preventDefault(); addScans(files); }
+    };
+    document.addEventListener('paste', onPaste);
+
+    const STATE = {
+      wait: ['', 'รอคิว'], reading: ['info', 'กำลังอ่าน…'], ready: ['accent', 'พร้อมตรวจ'], manual: ['warn', 'อ่านไม่ได้ กรอกเอง'],
+      failed: ['bad', 'ส่งไม่สำเร็จ'], saved: ['good', 'บันทึกแล้ว'],
+    };
+    const draw = () => {
+      if (!main.isConnected) { if (S.scanTick === draw) S.scanTick = null; return; }
+      const all = scans();
+      const n = (s) => all.filter((x) => x.status === s).length;
+      const todo = n('ready') + n('manual');
+      const first = all.find((x) => x.status === 'ready' || x.status === 'manual');
+      $('[data-head]', main).innerHTML = all.length ? `<div class="scan-head"><span>${all.length} ไฟล์ · พร้อมตรวจ ${todo}${n('reading') + n('wait') ? ` · กำลังอ่าน ${n('reading') + n('wait')}` : ''} · บันทึกแล้ว ${n('saved')}</span>
+        <span class="actions">${n('saved') ? '<button class="btn sm ghost" data-clear>ล้างที่บันทึกแล้ว</button>' : ''}${first ? `<a class="btn sm primary" href="#/new/EX?scan=${first.id}">ตรวจและบันทึก${todo > 1 ? 'ทีละใบ' : ''}</a>` : ''}</span></div>` : '';
+      $('[data-list]', main).innerHTML = all.length ? all.map((it) => {
+        const r = it.result;
+        const [tone, label] = STATE[it.status];
+        const name = r?.vendor?.name || it.name;
+        const meta = r ? [r.date && T.thDate(r.date), r.doc_no && `เลขที่ ${r.doc_no}`, r.tax_invoice ? 'ใบกำกับภาษี' : 'บิล / ใบเสร็จ', r.vat ? `VAT ${money(r.vat)}` : ''].filter(Boolean).join(' · ') : it.status === 'failed' ? it.error : it.name;
+        const chips = `<span class="chip ${tone}">${it.status === 'reading' ? '<i class="spin"></i>' : ''}${label}${it.status === 'saved' ? ` <a href="#/doc/${it.doc.id}">${esc(it.doc.number)}</a>` : ''}</span>`
+          + (it.status !== 'saved' && it.duplicate ? ` <span class="chip bad" title="บิลเลขที่นี้เคยบันทึกแล้ว">อาจซ้ำ ${esc(it.duplicate.number)}</span>` : '')
+          + (it.status === 'ready' && r?.confidence === 'low' ? ' <span class="chip warn">ภาพไม่ชัด</span>' : '');
+        const btns = it.status === 'ready' || it.status === 'manual' ? `<a class="btn sm primary" href="#/new/EX?scan=${it.id}">ตรวจและบันทึก</a>`
+          : it.status === 'failed' ? '<button class="btn sm" data-retry>ลองใหม่</button>'
+            : it.status === 'saved' ? `<a class="btn sm ghost" href="#/doc/${it.doc.id}">ดูเอกสาร</a>` : '';
+        return `<div class="card scan-item${it.status === 'saved' ? ' done' : ''}" data-id="${it.id}">
+          <a class="scan-thumb" href="${it.url}" target="_blank" rel="noopener">${it.pdf ? '<span>PDF</span>' : `<img src="${it.url}" alt="">`}</a>
+          <div class="scan-info"><b>${esc(name)}</b><div class="muted">${esc(meta)}</div><div class="scan-chips">${chips}</div></div>
+          <div class="scan-amt">${r?.total != null ? `<b>${money(r.total)}</b><small>${r.paid ? 'จ่ายแล้ว' : 'รอจ่าย'}</small>` : ''}</div>
+          <div class="scan-act">${btns}${it.status !== 'reading' ? '<button class="rm" data-rm aria-label="นำออก">✕</button>' : ''}</div></div>`;
+      }).join('') : '<div class="empty"><b>ยังไม่มีบิลที่สแกน</b>เลือกรูปหรือ PDF ของบิลซื้อ ใบกำกับภาษี หรือใบเสร็จจากผู้ขาย ระบบจะอ่านผู้ขาย เลขประจำตัวผู้เสียภาษี เลขที่บิล วันที่ รายการ VAT และยอดรวมให้ แล้วคุณตรวจก่อนบันทึก</div>';
+    };
+    S.scanTick = draw;
+    main.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-id]');
+      const it = card && scans().find((x) => x.id === card.dataset.id);
+      if (e.target.closest('[data-clear]')) { S.scans = scans().filter((x) => x.status !== 'saved'); draw(); return; }
+      if (!it) return;
+      if (e.target.closest('[data-rm]')) { URL.revokeObjectURL(it.url); S.scans = scans().filter((x) => x !== it); draw(); }
+      if (e.target.closest('[data-retry]')) { it.status = 'wait'; pumpScans(); draw(); }
+    });
+    draw();
   }
 
   /* ---------- Document view ---------- */
@@ -1782,7 +1929,7 @@
     const sel = new Set();
     const deferred = (d) => d.claim_month !== d.date.slice(0, 7);
     main.innerHTML = `<div class="page-h"><div><h1>จัดการเอกสารภาษีซื้อ</h1><div class="sub">สถานะใบกำกับภาษีของค่าใช้จ่าย และเดือนที่ใช้สิทธิ์ภาษีซื้อ</div></div>
-      <div class="actions"><a class="btn efiling" href="https://efiling.rd.go.th/rd-efiling-web/login" target="_blank" rel="noopener" title="ยื่นแบบ ภ.พ.30 ทางเว็บไซต์กรมสรรพากร (เปิดแท็บใหม่)" aria-label="ยื่น E-Filing กรมสรรพากร"><img src="img/efiling.png" alt="E-Filing"></a><button class="btn" data-xls>ดาวน์โหลด Excel</button><a class="btn" href="#/report/vat_purchase">รายงานภาษีซื้อ</a><a class="btn primary" href="#/new/EX">${ICON.plus}บันทึกค่าใช้จ่าย</a></div></div>
+      <div class="actions"><a class="btn efiling" href="https://efiling.rd.go.th/rd-efiling-web/login" target="_blank" rel="noopener" title="ยื่นแบบ ภ.พ.30 ทางเว็บไซต์กรมสรรพากร (เปิดแท็บใหม่)" aria-label="ยื่น E-Filing กรมสรรพากร"><img src="img/efiling.png" alt="E-Filing"></a><button class="btn" data-xls>ดาวน์โหลด Excel</button><a class="btn" href="#/report/vat_purchase">รายงานภาษีซื้อ</a><a class="btn" href="#/scan">${ICON.scan}สแกนบิลซื้อ</a><a class="btn primary" href="#/new/EX">${ICON.plus}บันทึกค่าใช้จ่าย</a></div></div>
       <div class="card">
         <div class="filters">
           <input type="search" placeholder="ค้นหา เลขที่เอกสาร ชื่อผู้จำหน่าย เลขที่ใบกำกับภาษี" data-q style="flex:1;max-width:none;min-width:200px">

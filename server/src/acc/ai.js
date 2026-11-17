@@ -10,7 +10,7 @@ function schemaFor(codes) {
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['vendor', 'doc_no', 'date', 'tax_invoice', 'price_mode', 'lines', 'vat', 'total', 'account', 'confidence'],
+    required: ['vendor', 'doc_no', 'date', 'due_date', 'tax_invoice', 'price_mode', 'lines', 'discount', 'vat', 'total', 'wht_rate', 'paid', 'account', 'confidence'],
     properties: {
       vendor: {
         type: 'object',
@@ -26,6 +26,7 @@ function schemaFor(codes) {
       },
       doc_no: nullable({ type: 'string', description: 'The bill / tax invoice number' }),
       date: nullable({ type: 'string', description: 'Document date as Gregorian YYYY-MM-DD' }),
+      due_date: nullable({ type: 'string', description: 'Payment due date (ครบกำหนดชำระ) as Gregorian YYYY-MM-DD, if printed' }),
       tax_invoice: { type: 'boolean', description: 'true when the document is a full tax invoice (ใบกำกับภาษี) showing the seller tax ID and VAT' },
       price_mode: { type: 'string', enum: ['excl', 'incl'], description: 'excl when line prices are before VAT, incl when they include VAT' },
       lines: {
@@ -33,12 +34,22 @@ function schemaFor(codes) {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['name', 'qty', 'price'],
-          properties: { name: { type: 'string' }, qty: { type: 'number' }, price: { type: 'number', description: 'Unit price as printed' } },
+          required: ['name', 'qty', 'unit', 'price', 'disc', 'account'],
+          properties: {
+            name: { type: 'string' },
+            qty: { type: 'number' },
+            unit: nullable({ type: 'string', description: 'Unit as printed, e.g. ชิ้น, เดือน, kg' }),
+            price: { type: 'number', description: 'Unit price as printed' },
+            disc: nullable({ type: 'number', description: 'Discount amount in baht on this line, if printed' }),
+            account: { type: 'string', enum: codes, description: 'Expense account for this line (usually the same as the main one)' },
+          },
         },
       },
+      discount: nullable({ type: 'number', description: 'Discount on the whole bill in baht (ส่วนลดท้ายบิล), not counting line discounts' }),
       vat: nullable({ type: 'number' }),
       total: nullable({ type: 'number', description: 'Grand total including VAT' }),
+      wht_rate: nullable({ type: 'number', enum: [1, 1.5, 2, 3, 5, 10, 15], description: 'Withholding tax rate % only when the bill itself shows หัก ณ ที่จ่าย' }),
+      paid: { type: 'boolean', description: 'true when the document is a receipt or shows it was already paid (ใบเสร็จรับเงิน, ชำระแล้ว, cash bill); false for an invoice still to be paid' },
       account: nullable({ type: 'string', enum: codes }),
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
     },
@@ -54,7 +65,7 @@ export async function readPurchaseDoc(base64, mediaType, accounts, biz) {
     model: RECEIPT_MODEL,
     max_tokens: 4000,
     output_config: { effort: 'low', format: { type: 'json_schema', schema: schemaFor(accounts.map((a) => a.code)) } },
-    system: `You read Thai purchase documents (tax invoices, receipts, bills) for the books of "${biz.name}". The vendor is the seller who issued the document, never "${biz.name}" itself. Thai dates may use the Buddhist Era (2569 = 2026): convert to Gregorian. Read only what is printed; use null for what is missing. Keep at most 30 lines; if the document lists many items, group them sensibly. Pick the expense account that fits best from the list.`,
+    system: `You read Thai purchase documents (tax invoices, receipts, bills) for the books of "${biz.name}". The vendor is the seller who issued the document, never "${biz.name}" itself. Thai dates may use the Buddhist Era (2569 = 2026): convert to Gregorian. Read only what is printed; use null for what is missing. Keep at most 30 lines; if the document lists many items, group them sensibly. Pick the expense account that fits best from the list. Line prices and discounts are as printed; say whether prices include VAT with price_mode. A multi-page PDF is one document unless pages are clearly separate bills: then read the first one.`,
     messages: [{
       role: 'user',
       content: [file, { type: 'text', text: `Expense accounts (code: name):\n${accounts.map((a) => `- ${a.code}: ${a.name}`).join('\n')}` }],
