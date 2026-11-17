@@ -1,6 +1,7 @@
 // Reads a photo or PDF of a purchase bill / tax invoice into an expense record draft.
 import Anthropic from '@anthropic-ai/sdk';
 import { RECEIPT_MODEL } from '../receipts.js';
+import { CATS, CAT_KEYS } from './cats.js';
 
 const enabled = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 const client = enabled ? new Anthropic() : null;
@@ -10,7 +11,7 @@ function schemaFor(codes) {
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['vendor', 'doc_no', 'date', 'due_date', 'tax_invoice', 'price_mode', 'lines', 'discount', 'vat', 'total', 'wht_rate', 'paid', 'account', 'confidence'],
+    required: ['vendor', 'doc_title', 'doc_no', 'date', 'due_date', 'tax_invoice', 'price_mode', 'lines', 'discount', 'vat', 'total', 'wht_rate', 'paid', 'description', 'category', 'account', 'confidence'],
     properties: {
       vendor: {
         type: 'object',
@@ -24,6 +25,7 @@ function schemaFor(codes) {
           is_company: { type: 'boolean', description: 'true for a company / juristic person (บริษัท, หจก.), false for an individual' },
         },
       },
+      doc_title: nullable({ type: 'string', description: 'The heading printed on the document, e.g. ใบกำกับภาษี/ใบเสร็จรับเงิน, ใบแจ้งหนี้, Receipt' }),
       doc_no: nullable({ type: 'string', description: 'The bill / tax invoice number' }),
       date: nullable({ type: 'string', description: 'Document date as Gregorian YYYY-MM-DD' }),
       due_date: nullable({ type: 'string', description: 'Payment due date (ครบกำหนดชำระ) as Gregorian YYYY-MM-DD, if printed' }),
@@ -34,13 +36,14 @@ function schemaFor(codes) {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['name', 'qty', 'unit', 'price', 'disc', 'account'],
+          required: ['name', 'qty', 'unit', 'price', 'disc', 'category', 'account'],
           properties: {
             name: { type: 'string' },
             qty: { type: 'number' },
             unit: nullable({ type: 'string', description: 'Unit as printed, e.g. ชิ้น, เดือน, kg' }),
             price: { type: 'number', description: 'Unit price as printed' },
             disc: nullable({ type: 'number', description: 'Discount amount in baht on this line, if printed' }),
+            category: { type: 'string', enum: CAT_KEYS, description: 'Business category of this line' },
             account: { type: 'string', enum: codes, description: 'Expense account for this line (usually the same as the main one)' },
           },
         },
@@ -50,6 +53,8 @@ function schemaFor(codes) {
       total: nullable({ type: 'number', description: 'Grand total including VAT' }),
       wht_rate: nullable({ type: 'number', enum: [1, 1.5, 2, 3, 5, 10, 15], description: 'Withholding tax rate % only when the bill itself shows หัก ณ ที่จ่าย' }),
       paid: { type: 'boolean', description: 'true when the document is a receipt or shows it was already paid (ใบเสร็จรับเงิน, ชำระแล้ว, cash bill); false for an invoice still to be paid' },
+      description: nullable({ type: 'string', description: 'A short Thai description of what was bought, under 60 characters' }),
+      category: { type: 'string', enum: CAT_KEYS, description: 'Business category that fits the whole bill best' },
       account: nullable({ type: 'string', enum: codes }),
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
     },
@@ -68,7 +73,7 @@ export async function readPurchaseDoc(base64, mediaType, accounts, biz) {
     system: `You read Thai purchase documents (tax invoices, receipts, bills) for the books of "${biz.name}". The vendor is the seller who issued the document, never "${biz.name}" itself. Thai dates may use the Buddhist Era (2569 = 2026): convert to Gregorian. Read only what is printed; use null for what is missing. Keep at most 30 lines; if the document lists many items, group them sensibly. Pick the expense account that fits best from the list. Line prices and discounts are as printed; say whether prices include VAT with price_mode. A multi-page PDF is one document unless pages are clearly separate bills: then read the first one.`,
     messages: [{
       role: 'user',
-      content: [file, { type: 'text', text: `Expense accounts (code: name):\n${accounts.map((a) => `- ${a.code}: ${a.name}`).join('\n')}` }],
+      content: [file, { type: 'text', text: `Expense accounts (code: name):\n${accounts.map((a) => `- ${a.code}: ${a.name}`).join('\n')}\n\nBusiness categories (key: name):\n${CATS.filter((c) => c.key).map((c) => `- ${c.key}: ${c.group ? `${CATS.find((g) => g.group === c.group && !g.key).label} › ` : ''}${c.label}`).join('\n')}` }],
     }],
   });
   if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') return null;
