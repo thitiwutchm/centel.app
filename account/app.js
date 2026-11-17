@@ -366,7 +366,7 @@
       if (r === 'dashboard') await viewDashboard(main, q);
       else if (r === 'docs') await viewDocs(main, parts[1] || 'IV', q);
       else if (r === 'new') await viewEditor(main, parts[1], null, q);
-      else if (r === 'scan') viewScan(main);
+      else if (r === 'scan') viewScan(main, q);
       else if (r === 'edit') await viewEditor(main, null, parts[1], q);
       else if (r === 'doc') await viewDoc(main, parts[1]);
       else if (r === 'contacts') viewContacts(main, q);
@@ -646,6 +646,7 @@
       return `<label class="st ${tone} pick"><select data-st="${d.id}" aria-label="สถานะ">${opts.map((o) => `<option value="${o}" ${o === d.status ? 'selected' : ''}>${esc(T.statusName(type, o))}</option>`).join('')}</select>${CHEV}</label>`;
     };
     const catCell = (d) => {
+      if (d.cat && catOf(d.cat)) { const h = catHead(catOf(d.cat)); return `<td><span class="cat" style="--c:${h.color}">${esc(catOf(d.cat).label)}</span>${d.line_count > 1 ? ` <span class="muted" style="font-size:12px">+${d.line_count - 1}</span>` : ''}</td>`; }
       if (!d.account) return '<td></td>';
       const a = S.boot.acc.get(d.account);
       const c = catTone(d.account);
@@ -1204,7 +1205,9 @@
         <label class="field"><span>วันที่${isEx ? 'จ่าย' : 'รับ'}เงิน</span><input type="date" data-p="date" value="${payDraft.date}"></label>
         <label class="field"><span>${isEx ? 'จ่ายจาก' : 'รับเข้า'}</span><select data-p="account">${moneyAccounts().map((a) => `<option value="${a.code}" ${a.code === payDraft.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
         <label class="field"><span>วิธีชำระ</span><select data-p="method">${Object.entries(T.PAY_METHOD).map(([k, v]) => `<option value="${k}" ${k === payDraft.method ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-        <label class="field"><span>ค่าธรรมเนียมธนาคาร</span><input type="number" step="0.01" class="num" data-p="fee" value="${payDraft.fee || ''}" placeholder="0"></label></div>`;
+        <label class="field"><span>ค่าธรรมเนียมธนาคาร</span><input type="number" step="0.01" class="num" data-p="fee" value="${payDraft.fee || ''}" placeholder="0"></label>
+        ${isEx ? '' : `<label class="field"><span>ธนาคาร (พิมพ์ในใบเสร็จ)</span><input type="text" data-p="bank" list="pay-banks" maxlength="120" value="${esc(payDraft.bank || '')}" placeholder="เช่น กสิกรไทย ออมทรัพย์"><datalist id="pay-banks">${[...new Set((biz().settings?.banks || []).map((b) => b && b.bank).filter(Boolean))].map((b) => `<option value="${esc(b)}">`).join('')}</datalist></label>
+        <label class="field"><span>เลขที่ (เช็ค / บัญชี / อ้างอิง)</span><input type="text" data-p="ref" maxlength="60" value="${esc(payDraft.ref || '')}"></label>`}</div>`;
       if (box.dataset.drawn) return;
       box.dataset.drawn = '1';
       box.innerHTML = isEx ? `<label class="check" style="margin-bottom:10px"><input type="checkbox" data-paid ${paidNow ? 'checked' : ''}> <b>จ่ายเงินแล้ว</b></label><div data-pf ${paidNow ? '' : 'hidden'}>${fields}</div>` : `<h2>การรับเงิน</h2>${fields}`;
@@ -1380,67 +1383,554 @@
     pumpScans();
   }
 
-  function viewScan(main) {
-    main.innerHTML = `<div class="page-h"><div><h1>สแกนบิลซื้อ</h1><div class="sub">อ่านบิล ใบกำกับภาษี ใบเสร็จ จากรูปหรือ PDF ด้วย AI แล้วตรวจก่อนบันทึกเป็นค่าใช้จ่าย</div></div>
-      <div class="actions"><a class="btn ghost" href="#/docs/EX">ค่าใช้จ่ายทั้งหมด</a><a class="btn" href="#/new/EX">${ICON.plus}กรอกเอง</a></div></div>
-      <div class="scan-drop big" data-drop>${ICON.scan}<b>ลากไฟล์มาวาง หรือแตะเพื่อเลือกรูป / PDF</b>
-        <span class="muted">ถ่ายรูปบิลจากมือถือได้ เลือกได้หลายไฟล์พร้อมกัน หรือกด Ctrl+V วางรูปที่คัดลอกไว้ · PDF ไม่เกิน 7 MB</span>
-        <input type="file" accept="image/*,application/pdf" multiple hidden></div>
-      <div data-head></div><div class="scan-list" data-list></div>`;
-    const drop = $('[data-drop]', main);
-    const fi = $('input', drop);
-    drop.onclick = (e) => { if (e.target !== fi) fi.click(); };
-    fi.onchange = () => { addScans(fi.files); fi.value = ''; };
-    main.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
-    main.addEventListener('dragleave', (e) => { if (!main.contains(e.relatedTarget)) drop.classList.remove('over'); });
-    main.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); addScans(e.dataTransfer.files); });
+  // Business categories (server/src/acc/cats.js) with their icons.
+  const CAT_ICON = {
+    megaphone: '<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12"/>',
+    cart: '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.5 12h12l2-8H6"/>',
+    glass: '<path d="M5 3h14l-7 9zM12 12v8M8 21h8"/>',
+    bed: '<path d="M3 18V6M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="11" r="1.6"/>',
+    car: '<path d="M5 16l1.5-6h11L19 16M4 16h16v3H4zM7 19v2M17 19v2"/>',
+    truck: '<path d="M2 6h11v10H2zM13 10h5l3 3v3h-8z"/><circle cx="6" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>',
+    building: '<path d="M5 21V3h14v18M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M3 21h18"/>',
+    cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
+    shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+    card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+    stamp: '<path d="M9 3h6v6l3 3v3H6v-3l3-3zM5 19h14v2H5z"/>',
+    box: '<path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/>',
+    home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
+    briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    person: '<circle cx="12" cy="5" r="2"/><path d="M8 9h8l-1 6h-2v6h-2v-6H9z"/>',
+    dots: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  };
+  const cats = () => S.boot.cats || [];
+  const catOf = (key) => cats().find((c) => c.key === key);
+  const catHead = (c) => (c.group ? cats().find((g) => g.group === c.group && !g.key) : c);
+  const catIcon = (c) => { const h = c && catHead(c); return h ? `<i class="cat-ic" style="--c:${h.color}">${I(CAT_ICON[h.icon] || CAT_ICON.dots)}</i>` : '<i class="cat-ic"></i>'; };
+  const catLabel = (key) => { const c = catOf(key); if (!c) return ''; const h = catHead(c); return h && h !== c ? `${h.label} › ${c.label}` : c.label; };
+  // The account a category posts to; a chart without that code uses ค่าใช้จ่ายอื่น.
+  const catAccount = (key) => { const c = catOf(key); return c && S.boot.acc.get(c.account)?.active !== false && S.boot.acc.get(c.account) ? c.account : sysAcc('other_expense'); };
+
+  // A category dropdown: icon rows for the main categories, groups with their sub-items, a search box.
+  function catPicker(btn, value, onPick) {
+    const draw = () => { const c = catOf(btn.dataset.v); btn.innerHTML = c ? `${catIcon(c)}<span>${esc(c.label)}</span>` : '<span class="muted">กรุณาเลือก</span>'; };
+    btn.dataset.v = value || '';
+    draw();
+    btn.onclick = (e) => {
+      e.preventDefault();
+      $$('.cat-pop').forEach((p) => p.remove());
+      const pop = document.createElement('div');
+      pop.className = 'cat-pop';
+      pop.innerHTML = '<div class="cat-pop-h">หมวดหมู่</div><input type="search" placeholder="ค้นหาหมวดหมู่"><div class="cat-pop-list"></div>';
+      document.body.appendChild(pop);
+      const r = btn.getBoundingClientRect();
+      const w = Math.max(r.width, 300);
+      pop.style.width = `${w}px`;
+      pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+      const below = innerHeight - r.bottom > 340 || r.top < 340;
+      pop.style[below ? 'top' : 'bottom'] = below ? `${r.bottom + 4}px` : `${innerHeight - r.top + 4}px`;
+      const list = $('.cat-pop-list', pop);
+      const fill = (s) => {
+        const hit = (c) => !s || c.label.includes(s) || (c.group && catHead(c).label.includes(s));
+        list.innerHTML = cats().map((c) => {
+          if (!c.key) return cats().some((x) => x.group === c.group && x.key && hit(x)) ? `<div class="cat-grp">${catIcon(c)}${esc(c.label)}</div>` : '';
+          if (!hit(c)) return '';
+          return `<button type="button" data-k="${c.key}" class="${c.group ? 'sub' : ''}${c.key === btn.dataset.v ? ' on' : ''}">${c.group ? '<i class="cat-dot" style="--c:' + catHead(c).color + '"></i>' : catIcon(c)}${esc(c.label)}</button>`;
+        }).join('') || '<div class="muted" style="padding:12px">ไม่พบหมวดหมู่</div>';
+      };
+      fill('');
+      const inp = $('input', pop);
+      inp.oninput = () => fill(inp.value.trim());
+      setTimeout(() => inp.focus(), 0);
+      $('.on', list)?.scrollIntoView({ block: 'center' });
+      list.onclick = (ev) => { const b = ev.target.closest('[data-k]'); if (!b) return; btn.dataset.v = b.dataset.k; draw(); pop.remove(); onPick(b.dataset.k); };
+      const close = (ev) => { if (!pop.contains(ev.target) && ev.target !== btn && !btn.contains(ev.target)) { pop.remove(); document.removeEventListener('mousedown', close, true); } };
+      document.addEventListener('mousedown', close, true);
+      addEventListener('hashchange', () => pop.remove(), { once: true });
+    };
+  }
+
+  // pdf.js loads on first use (vendor/pdf.min.js, about 300 KB).
+  let pdfjsP;
+  const pdfjs = () => (pdfjsP ||= new Promise((ok, no) => {
+    const s = document.createElement('script');
+    s.src = 'vendor/pdf.min.js';
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js'; ok(window.pdfjsLib); };
+    s.onerror = no;
+    document.head.appendChild(s);
+  }));
+
+  // The form a scanned bill fills in, kept on the file until it is saved.
+  function blankDraft() {
+    return {
+      ref_title: '', ref_no: '', date: T.today(), due_date: '', contact_id: null,
+      vendor: { name: '', address: '', tax_id: '', branch: '', is_company: true }, project: '', notes: '',
+      mode: 'sum', desc: '', cat: '', amount: 0,
+      lines: [0, 1, 2].map(() => ({ name: '', cat: '', qty: 1, unit: '', price: 0, discPct: 0, vat: true })),
+      lineVat: false, lineDisc: false, priceMode: 'excl', discPct: '', discAmt: 0, vat: !!biz().vat_registered, wht: 0,
+      paid: false, payAcc: sysAcc('bank') || sysAcc('cash'),
+    };
+  }
+  function draftFrom(r) {
+    const d = blankDraft();
+    if (!r) return d;
+    const okCat = (k) => (catOf(k) ? k : '');
+    const cat = okCat(r.category) || 'general';
+    Object.assign(d, {
+      ref_title: r.doc_title || '', ref_no: r.doc_no || '', date: r.date || d.date, due_date: r.paid ? '' : (r.due_date || ''),
+      desc: r.description || '', cat, priceMode: r.price_mode === 'incl' ? 'incl' : 'excl',
+      vat: !!r.tax_invoice && Number(r.vat) > 0, wht: T.WHT_RATES.includes(Number(r.wht_rate)) ? Number(r.wht_rate) : 0, paid: !!r.paid,
+    });
+    const lines = (r.lines || []).map((l) => {
+      const gross = (Number(l.qty) || 1) * (Number(l.price) || 0);
+      return { name: l.name || '', cat: okCat(l.category) || cat, qty: Number(l.qty) || 1, unit: l.unit || '', price: Number(l.price) || 0, discAmt: Number(l.disc) || 0, discPct: gross && l.disc ? Math.round((l.disc / gross) * 10000) / 100 : 0, vat: true };
+    });
+    if (lines.length > 1) {
+      d.mode = 'split'; d.lines = lines;
+      d.lineDisc = lines.some((l) => l.discAmt);
+      d.lineDiscUnit = 'amt';
+      d.lineCats = new Set(lines.map((l) => l.cat)).size > 1;
+    } else if (lines.length === 1) {
+      const l = lines[0];
+      d.amount = Math.round((l.qty * l.price - l.discAmt) * 100) / 100;
+      if (!d.desc) d.desc = l.name;
+    } else if (r.total) { d.amount = Number(r.total); d.priceMode = 'incl'; }
+    if (r.discount) d.discAmt = Number(r.discount);
+    const v = r.vendor || {};
+    const c = S.boot.contacts.find((x) => !x.archived && ((v.tax_id && x.tax_id === v.tax_id && (!v.branch || !x.branch || x.branch === v.branch)) || (v.name && x.name === v.name)));
+    if (c) { d.contact_id = c.id; d.vendor = { name: c.name, address: c.address || '', tax_id: c.tax_id || '', branch: c.branch || '', is_company: c.is_company !== false }; }
+    else d.vendor = { name: v.name || '', address: v.address || '', tax_id: v.tax_id || '', branch: v.branch || '', is_company: v.is_company !== false };
+    return d;
+  }
+  // The document lines and totals the form adds up to.
+  function draftDoc(d) {
+    let lines;
+    if (d.mode === 'sum') {
+      lines = [{ name: d.desc || d.ref_title || catOf(d.cat)?.label || 'ค่าใช้จ่าย', qty: 1, unit: '', price: Number(d.amount) || 0, disc: 0, vat: true, wht: d.wht, cat: d.cat || undefined, account: catAccount(d.cat) }];
+    } else {
+      lines = d.lines.filter((l) => l.name.trim() || Number(l.price)).map((l) => {
+        const gross = (Number(l.qty) || 0) * (Number(l.price) || 0);
+        const cat = l.cat || d.cat;
+        return { name: l.name.trim() || 'รายการ', qty: Number(l.qty) || 0, unit: l.unit || '', price: Number(l.price) || 0, disc: !d.lineDisc ? 0 : d.lineDiscUnit === 'amt' ? Number(l.discAmt) || 0 : Math.round(gross * (Number(l.discPct) || 0)) / 100, vat: d.lineVat ? l.vat !== false : true, wht: d.wht, cat: cat || undefined, account: catAccount(cat) };
+      });
+    }
+    const vatRate = d.vat ? 7 : 0;
+    const priceMode = d.vat ? d.priceMode : 'excl';
+    const pre = T.computeTotals(lines, { discount: 0, priceMode, vatRate });
+    const discount = d.discPct !== '' && d.discPct != null ? Math.round(pre.subtotal * Number(d.discPct)) / 100 : Number(d.discAmt) || 0;
+    return { lines, discount, vatRate, priceMode, t: T.computeTotals(lines, { discount, priceMode, vatRate }) };
+  }
+
+  function viewScan(main, q) {
+    const tab = q?.get('tab') === 'history' ? 'history' : 'files';
+    let sel = S.scanSel && scans().some((x) => x.id === S.scanSel) ? S.scanSel : scans()[0]?.id || null;
+    let hist = null; let hsel = null;
+    let zoom = 0; // 0 = fit width
+    let page = 1; let pages = 1;
+    const illo = `<svg class="bs-illo" viewBox="0 0 220 160" fill="none" aria-hidden="true"><circle cx="110" cy="84" r="70" fill="var(--accent-soft)"/><rect x="92" y="30" width="78" height="100" rx="8" fill="var(--panel)" stroke="var(--line)"/><path d="M104 50h44M104 62h54M104 74h40M104 86h50M104 98h30" stroke="var(--line)" stroke-width="5" stroke-linecap="round"/><path d="M104 50h30" stroke="var(--accent)" stroke-width="5" stroke-linecap="round"/><rect x="40" y="64" width="72" height="56" rx="8" fill="var(--accent)" opacity=".9"/><rect x="48" y="72" width="56" height="40" rx="5" fill="none" stroke="#fff" stroke-dasharray="5 4" stroke-width="2"/><path d="M76 102V82m-8 8 8-8 8 8" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="118" y="96" width="44" height="34" rx="5" fill="var(--panel)" stroke="var(--line)" transform="rotate(-10 140 113)"/><path d="m124 124 10-11 7 7 6-5 9 9" stroke="var(--info)" stroke-width="2.5" stroke-linejoin="round" transform="rotate(-10 140 113)"/></svg>`;
+    main.innerHTML = `<div class="bs">
+      <aside class="bs-files">
+        <div class="bs-tools">
+          <button class="ic-btn" data-t="add" title="เพิ่มไฟล์">${I('<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4M12 11v6M9 14h6"/>')}</button>
+          <button class="ic-btn" data-t="dup" title="ทำสำเนา (บิลหลายใบในไฟล์เดียว)">${I('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>')}</button>
+          <button class="ic-btn" data-t="del" title="นำไฟล์ออก">${I('<path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/>')}</button>
+          <span class="sp"></span>
+          <div class="seg sm"><button data-tab="files" class="${tab === 'files' ? 'on' : ''}">ไฟล์</button><button data-tab="history" class="${tab === 'history' ? 'on' : ''}">ประวัติ</button></div>
+        </div>
+        <div class="bs-count" data-count></div>
+        <div class="bs-list" data-list></div>
+        <input type="file" accept="image/*,application/pdf" multiple hidden data-fi>
+      </aside>
+      <section class="bs-view">
+        <div class="bs-canvas" data-canvas></div>
+        <div class="bs-vbar">
+          <span class="bs-pager" data-pager><button class="ic-btn" data-v="prev" title="หน้าก่อน">${I('<path d="M15 6l-6 6 6 6"/>')}</button><span class="pg" data-pg></span><button class="ic-btn" data-v="next" title="หน้าถัดไป">${I('<path d="M9 6l6 6-6 6"/>')}</button><span class="sep"></span></span>
+          <button class="ic-btn" data-v="out" title="ย่อ">${I('<path d="M5 12h14"/>')}</button><button class="zl" data-v="fit" title="พอดีความกว้าง" data-zl></button><button class="ic-btn" data-v="in" title="ขยาย">${I('<path d="M12 5v14M5 12h14"/>')}</button>
+          <span class="sep"></span><a class="ic-btn" data-open target="_blank" rel="noopener" title="เปิดไฟล์ในแท็บใหม่" hidden>${I('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>')}</a>
+        </div>
+      </section>
+      <section class="bs-form" data-form></section>
+    </div>`;
+    const fi = $('[data-fi]', main);
+    const pick = () => fi.click();
+    fi.onchange = () => { const before = scans().length; addScans(fi.files); fi.value = ''; if (scans().length > before) { sel = scans()[before].id; S.scanSel = sel; if (tab !== 'files') location.hash = '#/scan'; drawAll(); } };
+    main.addEventListener('dragover', (e) => { e.preventDefault(); main.classList.add('drag'); });
+    main.addEventListener('dragleave', (e) => { if (!main.contains(e.relatedTarget)) main.classList.remove('drag'); });
+    main.addEventListener('drop', (e) => { e.preventDefault(); main.classList.remove('drag'); const before = scans().length; addScans(e.dataTransfer.files); if (scans().length > before) { sel = scans()[before].id; S.scanSel = sel; if (tab !== 'files') location.hash = '#/scan'; drawAll(); } });
     const onPaste = (e) => {
       if (!main.isConnected) { document.removeEventListener('paste', onPaste); return; }
+      if (e.target.closest?.('input, textarea')) return;
       const files = [...(e.clipboardData?.files || [])];
-      if (files.length) { e.preventDefault(); addScans(files); }
+      if (files.length) { e.preventDefault(); const before = scans().length; addScans(files); if (scans().length > before) { sel = scans()[before].id; drawAll(); } }
     };
     document.addEventListener('paste', onPaste);
 
-    const STATE = {
-      wait: ['', 'รอคิว'], reading: ['info', 'กำลังอ่าน…'], ready: ['accent', 'พร้อมตรวจ'], manual: ['warn', 'อ่านไม่ได้ กรอกเอง'],
-      failed: ['bad', 'ส่งไม่สำเร็จ'], saved: ['good', 'บันทึกแล้ว'],
-    };
-    const draw = () => {
-      if (!main.isConnected) { if (S.scanTick === draw) S.scanTick = null; return; }
+    const cur = () => scans().find((x) => x.id === sel) || null;
+    const STATE = { wait: ['', 'รอคิว'], reading: ['info', 'กำลังอ่าน…'], ready: ['accent', 'รอตรวจ'], manual: ['warn', 'กรอกเอง'], failed: ['bad', 'ส่งไม่สำเร็จ'], saved: ['good', 'บันทึกแล้ว'] };
+
+    // Left: the files waiting, or scanned expenses already saved.
+    function drawList() {
+      const list = $('[data-list]', main);
+      if (tab === 'history') {
+        $('[data-count]', main).innerHTML = hist ? `บิลที่สแกนแล้ว: <b>${hist.length}</b>` : 'กำลังโหลด…';
+        if (!hist) return;
+        list.innerHTML = hist.length ? hist.map((d) => `<button class="bs-item${d.id === hsel ? ' on' : ''}" data-h="${d.id}">
+            <span class="bs-th">${d.thumb ? `<img src="${esc(d.thumb)}" alt="" loading="lazy">` : '<span>PDF</span>'}</span>
+            <span class="bs-tx"><b>${esc(d.contact_name || d.number)}</b><small>${T.thDate(String(d.date).slice(0, 10))} · ${esc(d.number)}</small><small class="num">${money(d.total)}${d.cat ? ` · ${esc(catOf(d.cat)?.label || '')}` : ''}</small></span></button>`).join('')
+          : '<div class="bs-none">ยังไม่มีค่าใช้จ่ายที่บันทึกจากการสแกน</div>';
+        return;
+      }
       const all = scans();
-      const n = (s) => all.filter((x) => x.status === s).length;
-      const todo = n('ready') + n('manual');
-      const first = all.find((x) => x.status === 'ready' || x.status === 'manual');
-      $('[data-head]', main).innerHTML = all.length ? `<div class="scan-head"><span>${all.length} ไฟล์ · พร้อมตรวจ ${todo}${n('reading') + n('wait') ? ` · กำลังอ่าน ${n('reading') + n('wait')}` : ''} · บันทึกแล้ว ${n('saved')}</span>
-        <span class="actions">${n('saved') ? '<button class="btn sm ghost" data-clear>ล้างที่บันทึกแล้ว</button>' : ''}${first ? `<a class="btn sm primary" href="#/new/EX?scan=${first.id}">ตรวจและบันทึก${todo > 1 ? 'ทีละใบ' : ''}</a>` : ''}</span></div>` : '';
-      $('[data-list]', main).innerHTML = all.length ? all.map((it) => {
+      const todo = all.filter((x) => x.status !== 'saved').length;
+      $('[data-count]', main).innerHTML = `ไฟล์ทั้งหมด: <b>${all.length}</b>${all.length ? ` · รอบันทึก ${todo}` : ''}`;
+      list.innerHTML = all.map((it) => {
         const r = it.result;
         const [tone, label] = STATE[it.status];
-        const name = r?.vendor?.name || it.name;
-        const meta = r ? [r.date && T.thDate(r.date), r.doc_no && `เลขที่ ${r.doc_no}`, r.tax_invoice ? 'ใบกำกับภาษี' : 'บิล / ใบเสร็จ', r.vat ? `VAT ${money(r.vat)}` : ''].filter(Boolean).join(' · ') : it.status === 'failed' ? it.error : it.name;
-        const chips = `<span class="chip ${tone}">${it.status === 'reading' ? '<i class="spin"></i>' : ''}${label}${it.status === 'saved' ? ` <a href="#/doc/${it.doc.id}">${esc(it.doc.number)}</a>` : ''}</span>`
-          + (it.status !== 'saved' && it.duplicate ? ` <span class="chip bad" title="บิลเลขที่นี้เคยบันทึกแล้ว">อาจซ้ำ ${esc(it.duplicate.number)}</span>` : '')
-          + (it.status === 'ready' && r?.confidence === 'low' ? ' <span class="chip warn">ภาพไม่ชัด</span>' : '');
-        const btns = it.status === 'ready' || it.status === 'manual' ? `<a class="btn sm primary" href="#/new/EX?scan=${it.id}">ตรวจและบันทึก</a>`
-          : it.status === 'failed' ? '<button class="btn sm" data-retry>ลองใหม่</button>'
-            : it.status === 'saved' ? `<a class="btn sm ghost" href="#/doc/${it.doc.id}">ดูเอกสาร</a>` : '';
-        return `<div class="card scan-item${it.status === 'saved' ? ' done' : ''}" data-id="${it.id}">
-          <a class="scan-thumb" href="${it.url}" target="_blank" rel="noopener">${it.pdf ? '<span>PDF</span>' : `<img src="${it.url}" alt="">`}</a>
-          <div class="scan-info"><b>${esc(name)}</b><div class="muted">${esc(meta)}</div><div class="scan-chips">${chips}</div></div>
-          <div class="scan-amt">${r?.total != null ? `<b>${money(r.total)}</b><small>${r.paid ? 'จ่ายแล้ว' : 'รอจ่าย'}</small>` : ''}</div>
-          <div class="scan-act">${btns}${it.status !== 'reading' ? '<button class="rm" data-rm aria-label="นำออก">✕</button>' : ''}</div></div>`;
-      }).join('') : '<div class="empty"><b>ยังไม่มีบิลที่สแกน</b>เลือกรูปหรือ PDF ของบิลซื้อ ใบกำกับภาษี หรือใบเสร็จจากผู้ขาย ระบบจะอ่านผู้ขาย เลขประจำตัวผู้เสียภาษี เลขที่บิล วันที่ รายการ VAT และยอดรวมให้ แล้วคุณตรวจก่อนบันทึก</div>';
-    };
-    S.scanTick = draw;
-    main.addEventListener('click', (e) => {
-      const card = e.target.closest('[data-id]');
-      const it = card && scans().find((x) => x.id === card.dataset.id);
-      if (e.target.closest('[data-clear]')) { S.scans = scans().filter((x) => x.status !== 'saved'); draw(); return; }
-      if (!it) return;
-      if (e.target.closest('[data-rm]')) { URL.revokeObjectURL(it.url); S.scans = scans().filter((x) => x !== it); draw(); }
-      if (e.target.closest('[data-retry]')) { it.status = 'wait'; pumpScans(); draw(); }
+        return `<button class="bs-item${it.id === sel ? ' on' : ''}${it.status === 'saved' ? ' done' : ''}" data-id="${it.id}">
+          <span class="bs-th">${it.pdf ? '<span>PDF</span>' : `<img src="${it.url}" alt="">`}</span>
+          <span class="bs-tx"><b>${esc(it.draft?.vendor?.name || r?.vendor?.name || it.name)}</b>
+            <small>${it.status === 'failed' ? esc(it.error || '') : esc(it.copyOf ? `สำเนา · ${it.name}` : it.name)}</small>
+            <span class="bs-chips"><span class="chip ${tone}">${it.status === 'reading' ? '<i class="spin"></i>' : ''}${it.status === 'saved' ? esc(it.doc.number) : label}</span>${it.status !== 'saved' && it.duplicate ? '<span class="chip bad">อาจซ้ำ</span>' : ''}</span></span></button>`;
+      }).join('') + `<button class="bs-add" data-t="add">${I('<path d="M12 5v14M5 12h14"/>')}เพิ่มไฟล์</button>`;
+    }
+
+    // Middle: the bill itself, every page of a PDF, with zoom.
+    let viewKey = null;
+    async function drawView() {
+      const box = $('[data-canvas]', main);
+      const open = $('[data-open]', main);
+      let src = null; let isPdf = false; let key = null;
+      if (tab === 'history') {
+        const d = hist?.find((x) => x.id === hsel);
+        if (d) { key = `h:${d.id}`; isPdf = /\.pdf$/.test(d.attachment); src = d._url || (d._url = (await get(`/attachment?key=${encodeURIComponent(d.attachment)}`).catch(() => ({}))).url); }
+      } else { const it = cur(); if (it) { key = it.id + (it.copyOf ? '' : ''); src = it.url; isPdf = it.pdf; } }
+      open.hidden = !src; if (src) open.href = src;
+      $('.bs-vbar', main).hidden = !src;
+      $('[data-zl]', main).textContent = zoom ? `${Math.round(zoom * 100)}%` : 'พอดี';
+      if (!src) {
+        viewKey = null; pages = 1; page = 1; drawPager();
+        box.innerHTML = tab === 'history' ? `<div class="bs-empty">${illo}<b>${hist?.length ? 'เลือกบิลทางซ้ายเพื่อดู' : 'ยังไม่มีประวัติการสแกน'}</b></div>`
+          : `<button class="bs-empty" data-t="add">${illo}<b>กดที่นี่ หรือลากไฟล์มาวาง เพื่ออัปโหลดบิลใบแรก</b><span>รองรับ PDF, JPG, PNG เลือกได้หลายไฟล์ · ถ่ายจากมือถือได้ · Ctrl+V วางรูป</span></button>`;
+        return;
+      }
+      const sameDoc = key === viewKey;
+      viewKey = key;
+      if (!isPdf) {
+        pages = 1; page = 1; drawPager();
+        if (!sameDoc || !$('img.bs-img', box)) box.innerHTML = `<div class="bs-pages"><img class="bs-img" src="${esc(src)}" alt="ไฟล์บิล"></div>`;
+        const img = $('img.bs-img', box);
+        img.style.width = zoom ? `${Math.round(zoom * 100)}%` : '';
+        img.classList.toggle('fit', !zoom);
+        return;
+      }
+      if (tab === 'history') { pages = 1; page = 1; drawPager(); box.innerHTML = `<iframe class="bs-frame" src="${esc(src)}#view=FitH" title="ไฟล์บิล"></iframe>`; return; }
+      // PDF from this tab: draw each page with pdf.js.
+      if (!sameDoc) { box.innerHTML = '<div class="bs-empty"><i class="spin"></i>กำลังเปิด PDF…</div>'; page = 1; }
+      try {
+        const lib = await pdfjs();
+        const it = cur();
+        it.pdfDoc ||= await lib.getDocument({ data: new Uint8Array(await it.file.arrayBuffer()) }).promise;
+        if (viewKey !== key) return;
+        const doc = it.pdfDoc;
+        pages = doc.numPages; drawPager();
+        const w = box.clientWidth - 32;
+        const wrap = document.createElement('div');
+        wrap.className = 'bs-pages';
+        for (let n = 1; n <= Math.min(pages, 30); n++) {
+          const pg = await doc.getPage(n);
+          const base = pg.getViewport({ scale: 1 });
+          const scale = (zoom || Math.max(0.2, w / base.width));
+          const vp = pg.getViewport({ scale: scale * (devicePixelRatio || 1) });
+          const c = document.createElement('canvas');
+          c.width = vp.width; c.height = vp.height;
+          c.style.width = `${Math.round(base.width * scale)}px`;
+          c.dataset.page = n;
+          await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+          wrap.appendChild(c);
+          if (viewKey !== key) return;
+        }
+        box.innerHTML = '';
+        box.appendChild(wrap);
+        if (page > 1) wrap.children[page - 1]?.scrollIntoView({ block: 'start' });
+      } catch (e) {
+        console.error(e);
+        box.innerHTML = `<iframe class="bs-frame" src="${esc(src)}#view=FitH" title="ไฟล์บิล"></iframe>`;
+      }
+    }
+    function drawPager() {
+      $('[data-pg]', main).textContent = `หน้า ${page} จาก ${pages}`;
+      $('[data-pager]', main).hidden = pages < 2;
+      $('[data-v=prev]', main).disabled = page <= 1;
+      $('[data-v=next]', main).disabled = page >= pages;
+    }
+    $('[data-canvas]', main).addEventListener('scroll', (e) => {
+      const cs = $$('canvas[data-page]', e.target);
+      if (!cs.length) return;
+      const top = e.target.getBoundingClientRect().top + 40;
+      const n = cs.filter((c) => c.getBoundingClientRect().top <= top).length || 1;
+      if (n !== page) { page = n; drawPager(); }
     });
-    draw();
+    $('.bs-vbar', main).onclick = (e) => {
+      const b = e.target.closest('[data-v]'); if (!b) return;
+      const v = b.dataset.v;
+      if (v === 'prev' || v === 'next') {
+        page = Math.max(1, Math.min(pages, page + (v === 'next' ? 1 : -1)));
+        $(`canvas[data-page="${page}"]`, main)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        drawPager(); return;
+      }
+      const box = $('[data-canvas]', main);
+      const fitScale = () => { const el = $('canvas[data-page], img.bs-img', box); return el ? el.getBoundingClientRect().width / (el.naturalWidth || el.width / (devicePixelRatio || 1)) : 1; };
+      const now = zoom || fitScale();
+      if (v === 'fit') zoom = 0;
+      else if (cur()?.pdf || tab === 'history') zoom = Math.max(0.25, Math.min(4, now * (v === 'in' ? 1.25 : 0.8)));
+      else zoom = Math.max(0.25, Math.min(4, (zoom || 1) * (v === 'in' ? 1.25 : 0.8)));
+      viewKey = cur()?.pdf ? null : viewKey;
+      drawView();
+    };
+
+    // Right: the expense form (or a saved expense in history).
+    function drawForm() {
+      const box = $('[data-form]', main);
+      if (tab === 'history') {
+        const d = hist?.find((x) => x.id === hsel);
+        box.innerHTML = d ? `<div class="bs-fbody"><h2 style="margin:0 0 4px">${esc(d.number)}</h2><div class="muted">${esc(d.ref_title || 'ค่าใช้จ่าย')}${d.ref_no ? ` · เลขที่ ${esc(d.ref_no)}` : ''}</div>
+            <dl class="bs-dl"><dt>ผู้จำหน่าย</dt><dd>${esc(d.contact_name || '')}</dd><dt>วันที่</dt><dd>${T.thDate(String(d.date).slice(0, 10))}</dd>
+            ${d.cat ? `<dt>หมวดหมู่</dt><dd>${catIcon(catOf(d.cat))} ${esc(catLabel(d.cat))}</dd>` : ''}${d.project ? `<dt>โปรเจ็ค</dt><dd>${esc(d.project)}</dd>` : ''}
+            <dt>ภาษีมูลค่าเพิ่ม</dt><dd class="num">${money(d.vat)}</dd><dt>รวมทั้งสิ้น</dt><dd class="num"><b>${money(d.total)}</b></dd><dt>สถานะ</dt><dd>${statusChip('EX', d.status)}</dd></dl>
+            <div class="actions"><a class="btn primary" href="#/doc/${d.id}">เปิดเอกสาร</a><a class="btn" href="#/edit/${d.id}">แก้ไข</a></div></div>` : '<div class="bs-none" style="padding:24px">เลือกบิลจากรายการทางซ้าย</div>';
+        return;
+      }
+      const it = cur();
+      if (!it) { box.innerHTML = `<div class="bs-none" style="padding:24px"><b>ยังไม่มีไฟล์</b><br>อัปโหลดรูปหรือ PDF ของบิลซื้อ ใบกำกับภาษี หรือใบเสร็จ AI จะอ่านข้อมูลมากรอกฟอร์มนี้ให้ แล้วคุณตรวจก่อนบันทึก</div>`; return; }
+      if (it.status === 'wait' || it.status === 'reading') { box.innerHTML = '<div class="bs-reading"><i class="spin"></i><b>AI กำลังอ่านบิล…</b><span class="muted">ประมาณ 5–15 วินาที ระหว่างนี้ดูไฟล์อื่นได้</span></div>'; return; }
+      if (it.status === 'saved') { box.innerHTML = `<div class="bs-reading"><b>บันทึกแล้ว ${esc(it.doc.number)}</b><div class="actions" style="margin-top:12px"><a class="btn" href="#/doc/${it.doc.id}">เปิดเอกสาร</a>${scans().some((x) => x.status !== 'saved') ? '<button class="btn primary" data-next>ใบถัดไป</button>' : ''}</div></div>`; return; }
+      if (it.status === 'failed') { box.innerHTML = `<div class="bs-reading"><b>ส่งไฟล์ไม่สำเร็จ</b><span class="muted">${esc(it.error || '')}</span><div class="actions" style="margin-top:12px"><button class="btn primary" data-retry>ลองใหม่</button><button class="btn" data-manual>กรอกเอง</button></div></div>`; return; }
+      const d = it.draft ||= draftFrom(it.result);
+      const vendors = S.boot.contacts.filter((c) => !c.archived && c.kind !== 'customer');
+      box.innerHTML = `<div class="bs-fbody">
+        ${it.duplicate ? `<div class="note-box warn" style="margin-bottom:12px">บิลเลขที่ ${esc(it.result?.doc_no || '')} เคยบันทึกแล้วใน <a href="#/doc/${it.duplicate.id}" target="_blank">${esc(it.duplicate.number)}</a> ตรวจก่อนบันทึกซ้ำ</div>` : ''}
+        ${it.status === 'manual' ? '<div class="note-box warn" style="margin-bottom:12px">AI อ่านไฟล์นี้ไม่ได้ ไฟล์แนบไว้แล้ว กรุณากรอกข้อมูลเอง</div>' : ''}
+        ${it.result?.confidence === 'low' ? '<div class="note-box warn" style="margin-bottom:12px">ภาพไม่ค่อยชัด ตรวจตัวเลขกับบิลก่อนบันทึก</div>' : ''}
+        <div class="bs-g2">
+          <label class="field"><span>หัวเอกสาร</span><input type="text" data-d="ref_title" value="${esc(d.ref_title)}" placeholder="เช่น ใบกำกับภาษี/ใบเสร็จรับเงิน"></label>
+          <label class="field"><span>เลขที่เอกสาร</span><input type="text" data-d="ref_no" value="${esc(d.ref_no)}"></label>
+          <label class="field"><span>วันที่</span><input type="date" data-d="date" value="${d.date}"></label>
+          <label class="field"><span>ครบกำหนดชำระ</span><input type="date" data-d="due_date" value="${d.due_date || ''}"></label>
+        </div>
+        <div class="field"><span>ข้อมูลผู้จำหน่าย ${d.contact_id ? '<small class="chip good" style="height:20px">ผู้ติดต่อเดิม</small>' : d.vendor.name ? '<small class="chip info" style="height:20px">เพิ่มเป็นผู้ติดต่อใหม่</small>' : ''}</span>
+          <div class="bs-vendor">
+            <input type="text" data-vn="name" list="bs-vendors" value="${esc(d.vendor.name)}" placeholder="ชื่อธุรกิจ" autocomplete="off">
+            <textarea data-vn="address" rows="2" placeholder="ที่อยู่">${esc(d.vendor.address)}</textarea>
+            <div class="bs-vrow"><input type="text" data-vn="tax_id" value="${esc(d.vendor.tax_id)}" placeholder="เลขประจำตัวผู้เสียภาษี" inputmode="numeric" maxlength="17"><input type="text" data-vn="branch" value="${esc(d.vendor.branch)}" placeholder="สำนักงาน/สาขา (00000 = สนญ.)"></div>
+          </div>
+          <datalist id="bs-vendors">${vendors.map((c) => `<option value="${esc(c.name)}">${esc(T.taxIdFmt(c.tax_id) || '')}</option>`).join('')}</datalist></div>
+        <div class="bs-g2">
+          <label class="field"><span>โปรเจ็ค</span><input type="text" data-d="project" list="bs-projects" value="${esc(d.project)}" placeholder="ไม่ระบุ"><datalist id="bs-projects">${(S.projects || []).map((p) => `<option value="${esc(p)}">`).join('')}</datalist></label>
+          <label class="field"><span>หมายเหตุ</span><input type="text" data-d="notes" value="${esc(d.notes)}" placeholder="ไม่บังคับ"></label>
+        </div>
+        <hr class="bs-hr">
+        <div class="bs-opt"><span>ประเภทค่าใช้จ่าย</span>
+          <label class="check"><input type="radio" name="bs-mode" value="sum" ${d.mode === 'sum' ? 'checked' : ''}> รวมรายการ</label>
+          <label class="check"><input type="radio" name="bs-mode" value="split" ${d.mode === 'split' ? 'checked' : ''}> แยกรายการ</label></div>
+        ${d.mode === 'sum' ? `<div class="bs-g2 bs-sum">
+            <label class="field"><span>รายละเอียด</span><input type="text" data-d="desc" value="${esc(d.desc)}" placeholder="ซื้ออะไร"></label>
+            <div class="field"><span>หมวดหมู่ธุรกิจ ${d.cat && it.result?.category === d.cat ? '<small class="chip accent" style="height:20px">AI แนะนำ</small>' : ''}</span><button type="button" class="cat-btn" data-cat="main"></button></div>
+            <label class="field"><span>จำนวนเงิน</span><input type="number" step="0.01" class="num" data-d="amount" value="${d.amount || ''}" placeholder="0.00"></label>
+          </div>`
+        : `<div class="bs-opt"><span>ฟังก์ชันเอกสาร</span>
+            <label class="check"><input type="checkbox" data-o="lineVat" ${d.lineVat ? 'checked' : ''}> ภาษีมูลค่าเพิ่มแยกรายการ</label>
+            <label class="check"><input type="checkbox" data-o="lineDisc" ${d.lineDisc ? 'checked' : ''}> ส่วนลดแยกรายการ</label>${d.lineDisc ? `<select data-o2="lineDiscUnit" class="th-sel" aria-label="หน่วยส่วนลด"><option value="pct" ${d.lineDiscUnit !== 'amt' ? 'selected' : ''}>เป็น %</option><option value="amt" ${d.lineDiscUnit === 'amt' ? 'selected' : ''}>เป็นบาท</option></select>` : ''}</div>
+          <div class="field" style="margin-bottom:8px"><span>หมวดหมู่หลัก ${d.cat && it.result?.category === d.cat ? '<small class="chip accent" style="height:20px">AI แนะนำ</small>' : ''}</span><button type="button" class="cat-btn" data-cat="main"></button></div>
+          <div class="bs-lines">${d.lines.map((l, i) => `<div class="bs-line" data-i="${i}">
+              <div class="bl-top"><span class="bl-n">${i + 1}</span><input type="text" data-l="name" value="${esc(l.name)}" placeholder="รายละเอียด">${d.lines.length > 1 ? '<button class="rm" data-rm aria-label="ลบแถว">✕</button>' : ''}</div>
+              <div class="bl-cat"><button type="button" class="cat-btn sm" data-cat="${i}"></button></div>
+              <div class="bl-nums">
+                <label><small>จำนวน</small><input type="number" step="any" class="num" data-l="qty" value="${l.qty}"></label>
+                <label><small>หน่วย</small><input type="text" data-l="unit" value="${esc(l.unit)}"></label>
+                <label class="w"><small>ราคาต่อหน่วย</small><input type="number" step="0.01" class="num" data-l="price" value="${l.price || ''}" placeholder="0.00"></label>
+                ${d.lineDisc ? (d.lineDiscUnit === 'amt' ? `<label><small>ส่วนลด ฿</small><input type="number" step="0.01" min="0" class="num" data-l="discAmt" value="${l.discAmt || ''}" placeholder="0.00"></label>` : `<label><small>ส่วนลด %</small><input type="number" step="0.01" min="0" max="100" class="num" data-l="discPct" value="${l.discPct || ''}" placeholder="0"></label>`) : ''}
+                ${d.lineVat ? `<label><small>ภาษี</small><select data-l="vat"><option value="1" ${l.vat !== false ? 'selected' : ''}>7%</option><option value="0" ${l.vat === false ? 'selected' : ''}>ไม่มี</option></select></label>` : ''}
+                <span class="bl-amt"><small>จำนวนเงิน</small><b class="num" data-amt></b></span>
+              </div></div>`).join('')}</div>
+          <button type="button" class="btn sm ghost" data-addline>${ICON.plus}เพิ่มแถวรายการ</button>`}
+        <hr class="bs-hr">
+        <div class="bs-tot">
+          <div class="bs-opt" style="justify-content:flex-end"><span>ราคาสินค้า</span>
+            <label class="check"><input type="radio" name="bs-pm" value="incl" ${d.priceMode === 'incl' ? 'checked' : ''} ${d.vat ? '' : 'disabled'}> รวมภาษี</label>
+            <label class="check"><input type="radio" name="bs-pm" value="excl" ${d.priceMode === 'excl' ? 'checked' : ''} ${d.vat ? '' : 'disabled'}> ไม่รวมภาษี</label></div>
+          <table class="bs-sumtbl">
+            <tr><td>รวมเป็นเงิน</td><td></td><td class="num" data-s="sub"></td></tr>
+            <tr><td>ส่วนลด</td><td><span class="pct"><input type="number" step="0.01" min="0" max="100" class="num" data-d="discPct" value="${d.discPct ?? ''}" placeholder="0"> %</span></td><td><input type="number" step="0.01" class="num" data-d="discAmt" value="${d.discPct === '' || d.discPct == null ? (d.discAmt || '') : ''}" placeholder="0.00"></td></tr>
+            <tr><td>ราคาหลังหักส่วนลด</td><td></td><td class="num" data-s="after"></td></tr>
+            <tr><td colspan="2"><label class="check"><input type="checkbox" data-o="vat" ${d.vat ? 'checked' : ''}> ภาษีมูลค่าเพิ่ม 7%</label></td><td class="num" data-s="vat"></td></tr>
+            <tr><td>หัก ณ ที่จ่าย</td><td><select data-d="wht">${T.WHT_RATES.map((r) => `<option value="${r}" ${Number(d.wht) === r ? 'selected' : ''}>${r ? `${r}%` : 'ไม่มี'}</option>`).join('')}</select></td><td class="num" data-s="wht"></td></tr>
+            <tr class="grand"><td colspan="2">จำนวนเงินรวมทั้งสิ้น</td><td class="num" data-s="total"></td></tr>
+          </table>
+          <div class="bs-pay"><label class="check"><input type="checkbox" data-o="paid" ${d.paid ? 'checked' : ''}> <b>จ่ายเงินแล้ว</b></label>
+            <select data-d="payAcc" ${d.paid ? '' : 'hidden'}>${moneyAccounts().map((a) => `<option value="${a.code}" ${a.code === d.payAcc ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
+        </div>
+      </div>
+      <div class="bs-save"><div><small class="muted">รวมทั้งสิ้น</small><b data-s="bar"></b><small class="muted" data-s="barnote"></small></div><button class="btn primary" data-save>${scans().some((x) => x !== it && (x.status === 'ready' || x.status === 'manual')) ? 'บันทึกและไปใบถัดไป' : 'บันทึกค่าใช้จ่าย'}</button></div>`;
+      catPicker($('[data-cat=main]', box), d.cat, (k) => {
+        d.cat = k;
+        if (d.mode === 'split') d.lines.forEach((l) => { if (!l.catSet) l.cat = k; });
+        drawForm();
+      });
+      $$('[data-cat]:not([data-cat=main])', box).forEach((b) => catPicker(b, d.lines[Number(b.dataset.cat)].cat || d.cat, (k) => { const l = d.lines[Number(b.dataset.cat)]; l.cat = k; l.catSet = true; }));
+      recalc();
+    }
+    function recalc() {
+      const it = cur(); const d = it?.draft; if (!d) return;
+      const box = $('[data-form]', main);
+      const { t, discount } = draftDoc(d);
+      const set = (k, v) => { const el = $(`[data-s=${k}]`, box); if (el) el.textContent = v; };
+      set('sub', money(t.subtotal)); set('after', money(t.subtotal - discount)); set('vat', money(t.vat)); set('wht', t.wht ? `-${money(t.wht)}` : '–');
+      set('total', money(t.total)); set('bar', money(t.total)); set('barnote', t.wht ? `จ่ายสุทธิ ${money(t.total - t.wht)}` : '');
+      if (d.mode === 'split') {
+        let k = 0;
+        $$('[data-amt]', box).forEach((td, i) => {
+          const l = d.lines[i];
+          const has = l.name.trim() || Number(l.price);
+          td.textContent = has ? money(t.amounts[k++] ?? 0) : '';
+        });
+      }
+      const di = $('[data-d=discAmt]', box);
+      if (di && d.discPct !== '' && d.discPct != null && document.activeElement !== di) di.value = discount ? discount.toFixed(2) : '';
+    }
+
+    const form = $('[data-form]', main);
+    form.addEventListener('input', (e) => {
+      const it = cur(); const d = it?.draft; if (!d) return;
+      const el = e.target;
+      if (el.dataset.d) {
+        const k = el.dataset.d;
+        if (k === 'discPct') { d.discPct = el.value === '' ? '' : Math.min(100, Math.max(0, Number(el.value) || 0)); }
+        else if (k === 'discAmt') { d.discAmt = Number(el.value) || 0; d.discPct = ''; const p = $('[data-d=discPct]', form); if (p) p.value = ''; }
+        else if (k === 'amount' || k === 'wht') d[k] = Number(el.value) || 0;
+        else d[k] = el.value;
+        recalc();
+        if (k === 'ref_title' || k === 'desc') return;
+      }
+      if (el.dataset.vn) {
+        const k = el.dataset.vn;
+        d.vendor[k] = el.value;
+        if (k === 'name') {
+          const c = S.boot.contacts.find((x) => !x.archived && x.name === el.value);
+          if (c) { d.contact_id = c.id; d.vendor = { name: c.name, address: c.address || '', tax_id: c.tax_id || '', branch: c.branch || '', is_company: c.is_company !== false }; drawForm(); drawList(); return; }
+          if (d.contact_id) { d.contact_id = null; }
+        } else if (d.contact_id) d.contact_id = null;
+      }
+      if (el.dataset.l) {
+        const l = d.lines[Number(el.closest('[data-i]').dataset.i)];
+        const k = el.dataset.l;
+        l[k] = k === 'vat' ? el.value === '1' : ['qty', 'price', 'discPct', 'discAmt'].includes(k) ? Number(el.value) || 0 : el.value;
+        recalc();
+      }
+    });
+    form.addEventListener('change', (e) => {
+      const it = cur(); const d = it?.draft; if (!d) return;
+      const el = e.target;
+      if (el.name === 'bs-mode') {
+        if (el.value === 'split' && d.mode === 'sum' && (d.desc || d.amount)) d.lines = [{ name: d.desc, cat: d.cat, qty: 1, unit: '', price: Number(d.amount) || 0, discPct: 0, vat: true }, ...d.lines.filter((l) => l.name || l.price)].concat(d.lines.length < 3 ? [{ name: '', cat: '', qty: 1, unit: '', price: 0, discPct: 0, vat: true }] : []);
+        if (el.value === 'sum' && d.mode === 'split') { const { t } = draftDoc({ ...d, discPct: '', discAmt: 0, vat: false }); d.amount = t.subtotal; d.desc ||= d.lines.find((l) => l.name)?.name || ''; }
+        d.mode = el.value; drawForm(); return;
+      }
+      if (el.name === 'bs-pm') { d.priceMode = el.value; recalc(); return; }
+      if (el.dataset.o) {
+        d[el.dataset.o] = el.checked;
+        if (el.dataset.o === 'vat' || el.dataset.o === 'lineVat' || el.dataset.o === 'lineDisc') { drawForm(); return; }
+        if (el.dataset.o === 'paid') { const s = $('[data-d=payAcc]', form); if (s) s.hidden = !el.checked; }
+        recalc();
+      }
+      if (el.dataset.o2) { d[el.dataset.o2] = el.value; drawForm(); return; }
+      if (el.dataset.d === 'payAcc') d.payAcc = el.value;
+      if (el.dataset.l === 'vat') el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    form.addEventListener('click', async (e) => {
+      const it = cur();
+      if (e.target.closest('[data-addline]')) { it.draft.lines.push({ name: '', cat: '', qty: 1, unit: '', price: 0, discPct: 0, vat: true }); drawForm(); $$('[data-l=name]', form).pop()?.focus(); return; }
+      const rm = e.target.closest('[data-rm]');
+      if (rm) { it.draft.lines.splice(Number(rm.closest('[data-i]').dataset.i), 1); drawForm(); return; }
+      if (e.target.closest('[data-next]')) { const n = scans().find((x) => x.status !== 'saved'); if (n) { sel = n.id; S.scanSel = sel; drawAll(); } return; }
+      if (e.target.closest('[data-retry]')) { it.status = 'wait'; pumpScans(); drawAll(); return; }
+      if (e.target.closest('[data-manual]')) { it.status = 'manual'; drawAll(); return; }
+      const sv = e.target.closest('[data-save]');
+      if (sv) await save(it, sv);
+    });
+
+    async function save(it, btn) {
+      const d = it.draft;
+      const { lines, discount, vatRate, priceMode } = draftDoc(d);
+      if (!d.vendor.name.trim()) { toast('กรอกชื่อผู้จำหน่าย', true); $('[data-vn=name]', form)?.focus(); return; }
+      if (!lines.length || !lines.some((l) => Number(l.price))) { toast('กรอกจำนวนเงิน หรือรายการอย่างน้อย 1 แถว', true); return; }
+      if (d.mode === 'sum' && !d.cat) { toast('เลือกหมวดหมู่ธุรกิจ', true); return; }
+      btn.disabled = true;
+      try {
+        let cid = d.contact_id;
+        if (!cid) {
+          const v = d.vendor;
+          const c = (await post('/contacts', { kind: 'vendor', name: v.name.trim(), tax_id: v.tax_id.replace(/\D/g, '') || null, branch: v.branch || null, address: v.address || null, is_company: v.is_company })).contact;
+          S.boot.contacts.push(c);
+          cid = d.contact_id = c.id;
+        }
+        const body = {
+          type: 'EX', date: d.date, due_date: d.due_date || null, contact_id: cid, tax_invoice: !!vatRate, price_mode: priceMode, vat_rate: vatRate,
+          lines, discount, notes: d.notes, ref_no: d.ref_no, ref_date: vatRate ? d.date : null, ref_title: d.ref_title, project: d.project,
+          attachment: it.attachment, pay: d.paid ? { date: d.date, account: d.payAcc, method: 'transfer', fee: 0 } : null,
+        };
+        const r = await post('/docs', body);
+        Object.assign(it, { status: 'saved', doc: { id: r.doc.id, number: r.doc.number } });
+        if (d.project && !(S.projects || []).includes(d.project)) (S.projects ||= []).unshift(d.project);
+        hist = null;
+        const next = scans().find((x) => x.status === 'ready' || x.status === 'manual');
+        toast(`สร้าง ${r.doc.number} แล้ว${next ? ' · ไปใบถัดไป' : ''}`);
+        if (next) { sel = next.id; S.scanSel = sel; }
+        drawAll();
+      } catch (err) { fail(err); } finally { btn.disabled = false; }
+    }
+
+    // Left toolbar and list.
+    $('.bs-files', main).addEventListener('click', (e) => {
+      const t = e.target.closest('[data-t]')?.dataset.t;
+      if (t === 'add') { pick(); return; }
+      const tb = e.target.closest('[data-tab]');
+      if (tb) { location.hash = tb.dataset.tab === 'history' ? '#/scan?tab=history' : '#/scan'; return; }
+      if (t === 'dup') {
+        const it = cur(); if (!it || it.status === 'wait' || it.status === 'reading') return;
+        const copy = { ...it, id: Math.random().toString(36).slice(2, 10), copyOf: it.id, status: it.status === 'saved' || it.status === 'failed' ? (it.result ? 'ready' : 'manual') : it.status, draft: it.draft ? JSON.parse(JSON.stringify(it.draft)) : null, doc: null, duplicate: null };
+        scans().splice(scans().indexOf(it) + 1, 0, copy);
+        sel = copy.id; S.scanSel = sel; drawAll(); toast('ทำสำเนาแล้ว ใช้เมื่อไฟล์เดียวมีบิลหลายใบ'); return;
+      }
+      if (t === 'del') {
+        const it = cur(); if (!it || it.status === 'reading') return;
+        const i = scans().indexOf(it);
+        if (!scans().some((x) => x !== it && x.url === it.url)) URL.revokeObjectURL(it.url);
+        S.scans = scans().filter((x) => x !== it);
+        sel = (scans()[i] || scans()[i - 1])?.id || null; S.scanSel = sel; drawAll(); return;
+      }
+      const row = e.target.closest('[data-id]');
+      if (row) { sel = row.dataset.id; S.scanSel = sel; zoom = 0; drawAll(); return; }
+      const h = e.target.closest('[data-h]');
+      if (h) { hsel = h.dataset.h; zoom = 0; drawAll(); }
+    });
+    $('[data-canvas]', main).addEventListener('click', (e) => { if (e.target.closest('[data-t=add]')) pick(); });
+
+    function drawAll() { drawList(); drawView(); drawForm(); }
+    S.scanTick = () => {
+      if (!main.isConnected) { S.scanTick = null; return; }
+      drawList();
+      const it = cur();
+      const f = $('[data-form]', main);
+      // Redraw the form only when the selected file just finished reading, so typing is not lost.
+      if (it && f.dataset.st !== it.status) drawForm();
+      if (it) f.dataset.st = it.status;
+    };
+    if (tab === 'history') {
+      get('/docs?type=EX').then(({ docs }) => { hist = docs.filter((d) => d.attachment && d.status !== 'void'); hsel = hist[0]?.id || null; drawAll(); }).catch(fail);
+    }
+    if (!S.projects) get('/projects').then((r) => { S.projects = r.projects; }).catch(() => {});
+    drawAll();
+    $('[data-form]', main).dataset.st = cur()?.status || '';
   }
 
   /* ---------- Document view ---------- */
@@ -2431,7 +2921,9 @@
     await loadBoot();
   }
 
-  function editChannel(c, kind) {
+  // idx is the entry's place in settings.banks: entries saved before ids existed have no id, so
+  // editing, deleting and switching go by position, not id.
+  function editChannel(c, kind, idx) {
     const isNew = !c;
     c = c || { kind, active: true, acctType: 'savings', bank: kind === 'bank' ? BANK_NAMES[0] : OTHER_KINDS[0] };
     const bank = c.kind !== 'other';
@@ -2456,7 +2948,7 @@
         if (!bank && !d.name) { toast('กรอกชื่อผู้ให้บริการ', true); return false; }
         const next = { ...c, ...d, number: bank ? fmtAcct(d.number) : d.number };
         const list = (biz().settings?.banks || []).map((x) => ({ ...x }));
-        if (isNew) list.push(next); else list.splice(list.findIndex((x) => x.id === c.id), 1, next);
+        if (isNew) list.push(next); else list.splice(idx, 1, next);
         await saveChannels(list);
         toast('บันทึกแล้ว');
         return true;
@@ -2466,13 +2958,13 @@
 
   function viewChannels(main) {
     const list = biz().settings?.banks || [];
-    const row = (c) => {
+    const row = (c, i) => {
       const bank = c.kind !== 'other';
       const detail = bank
         ? `<div>ประเภทบัญชี: ${ACCT_TYPE[c.acctType] || ACCT_TYPE.savings}</div>${c.branch ? `<div>สาขา: ${esc(c.branch)}</div>` : ''}`
         : (c.number ? `<div>${esc(c.number)}</div>` : '');
       const on = c.active !== false;
-      return `<tr data-id="${esc(c.id)}"${on ? '' : ' class="off"'}>
+      return `<tr data-i="${i}"${on ? '' : ' class="off"'}>
         <td class="nowrap">${bank ? 'บัญชีธนาคาร' : 'ช่องทางชำระอื่นๆ'}</td>
         <td><div class="ch-name">${channelBadge(c)}<div><div>${esc(bank ? `${c.bank} ${c.number}` : c.bank)}</div><div class="muted">${esc(c.name || '')}</div></div></div></td>
         <td class="muted ch-detail">${detail}</td>
@@ -2487,7 +2979,7 @@
       ${biz().settings?.promptpay?.id ? '' : '<p class="muted" style="font-size:13px">ตั้งพร้อมเพย์เพื่อพิมพ์ QR รับเงินในใบแจ้งหนี้ได้ที่ <a class="link" href="#/settings">ตั้งค่า › รับชำระเงิน</a></p>'}</div>`;
     const root = $('[data-ch]', main);
     const redraw = () => viewChannels(main);
-    const byId = (id) => (biz().settings?.banks || []).find((x) => x.id === id);
+    const all = () => biz().settings?.banks || [];
     root.addEventListener('click', (e) => {
       const add = e.target.closest('[data-add]');
       if (add) return editChannel(null, add.dataset.add).then((r) => r && redraw());
@@ -2495,18 +2987,20 @@
       if (am) return popMenu(am, [['บัญชีธนาคาร', () => editChannel(null, 'bank').then((r) => r && redraw())], ['ช่องทางชำระอื่นๆ', () => editChannel(null, 'other').then((r) => r && redraw())]]);
       const more = e.target.closest('[data-more]');
       if (more) {
-        const c = byId(more.closest('tr').dataset.id);
-        popMenu(more, [['แก้ไข', () => editChannel(c).then((r) => r && redraw())], null, ['ลบ', async () => {
+        const i = Number(more.closest('tr').dataset.i);
+        const c = all()[i];
+        if (!c) return;
+        popMenu(more, [['แก้ไข', () => editChannel(c, c.kind, i).then((r) => r && redraw())], null, ['ลบ', async () => {
           if (!(await confirmBox('ลบช่องทางการเงิน', `ลบ ${esc(c.bank)} ${esc(c.number || c.name || '')} ออกจากรายการ? เอกสารที่ออกไปแล้วไม่เปลี่ยน`, 'ลบ'))) return;
-          try { await saveChannels((biz().settings?.banks || []).filter((x) => x.id !== c.id)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
+          try { await saveChannels(all().filter((_, j) => j !== i)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
         }, { danger: true }]]);
       }
     });
     root.addEventListener('change', async (e) => {
       if (!e.target.matches('[data-active]')) return;
-      const id = e.target.closest('tr').dataset.id;
+      const i = Number(e.target.closest('tr').dataset.i);
       try {
-        await saveChannels((biz().settings?.banks || []).map((x) => (x.id === id ? { ...x, active: e.target.value === '1' } : x)));
+        await saveChannels(all().map((x, j) => (j === i ? { ...x, active: e.target.value === '1' } : x)));
         toast(e.target.value === '1' ? 'เปิดใช้งานแล้ว' : 'ปิดการใช้งานแล้ว'); redraw();
       } catch (err) { fail(err); redraw(); }
     });
