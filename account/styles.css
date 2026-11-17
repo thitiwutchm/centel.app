@@ -554,6 +554,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .int-card { display: flex; gap: 14px; align-items: center; text-decoration: none; color: inherit; }
 .int-status { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .int-logo { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: 15px; letter-spacing: .5px; background: #0E1116; color: #C6F432; }
+.int-logo.ai-logo { background: linear-gradient(145deg, #D97757, #8E5CF6); color: #fff; }
+.ai-url { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ai-url code { flex: 1 1 260px; min-width: 0; padding: 11px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); font-size: 15px; word-break: break-all; }
+.ai-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 14px; }
+.ai-steps ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.7; }
+.ai-steps li + li { margin-top: 4px; }
 .cc-flow { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.6; }
 .cc-flow li::marker { color: var(--muted); }
 .grid > .card { min-width: 0; }
