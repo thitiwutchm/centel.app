@@ -1523,7 +1523,8 @@
 
   function viewScan(main, q) {
     const tab = q?.get('tab') === 'history' ? 'history' : 'files';
-    let sel = S.scanSel && scans().some((x) => x.id === S.scanSel) ? S.scanSel : scans()[0]?.id || null;
+    // The page opens on the empty drop zone; files already added stay in the list on the left.
+    let sel = null;
     let hist = null; let hsel = null;
     let zoom = 0; // 0 = fit width
     let page = 1; let pages = 1;
@@ -1610,7 +1611,7 @@
       if (!src) {
         viewKey = null; pages = 1; page = 1; drawPager();
         box.innerHTML = tab === 'history' ? `<div class="bs-empty">${illo}<b>${hist?.length ? 'เลือกบิลทางซ้ายเพื่อดู' : 'ยังไม่มีประวัติการสแกน'}</b></div>`
-          : `<button class="bs-empty" data-t="add">${illo}<b>กดที่นี่ หรือลากไฟล์มาวาง เพื่ออัปโหลดบิลใบแรก</b><span>รองรับ PDF, JPG, PNG เลือกได้หลายไฟล์ · ถ่ายจากมือถือได้ · Ctrl+V วางรูป</span></button>`;
+          : `<button class="bs-empty" data-t="add">${illo}<b>${scans().length ? 'ลากบิลมาวาง หรือกดที่นี่เพื่อเลือกไฟล์' : 'กดที่นี่ หรือลากไฟล์มาวาง เพื่ออัปโหลดบิลใบแรก'}</b><span>รองรับ PDF, JPG, PNG เลือกได้หลายไฟล์ · ถ่ายจากมือถือได้ · Ctrl+V วางรูป</span></button>`;
         return;
       }
       const sameDoc = key === viewKey;
@@ -1701,7 +1702,7 @@
         return;
       }
       const it = cur();
-      if (!it) { box.innerHTML = `<div class="bs-none" style="padding:24px"><b>ยังไม่มีไฟล์</b><br>อัปโหลดรูปหรือ PDF ของบิลซื้อ ใบกำกับภาษี หรือใบเสร็จ AI จะอ่านข้อมูลมากรอกฟอร์มนี้ให้ แล้วคุณตรวจก่อนบันทึก</div>`; return; }
+      if (!it) { box.innerHTML = scans().length ? `<div class="bs-none" style="padding:24px"><b>ลากบิลใบใหม่มาวางได้เลย</b><br>หรือเลือกไฟล์จากรายการทางซ้ายเพื่อตรวจและบันทึก${scans().some((x) => x.status !== 'saved') ? ` (รอบันทึก ${scans().filter((x) => x.status !== 'saved').length} ไฟล์)` : ''}</div>` : `<div class="bs-none" style="padding:24px"><b>ยังไม่มีไฟล์</b><br>อัปโหลดรูปหรือ PDF ของบิลซื้อ ใบกำกับภาษี หรือใบเสร็จ AI จะอ่านข้อมูลมากรอกฟอร์มนี้ให้ แล้วคุณตรวจก่อนบันทึก</div>`; return; }
       if (it.status === 'wait' || it.status === 'reading') { box.innerHTML = '<div class="bs-reading"><i class="spin"></i><b>AI กำลังอ่านบิล…</b><span class="muted">ประมาณ 5–15 วินาที ระหว่างนี้ดูไฟล์อื่นได้</span></div>'; return; }
       if (it.status === 'saved') { box.innerHTML = `<div class="bs-reading"><b>บันทึกแล้ว ${esc(it.doc.number)}</b><div class="actions" style="margin-top:12px"><a class="btn" href="#/doc/${it.doc.id}">เปิดเอกสาร</a>${scans().some((x) => x.status !== 'saved') ? '<button class="btn primary" data-next>ใบถัดไป</button>' : ''}</div></div>`; return; }
       if (it.status === 'failed') { box.innerHTML = `<div class="bs-reading"><b>ส่งไฟล์ไม่สำเร็จ</b><span class="muted">${esc(it.error || '')}</span><div class="actions" style="margin-top:12px"><button class="btn primary" data-retry>ลองใหม่</button><button class="btn" data-manual>กรอกเอง</button></div></div>`; return; }
@@ -1884,7 +1885,7 @@
         hist = null;
         const next = scans().find((x) => x.status === 'ready' || x.status === 'manual');
         toast(`สร้าง ${r.doc.number} แล้ว${next ? ' · ไปใบถัดไป' : ''}`);
-        if (next) { sel = next.id; S.scanSel = sel; }
+        sel = next ? next.id : null; S.scanSel = sel;
         drawAll();
       } catch (err) { fail(err); } finally { btn.disabled = false; }
     }
