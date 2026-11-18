@@ -108,8 +108,9 @@ async function ledger(db, biz, q) {
 // ภาษีขายตามเอกสาร: every sales document whose tax point is in the month. That is an invoice
 // or receipt issued as a tax invoice, plus cash sales without VAT (0% or exempt), which still
 // count as sales on ภ.พ.30. A receipt made from a tax invoice is not listed again.
-// status: '' all, open รอชำระ, paid ชำระแล้ว, void ยกเลิก (void rows count as 0).
-export const VAT_SALE_STATUS = ['', 'open', 'paid', 'void'];
+// Cancelled (void) documents are left out entirely: they are not part of sales VAT.
+// status: '' all, open รอชำระ, paid ชำระแล้ว.
+export const VAT_SALE_STATUS = ['', 'open', 'paid'];
 async function vatSales(db, biz, q) {
   const m = monthOf(q.month);
   const status = VAT_SALE_STATUS.includes(q.status) ? q.status || '' : '';
@@ -117,19 +118,18 @@ async function vatSales(db, biz, q) {
     `select d.id, d.type, d.number, d.date, d.status, d.contact, d.vat_rate, d.vat_base, d.vat, d.total, d.tax_invoice,
             r.number as ref_number, r.type as ref_type
      from acc_docs d left join acc_docs r on r.id = d.ref_id
-     where d.business_id = $1 and d.date between $2 and $3
+     where d.business_id = $1 and d.date between $2 and $3 and d.status <> 'void'
        and ((d.type in ('IV', 'RE') and d.tax_invoice)
          or (d.type = 'RE' and not d.tax_invoice and d.vat = 0 and not coalesce(r.type = 'IV' and r.tax_invoice, false)))
      order by d.date, d.number`, [biz.id, m.from, m.to])).rows.map((d) => {
-    const v = d.status === 'void';
-    const st = v ? 'void' : d.type === 'RE' ? 'paid' : d.status;
+    const st = d.type === 'RE' ? 'paid' : d.status;
     const value = r2(d.total - d.vat);
     return {
-      id: d.id, type: d.type, number: d.number, date: d.date, status: st, void: v, tax_invoice: d.tax_invoice,
+      id: d.id, type: d.type, number: d.number, date: d.date, status: st, tax_invoice: d.tax_invoice,
       ref_no: d.ref_type === 'IV' || d.ref_type === 'QT' ? d.ref_number : '',
       name: d.contact?.name || '', tax_id: d.contact?.tax_id || '', branch: d.contact?.branch || '',
       rate: Number(d.vat) > 0 ? Number(d.vat_rate) : 0,
-      value: v ? 0 : value, base: v ? 0 : d.vat_base, zero: v ? 0 : r2(value - d.vat_base), vat: v ? 0 : d.vat,
+      value, base: d.vat_base, zero: r2(value - d.vat_base), vat: d.vat,
     };
   });
   const rows = status ? all.filter((r) => r.status === status) : all;
@@ -137,7 +137,7 @@ async function vatSales(db, biz, q) {
 }
 function vatTotals(rows) {
   const sum = (k) => r2(rows.reduce((s, x) => s + (x[k] || 0), 0));
-  return { count: rows.filter((r) => !r.void).length, value: sum('value'), base: sum('base'), zero: sum('zero'), vat: sum('vat') };
+  return { count: rows.length, value: sum('value'), base: sum('base'), zero: sum('zero'), vat: sum('vat') };
 }
 
 // The tax month an expense's input VAT is claimed in.
