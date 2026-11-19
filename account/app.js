@@ -160,39 +160,59 @@
         },
       });
       container.hidden = false;
-      window.google.accounts.id.renderButton($('.gbtn', container), { theme: 'outline', size: 'large', width: 340, text: 'continue_with', locale: 'th' });
+      const gw = Math.max(200, Math.min(352, $('.gwrap', container).clientWidth || 340));
+      window.google.accounts.id.renderButton($('.gbtn', container), { theme: themeNow() === 'night' ? 'filled_black' : 'outline', size: 'large', width: gw, text: 'continue_with', locale: 'th' });
     } catch { /* Google sign-in not available here */ }
   }
 
   function renderAuth(invite) {
     let mode = 'login';
     app.innerHTML = `<div class="auth">
-      <div class="auth-art">
-        <div class="brand" style="padding:0"><span class="brand-mark">${ICON.journal}</span><div>Centel Account<small>account.centel.app</small></div></div>
-        <div>
-          <h1>บัญชีของธุรกิจคุณ<br>ครบในที่เดียว</h1>
-          <p>ออกใบเสนอราคา ใบแจ้งหนี้ ใบเสร็จ และใบกำกับภาษี บันทึกค่าใช้จ่ายจากรูปบิล ระบบลงบัญชีคู่ให้อัตโนมัติ พร้อมรายงานภาษีซื้อขาย ภ.ง.ด. และงบการเงิน</p>
+      <aside class="auth-art">
+        <div class="auth-brand"><span class="auth-mark">${ICON.journal}</span><div><b>Centel Account</b><small>account.centel.app</small></div></div>
+        <div class="auth-hero">
+          <span class="auth-kicker">ระบบบัญชีออนไลน์สำหรับธุรกิจ</span>
+          <h1>บัญชีของธุรกิจคุณ<br><em>ครบในที่เดียว</em></h1>
+          <p class="auth-lead">ออกเอกสาร บันทึกค่าใช้จ่าย ลงบัญชี และเตรียมภาษี จบในแอปเดียว ใช้ได้ทั้งมือถือ iPad และคอมพิวเตอร์</p>
+          <ul class="auth-feats">
+            <li><i>${ICON.iv}</i>ใบเสนอราคา ใบแจ้งหนี้ ใบเสร็จ ใบกำกับภาษี</li>
+            <li><i>${ICON.scan}</i>สแกนบิลซื้อด้วย AI บันทึกค่าใช้จ่ายให้เอง</li>
+            <li><i>${ICON.journal}</i>ลงบัญชีคู่อัตโนมัติจากทุกเอกสาร</li>
+            <li><i>${ICON.tax}</i>รายงาน ภ.พ.30 ภ.ง.ด. และงบการเงิน</li>
+          </ul>
         </div>
-        <svg class="ledger" viewBox="0 0 420 260" fill="none" aria-hidden="true">
-          <rect x="20" y="20" width="380" height="230" rx="14" fill="#1E2126" stroke="#2C3038"/>
-          ${[0, 1, 2, 3, 4, 5].map((i) => `<path d="M44 ${70 + i * 30}h220" stroke="#2C3038"/><path d="M300 ${70 + i * 30}h${60 - (i % 3) * 14}" stroke="${i === 5 ? '#F76707' : '#3A3F48'}" stroke-width="6" stroke-linecap="round"/>`).join('')}
-          <path d="M44 46h120" stroke="#F76707" stroke-width="6" stroke-linecap="round"/>
-        </svg>
-        <div class="muted" style="font-size:12px">ส่วนหนึ่งของ Centel · ใช้บัญชีเดียวกับแอป Centel ได้</div>
-      </div>
-      <div class="auth-form"><form class="card" novalidate>
-        <h2 data-t>เข้าสู่ระบบ</h2>
-        <p class="muted" style="margin:0 0 18px" data-s>ใช้อีเมลเดียวกับบัญชี Centel</p>
-        <div data-google hidden><div class="gbtn"></div><div class="or">หรือ</div></div>
-        <div class="grid">
-          <label class="field" data-name hidden><span>ชื่อ</span><input type="text" name="name" autocomplete="name"></label>
-          <label class="field"><span>อีเมล</span><input type="email" name="email" autocomplete="email" required></label>
-          <label class="field"><span>รหัสผ่าน</span><input type="password" name="password" autocomplete="current-password" required></label>
-          <div class="err-text" data-err></div>
-          <button class="btn primary" style="justify-content:center;height:42px" data-go>เข้าสู่ระบบ</button>
-          <button type="button" class="btn ghost" data-switch>ยังไม่มีบัญชี? สมัครใช้งาน</button>
+        <div class="auth-preview" aria-hidden="true">
+          <div class="ap-doc">
+            <div class="ap-head"><div><b>ใบแจ้งหนี้ / ใบกำกับภาษี</b><small>IV-2026-0042 · 18 พ.ย. 2569</small></div><span class="ap-paid">ชำระแล้ว</span></div>
+            <div class="ap-row"><span>ออกแบบเว็บไซต์</span><span>18,000.00</span></div>
+            <div class="ap-row"><span>ดูแลระบบรายเดือน</span><span>5,000.00</span></div>
+            <div class="ap-row"><span>VAT 7%</span><span>1,610.00</span></div>
+            <div class="ap-total"><span>ยอดรวมทั้งสิ้น</span><b>฿24,610.00</b></div>
+          </div>
+          <div class="ap-kpi"><div class="ap-bars">${[40, 55, 48, 70, 62, 88].map((h) => `<span style="height:${h}%"></span>`).join('')}</div><div><small>รายรับเดือนนี้</small><b>฿186,400</b><em>+18%</em></div></div>
         </div>
-      </form></div></div>`;
+        <div class="auth-foot">ส่วนหนึ่งของ <b>Centel</b> · ใช้บัญชีเดียวกับแอป Centel ได้</div>
+      </aside>
+      <main class="auth-form">
+        <button type="button" class="auth-theme" data-auth-theme aria-label="สลับธีมกลางวัน/กลางคืน"></button>
+        <form class="card auth-card" novalidate>
+          <h2 data-t>เข้าสู่ระบบ</h2>
+          <p class="auth-sub" data-s>ใช้อีเมลเดียวกับบัญชี Centel</p>
+          <div data-google hidden><div class="gwrap"><div class="gbtn"></div></div><div class="or">หรือใช้อีเมล</div></div>
+          <div class="grid">
+            <label class="field" data-name hidden><span>ชื่อ</span><input type="text" name="name" autocomplete="name"></label>
+            <label class="field"><span>อีเมล</span><input type="email" name="email" autocomplete="email" placeholder="you@company.com" required></label>
+            <label class="field"><span>รหัสผ่าน</span><input type="password" name="password" autocomplete="current-password" placeholder="••••••••" required></label>
+            <div class="err-text" data-err></div>
+            <button class="btn primary auth-go" data-go>เข้าสู่ระบบ</button>
+          </div>
+          <p class="auth-switch"><span data-q>ยังไม่มีบัญชี?</span> <button type="button" data-switch>สมัครใช้งาน</button></p>
+        </form>
+      </main></div>`;
+    const tg = $('[data-auth-theme]', app);
+    const drawTg = () => { tg.innerHTML = themeNow() === 'night' ? ICON.sun : ICON.moon; };
+    drawTg();
+    tg.onclick = () => { setTheme(themeNow() === 'night' ? 'day' : 'night'); drawTg(); };
     const f = $('form', app);
     loadGoogle($('[data-google]', f));
     // Opened from an invite link: say who invited them and to which email.
@@ -215,7 +235,9 @@
       $('[data-name]', f).hidden = mode === 'login';
       $('[data-t]', f).textContent = mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครใช้งาน';
       $('[data-go]', f).textContent = mode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชี';
-      $('[data-switch]', f).textContent = mode === 'login' ? 'ยังไม่มีบัญชี? สมัครใช้งาน' : 'มีบัญชีแล้ว? เข้าสู่ระบบ';
+      $('[data-q]', f).textContent = mode === 'login' ? 'ยังไม่มีบัญชี?' : 'มีบัญชีแล้ว?';
+      $('[data-switch]', f).textContent = mode === 'login' ? 'สมัครใช้งาน' : 'เข้าสู่ระบบ';
+      $('[data-s]', f).textContent = mode === 'login' ? 'ใช้อีเมลเดียวกับบัญชี Centel' : 'สร้างบัญชีใหม่ ใช้ได้กับแอป Centel ด้วย';
       $('[name=password]', f).autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     };
     f.onsubmit = async (e) => {
