@@ -1100,6 +1100,88 @@ export function startAccJobs() {
   startReminderJob();
 }
 
+/* ---------- คลังเอกสาร: folders and link cards (migrations/046_acc_library.sql) ---------- */
+// A card is only a name and a link to where the file lives (Google Drive and so on).
+
+const LIB_COLORS = ['orange', 'blue', 'green', 'purple', 'pink', 'gray'];
+const libUrl = (v) => {
+  let s = String(v ?? '').trim();
+  if (!s) return null;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = `https://${s}`;
+  try {
+    const u = new URL(s);
+    return (u.protocol === 'https:' || u.protocol === 'http:') && u.hostname.includes('.') && s.length <= 2000 ? u.href : null;
+  } catch { return null; }
+};
+const libRow = (r) => ({ id: r.id, parent: r.parent_id, kind: r.kind, name: r.name, url: r.url, note: r.note, color: r.color, createdAt: r.created_at, updatedAt: r.updated_at });
+
+// The folder something goes into: null (top level) or a folder of this business that is not
+// the item itself or inside it, so a folder can't be moved into its own subfolder.
+async function libParent(db, bizId, parent, self) {
+  if (parent == null || parent === '') return null;
+  if (!isUuid(parent)) throw bad('bad_folder');
+  const f = (await db.query(`select id from acc_library where id = $1 and business_id = $2 and kind = 'folder'`, [parent, bizId])).rows[0];
+  if (!f) throw bad('bad_folder');
+  if (self) {
+    const loop = (await db.query(
+      `with recursive up(id, parent_id) as (select id, parent_id from acc_library where id = $1
+         union all select l.id, l.parent_id from acc_library l join up on l.id = up.parent_id)
+       select 1 from up where id = $2 limit 1`, [parent, self])).rows[0];
+    if (loop) throw bad('bad_folder');
+  }
+  return parent;
+}
+
+biz.get('/library', wrap(async (req, res) => {
+  const rows = await tx(req, async (db) => (await db.query(
+    'select * from acc_library where business_id = $1 order by kind, lower(name), created_at limit 5000', [B(req)])).rows);
+  res.json({ items: rows.map(libRow) });
+}));
+
+biz.post('/library', rateLimit(600, 60 * 60000), wrap(async (req, res) => {
+  const b = req.body || {};
+  const kind = b.kind === 'folder' ? 'folder' : 'link';
+  const url = kind === 'link' ? libUrl(b.url) : null;
+  if (kind === 'link' && !url) throw bad('bad_url');
+  const name = str(b.name, 200) || (url ? new URL(url).hostname.replace(/^www\./, '') : null);
+  if (!name) throw bad('bad_name');
+  const row = await tx(req, async (db) => {
+    const n = (await db.query('select count(*)::int as n from acc_library where business_id = $1', [B(req)])).rows[0].n;
+    if (n >= 5000) throw bad('too_many');
+    const parent = await libParent(db, B(req), b.parent);
+    return (await db.query(
+      `insert into acc_library (business_id, parent_id, kind, name, url, note, color, created_by) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+      [B(req), parent, kind, name, url, str(b.note, 1000), LIB_COLORS.includes(b.color) ? b.color : null, req.user.id])).rows[0];
+  });
+  res.json({ item: libRow(row) });
+}));
+
+biz.put('/library/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const b = req.body || {};
+  const row = await tx(req, async (db) => {
+    const cur = (await db.query('select * from acc_library where id = $1 and business_id = $2', [req.params.id, B(req)])).rows[0];
+    if (!cur) throw bad('not_found', 404);
+    const next = { ...cur };
+    if (b.name !== undefined) { next.name = str(b.name, 200); if (!next.name) throw bad('bad_name'); }
+    if (b.url !== undefined && cur.kind === 'link') { next.url = libUrl(b.url); if (!next.url) throw bad('bad_url'); }
+    if (b.note !== undefined) next.note = str(b.note, 1000);
+    if (b.color !== undefined) next.color = LIB_COLORS.includes(b.color) ? b.color : null;
+    if (b.parent !== undefined) next.parent_id = await libParent(db, B(req), b.parent, cur.id);
+    return (await db.query(
+      `update acc_library set name = $2, url = $3, note = $4, color = $5, parent_id = $6, updated_at = now() where id = $1 returning *`,
+      [cur.id, next.name, next.url, next.note, next.color, next.parent_id])).rows[0];
+  });
+  res.json({ item: libRow(row) });
+}));
+
+biz.delete('/library/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const n = await tx(req, async (db) => (await db.query('delete from acc_library where id = $1 and business_id = $2', [req.params.id, B(req)])).rowCount);
+  if (!n) throw bad('not_found', 404);
+  res.json({ ok: true });
+}));
+
 /* ---------- Public shapes ---------- */
 
 function publicDoc(d, ref) {

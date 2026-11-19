@@ -34,7 +34,7 @@
     doc_void: 'เอกสารถูกยกเลิกแล้ว', unbalanced: 'ยอดเดบิตและเครดิตต้องเท่ากัน', debit_and_credit: 'บรรทัดหนึ่งใส่ได้แค่เดบิตหรือเครดิต',
     unknown_account: 'มีรหัสบัญชีที่ไม่อยู่ในผังบัญชี', account_in_use: 'บัญชีนี้มีรายการหรือระบบใช้อยู่ ลบหรือเปลี่ยนหมวดไม่ได้',
     bad_pay_account: 'เลือกบัญชีเงินสดหรือธนาคาร', negative_total: 'ยอดรวมติดลบไม่ได้', confirm_name: 'พิมพ์ชื่อกิจการให้ตรงเพื่อยืนยัน',
-    capcourt_key: 'รหัสเชื่อมต่อ CapCourt ไม่ถูกต้องหรือถูกยกเลิก', capcourt_down: 'ติดต่อ CapCourt ไม่ได้ ลองใหม่อีกครั้ง', bad_url: 'ที่อยู่ต้องขึ้นต้นด้วย https://',
+    capcourt_key: 'รหัสเชื่อมต่อ CapCourt ไม่ถูกต้องหรือถูกยกเลิก', capcourt_down: 'ติดต่อ CapCourt ไม่ได้ ลองใหม่อีกครั้ง', bad_url: 'ที่อยู่ต้องขึ้นต้นด้วย https://', bad_folder: 'ไม่พบโฟลเดอร์ หรือย้ายโฟลเดอร์เข้าไปในตัวเองไม่ได้',
     too_large: 'ไฟล์ใหญ่เกินไป', forbidden: 'ไม่มีสิทธิ์ทำรายการนี้', not_found: 'ไม่พบข้อมูล', too_many_requests: 'ลองใหม่อีกครั้งในอีกสักครู่',
     google_mismatch: 'อีเมลนี้ผูกกับบัญชี Google อื่นอยู่', bad_role: 'กรุณาเลือกตำแหน่ง', already_member: 'อีเมลนี้เป็นผู้ใช้งานในกิจการนี้อยู่แล้ว',
     too_many_users: 'เพิ่มผู้ใช้งานได้สูงสุด 50 คนต่อกิจการ', primary_owner: 'เจ้าของหลักของกิจการแก้ไขหรือลบไม่ได้', self_demote: 'เปลี่ยนตำแหน่งของตัวเองไม่ได้ ให้เจ้าของคนอื่นเปลี่ยนให้',
@@ -137,6 +137,7 @@
     link: I('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
     bell: I('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
+    folder: I('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
     scan: I('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/>'),
   };
 
@@ -285,7 +286,7 @@
     ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
     ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex], ['scan', 'สแกนบิลซื้อ', ICON.scan]]],
     ['ภาษี', 'vat'],
-    ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items]]],
+    ['ข้อมูล', [['contacts', 'ผู้ติดต่อ', ICON.contacts], ['items', 'สินค้า / บริการ', ICON.items], ['library', 'คลังเอกสาร', ICON.folder]]],
     ['บัญชี', [['journal', 'สมุดรายวัน', ICON.journal], ['accounts', 'ผังบัญชี', ICON.accounts], ['reports', 'รายงาน', ICON.reports], ['integrations', 'เชื่อมต่อระบบ', ICON.link], ['channels', 'ช่องทางการเงิน', ICON.bank], ['settings', 'ตั้งค่า', ICON.settings]]],
     ['ผู้ใช้งาน', [['profile', 'ข้อมูลส่วนตัว', ICON.user], ['users', 'ผู้ใช้งานในระบบ', ICON.users]]],
   ];
@@ -382,6 +383,7 @@
       else if (r === 'settings') viewSettings(main);
       else if (r === 'channels') viewChannels(main);
       else if (r === 'reminders') await viewReminders(main);
+      else if (r === 'library') await viewLibrary(main, parts[1], q);
       else if (r === 'profile') await viewProfile(main);
       else if (r === 'users' && parts[1] === 'new') await viewInvite(main);
       else if (r === 'users') await viewUsers(main);
@@ -3005,6 +3007,206 @@
         toast(e.target.value === '1' ? 'เปิดใช้งานแล้ว' : 'ปิดการใช้งานแล้ว'); redraw();
       } catch (err) { fail(err); redraw(); }
     });
+  }
+
+  /* ---------- คลังเอกสาร (document library) ---------- */
+  // Folders and cards; a card is a name plus a link to where the file lives (Google Drive and so
+  // on). Nothing is uploaded here. Routes: #/library, #/library/<folderId>, ?q= searches everything.
+
+  const LIB_COLORS = { orange: '#F76707', blue: '#2F7DF6', green: '#1E9E5A', purple: '#7C5CE0', pink: '#E0457B', gray: '#7A7F88' };
+  // What a link points at, from its address: [label, short tag, colour].
+  function libKind(url) {
+    let u;
+    try { u = new URL(url); } catch { return ['ลิงก์', '🔗', '#7A7F88']; }
+    const h = u.hostname.replace(/^www\./, ''); const p = u.pathname;
+    if (h === 'docs.google.com') {
+      if (p.startsWith('/spreadsheets')) return ['Google Sheets', 'S', '#1E9E5A'];
+      if (p.startsWith('/presentation')) return ['Google Slides', 'P', '#F4B400'];
+      if (p.startsWith('/forms')) return ['Google Forms', 'F', '#7C5CE0'];
+      return ['Google Docs', 'D', '#2F7DF6'];
+    }
+    if (h === 'drive.google.com') return p.includes('/folders/') ? ['โฟลเดอร์ Google Drive', 'G', '#1A73E8'] : ['Google Drive', 'G', '#1A73E8'];
+    if (h.endsWith('dropbox.com')) return ['Dropbox', 'Db', '#0061FE'];
+    if (h === '1drv.ms' || h.endsWith('onedrive.live.com') || h.endsWith('sharepoint.com')) return ['OneDrive', 'O', '#0F6CBD'];
+    if (h.endsWith('icloud.com')) return ['iCloud', 'iC', '#3E8BF7'];
+    if (h.endsWith('notion.so') || h.endsWith('notion.site')) return ['Notion', 'N', '#2B2B2B'];
+    if (h.endsWith('canva.com')) return ['Canva', 'C', '#00B5C8'];
+    if (h.endsWith('figma.com')) return ['Figma', 'Fg', '#A259FF'];
+    if (/\.pdf$/i.test(p)) return ['PDF', 'PDF', '#D93025'];
+    return [h, '🔗', '#7A7F88'];
+  }
+  const libHost = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } };
+  const libSub = (l) => { if (l.note) return l.note; const k = libKind(l.url)[0]; const h = libHost(l.url); return k === h ? h : k; };
+  const libBadge = (url) => { const [, t, c] = libKind(url); return `<span class="lib-badge" style="--c:${c}">${esc(t)}</span>`; };
+  const FOLDER_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.2a2 2 0 0 1 1.5.7L12.6 6.3h5.9A2.5 2.5 0 0 1 21 8.8v8.7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>';
+  const libCanEdit = () => ['sales', 'purchase', 'accounting', 'settings'].some((a) => can(a, 2));
+  const libNormUrl = (v) => { const s = String(v || '').trim(); return !s ? '' : /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`; };
+
+  // Add or edit a card. Only the link is needed; the name defaults to what the link is.
+  function libEditLink(it, parent) {
+    const isNew = !it;
+    return dialog({
+      title: isNew ? 'เพิ่มลิงก์เอกสาร' : 'แก้ไขลิงก์เอกสาร', ok: isNew ? 'เพิ่ม' : 'บันทึก',
+      body: `<div class="form-rows">
+        <label><span>ลิงก์ (URL)</span><input type="url" name="url" value="${esc(it?.url || '')}" placeholder="https://drive.google.com/…" autocomplete="off"></label>
+        <label><span>ชื่อ</span><input type="text" name="name" value="${esc(it?.name || '')}" placeholder="ไม่ใส่ก็ได้ ระบบตั้งให้"></label>
+        <label><span>หมายเหตุ</span><input type="text" name="note" value="${esc(it?.note || '')}" placeholder="ไม่บังคับ"></label>
+        <div class="fr"><span></span><div class="lib-hint" data-hint></div></div></div>
+        <p class="muted" style="font-size:12.5px;margin:12px 0 0">ใน Google Drive คลิกขวาที่ไฟล์ › แชร์ › คัดลอกลิงก์ แล้ววางที่นี่ · ใครเปิดได้ขึ้นกับสิทธิ์แชร์ใน Drive
+        <a class="link" href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener">เปิด Google Drive</a></p>`,
+      onOpen: (el) => {
+        const u = $('[name=url]', el); const hint = $('[data-hint]', el);
+        const show = () => { const v = libNormUrl(u.value); hint.innerHTML = v ? `${libBadge(v)}<span>${esc(libKind(v)[0])}</span>` : ''; };
+        u.addEventListener('input', show); show();
+      },
+      onOk: async (el) => {
+        const d = formData(el);
+        const url = libNormUrl(d.url);
+        if (!url) { toast('วางลิงก์ของเอกสาร', true); return false; }
+        const body = { url, name: d.name.trim() || libKind(url)[0], note: d.note };
+        const r = isNew ? await post('/library', { ...body, kind: 'link', parent }) : await put(`/library/${it.id}`, body);
+        toast(isNew ? 'เพิ่มแล้ว' : 'บันทึกแล้ว');
+        return r.item;
+      },
+    });
+  }
+  function libEditFolder(it, parent) {
+    const isNew = !it; const cur = it?.color || 'orange';
+    return dialog({
+      title: isNew ? 'สร้างโฟลเดอร์' : 'แก้ไขโฟลเดอร์', ok: isNew ? 'สร้าง' : 'บันทึก',
+      body: `<div class="form-rows">
+        <label><span>ชื่อโฟลเดอร์</span><input type="text" name="name" value="${esc(it?.name || '')}" placeholder="เช่น สัญญา, ภ.พ.30 ปี 2569"></label>
+        <div class="fr"><span>สี</span><div class="lib-colors">${Object.entries(LIB_COLORS).map(([k, c]) => `<label style="--c:${c}"><input type="radio" name="color" value="${k}" ${k === cur ? 'checked' : ''}><i></i></label>`).join('')}</div></div></div>`,
+      onOk: async (el) => {
+        const d = formData(el);
+        if (!d.name.trim()) { toast('ตั้งชื่อโฟลเดอร์', true); return false; }
+        const r = isNew ? await post('/library', { kind: 'folder', name: d.name, color: d.color, parent }) : await put(`/library/${it.id}`, { name: d.name, color: d.color });
+        toast(isNew ? 'สร้างโฟลเดอร์แล้ว' : 'บันทึกแล้ว');
+        return r.item;
+      },
+    });
+  }
+
+  async function viewLibrary(main, folderId, q) {
+    const items = (await get('/library')).items;
+    const byId = new Map(items.map((x) => [x.id, x]));
+    const folder = folderId ? byId.get(folderId) : null;
+    if (folderId && (!folder || folder.kind !== 'folder')) { location.replace('#/library'); return; }
+    const edit = libCanEdit();
+    const here = folder?.id || null;
+    const pathOf = (it) => { const out = []; let p = it.parent ? byId.get(it.parent) : null; while (p) { out.unshift(p); p = p.parent ? byId.get(p.parent) : null; } return out; };
+    const countIn = (id) => items.filter((x) => x.parent === id).length;
+    const crumbs = folder ? [...pathOf(folder), folder] : [];
+    let query = q.get('q') || '';
+
+    const folderTile = (f) => `<div class="lib-folder" data-id="${f.id}" ${edit ? 'draggable="true"' : ''} style="--c:${LIB_COLORS[f.color] || LIB_COLORS.orange}">
+        <a href="#/library/${f.id}" class="lib-hit" aria-label="${esc(f.name)}"></a>
+        <span class="lib-fico">${FOLDER_SVG}</span><div class="lib-txt"><b>${esc(f.name)}</b><small>${countIn(f.id) || 'ว่าง'}${countIn(f.id) ? ' รายการ' : ''}</small></div>
+        ${edit ? `<button type="button" class="icon-btn lib-more" data-more aria-label="เพิ่มเติม">${DOTS}</button>` : ''}</div>`;
+    const linkCard = (l, showPath) => `<div class="lib-card" data-id="${l.id}" ${edit ? 'draggable="true"' : ''}>
+        <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" class="lib-hit" aria-label="${esc(l.name)}"></a>
+        ${libBadge(l.url)}<div class="lib-txt"><b>${esc(l.name)}</b><small>${showPath ? `${esc(['คลังเอกสาร', ...pathOf(l).map((p) => p.name)].join(' › '))}` : esc(libSub(l))}</small></div>
+        <button type="button" class="icon-btn lib-more" data-more aria-label="เพิ่มเติม">${DOTS}</button></div>`;
+
+    main.innerHTML = `<div data-lib><div class="page-h"><div>
+        ${folder ? `<div class="lib-crumbs"><a href="#/library" data-drop="">คลังเอกสาร</a>${crumbs.map((c, i) => ` › ${i === crumbs.length - 1 ? `<span>${esc(c.name)}</span>` : `<a href="#/library/${c.id}" data-drop="${c.id}">${esc(c.name)}</a>`}`).join('')}</div>` : ''}
+        <h1>${esc(folder ? folder.name : 'คลังเอกสาร')}</h1>
+        <div class="sub">${folder ? 'การ์ดแต่ละใบเก็บลิงก์ไปยังไฟล์ เช่น Google Drive' : 'เก็บลิงก์เอกสารของกิจการ (Google Drive, OneDrive, Dropbox …) จัดเป็นโฟลเดอร์'}</div></div>
+      <div class="actions">${edit ? `<button class="btn" data-newfolder>${ICON.folder}สร้างโฟลเดอร์</button><button class="btn primary" data-newlink>${ICON.plus}เพิ่มลิงก์</button>` : ''}</div></div>
+      <div class="lib-tools"><input type="search" placeholder="ค้นหาในคลังเอกสารทั้งหมด" data-q value="${esc(query)}">${edit ? '<span class="muted lib-tip">วางลิงก์ (⌘V / Ctrl+V) ในหน้านี้เพื่อเพิ่มการ์ดได้ทันที · ลากการ์ดไปวางบนโฟลเดอร์เพื่อย้าย</span>' : ''}</div>
+      <div data-body></div></div>`;
+    const root = $('[data-lib]', main);
+    const body = $('[data-body]', root);
+    const redraw = () => viewLibrary(main, folderId, new URLSearchParams(query ? `q=${encodeURIComponent(query)}` : ''));
+
+    const draw = () => {
+      const s = query.trim().toLowerCase();
+      if (s) {
+        const hit = items.filter((x) => `${x.name} ${x.url || ''} ${x.note || ''}`.toLowerCase().includes(s));
+        const fs = hit.filter((x) => x.kind === 'folder'); const ls = hit.filter((x) => x.kind === 'link');
+        body.innerHTML = hit.length
+          ? `${fs.length ? `<div class="lib-h">โฟลเดอร์</div><div class="lib-grid">${fs.map(folderTile).join('')}</div>` : ''}${ls.length ? `<div class="lib-h">เอกสาร</div><div class="lib-grid">${ls.map((l) => linkCard(l, true)).join('')}</div>` : ''}`
+          : `<div class="card"><div class="empty"><b>ไม่พบ “${esc(query)}”</b>ลองค้นด้วยชื่อหรือบางส่วนของลิงก์</div></div>`;
+        return;
+      }
+      const fs = items.filter((x) => x.parent === here && x.kind === 'folder');
+      const ls = items.filter((x) => x.parent === here && x.kind === 'link');
+      body.innerHTML = fs.length || ls.length
+        ? `${fs.length ? `<div class="lib-h">โฟลเดอร์</div><div class="lib-grid">${fs.map(folderTile).join('')}</div>` : ''}${ls.length ? `<div class="lib-h">เอกสาร</div><div class="lib-grid">${ls.map((l) => linkCard(l)).join('')}</div>` : ''}`
+        : `<div class="card"><div class="empty lib-empty"><span class="lib-fico big" style="--c:${LIB_COLORS[folder?.color] || LIB_COLORS.orange}">${FOLDER_SVG}</span><b>${folder ? 'โฟลเดอร์นี้ยังว่าง' : 'ยังไม่มีเอกสารในคลัง'}</b>${edit ? 'สร้างโฟลเดอร์เพื่อจัดหมวด แล้วเพิ่มลิงก์ไฟล์จาก Google Drive เป็นการ์ด' : 'ยังไม่มีใครเพิ่มเอกสาร'}
+          ${edit ? `<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn" data-newfolder>สร้างโฟลเดอร์</button><button class="btn primary" data-newlink>${ICON.plus}เพิ่มลิงก์</button></div>` : ''}</div></div>`;
+    };
+    draw();
+    const qi = $('[data-q]', root);
+    qi.oninput = () => { query = qi.value; history.replaceState(null, '', `#/library${here ? `/${here}` : ''}${query ? `?q=${encodeURIComponent(query)}` : ''}`); draw(); };
+
+    const move = async (it, to) => {
+      if ((it.parent || null) === (to || null) || it.id === to) return;
+      try { await put(`/library/${it.id}`, { parent: to || null }); toast(`ย้ายไป ${to ? byId.get(to).name : 'คลังเอกสาร'} แล้ว`); redraw(); } catch (err) { fail(err); }
+    };
+    // Folders something can move into: not itself or anything inside it.
+    const targetsFor = (it) => {
+      const inside = (f) => { for (let p = f; p; p = p.parent ? byId.get(p.parent) : null) if (p.id === it.id) return true; return false; };
+      return items.filter((f) => f.kind === 'folder' && !inside(f));
+    };
+    const pickFolder = (it) => dialog({
+      title: `ย้าย “${it.name}”`, ok: 'ย้าย',
+      body: `<div class="form-rows"><label><span>ไปที่โฟลเดอร์</span><select name="to"><option value="">คลังเอกสาร (ชั้นบนสุด)</option>${targetsFor(it)
+        .map((f) => ({ f, path: [...pathOf(f), f].map((p) => p.name).join(' › ') })).sort((a, b) => a.path.localeCompare(b.path, 'th'))
+        .map(({ f, path }) => `<option value="${f.id}" ${f.id === it.parent ? 'selected' : ''}>${esc(path)}</option>`).join('')}</select></label></div>`,
+      onOk: (el) => ({ to: formData(el).to }),
+    }).then((r) => r && move(it, r.to));
+
+    root.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-newfolder]')) return libEditFolder(null, here).then((r) => r && redraw());
+      if (e.target.closest('[data-newlink]')) return libEditLink(null, here).then((r) => r && redraw());
+      const more = e.target.closest('[data-more]');
+      if (!more) return;
+      const it = byId.get(more.closest('[data-id]').dataset.id);
+      if (!it) return;
+      const menu = it.kind === 'folder'
+        ? [['เปิดโฟลเดอร์', () => { location.hash = `#/library/${it.id}`; }], ['แก้ไขชื่อ / สี', () => libEditFolder(it).then((r) => r && redraw())], ['ย้ายไปโฟลเดอร์…', () => pickFolder(it)]]
+        : [['เปิดลิงก์', () => window.open(it.url, '_blank', 'noopener')], ['คัดลอกลิงก์', async () => { try { await navigator.clipboard.writeText(it.url); toast('คัดลอกลิงก์แล้ว'); } catch { toast(it.url); } }],
+          ...(edit ? [['แก้ไข', () => libEditLink(it).then((r) => r && redraw())], ['ย้ายไปโฟลเดอร์…', () => pickFolder(it)]] : [])];
+      if (edit) {
+        menu.push(null, ['ลบ', async () => {
+          const n = it.kind === 'folder' ? (() => { let c = 0; const walk = (id) => items.filter((x) => x.parent === id).forEach((x) => { c += 1; walk(x.id); }); walk(it.id); return c; })() : 0;
+          const msg = it.kind === 'folder'
+            ? `ลบโฟลเดอร์ <b>${esc(it.name)}</b>${n ? ` และทุกอย่างข้างใน (${n} รายการ)` : ''}? ไฟล์จริงใน Google Drive ไม่ถูกลบ`
+            : `ลบการ์ด <b>${esc(it.name)}</b>? ไฟล์จริงใน Google Drive ไม่ถูกลบ`;
+          if (!(await confirmBox(it.kind === 'folder' ? 'ลบโฟลเดอร์' : 'ลบการ์ด', msg, 'ลบ'))) return;
+          try { await api('DELETE', A(`/library/${it.id}`)); toast('ลบแล้ว'); redraw(); } catch (err) { fail(err); }
+        }, { danger: true }]);
+      }
+      popMenu(more, menu);
+    });
+
+    if (!edit) return;
+    // Drag a card or folder onto a folder (or a breadcrumb) to move it there.
+    let dragId = null;
+    root.addEventListener('dragstart', (e) => { const el = e.target.closest?.('[data-id][draggable]'); if (!el) return; dragId = el.dataset.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); el.classList.add('dragging'); });
+    root.addEventListener('dragend', () => { dragId = null; $$('.dragging, .drop-on', root).forEach((x) => x.classList.remove('dragging', 'drop-on')); });
+    const dropTarget = (e) => e.target.closest?.('.lib-folder, [data-drop]');
+    const targetId = (t) => (t.matches('[data-drop]') ? t.dataset.drop : t.dataset.id);
+    root.addEventListener('dragover', (e) => { const t = dropTarget(e); if (!dragId || !t || targetId(t) === dragId) return; e.preventDefault(); $$('.drop-on', root).forEach((x) => x !== t && x.classList.remove('drop-on')); t.classList.add('drop-on'); });
+    root.addEventListener('dragleave', (e) => { const t = dropTarget(e); if (t && !t.contains(e.relatedTarget)) t.classList.remove('drop-on'); });
+    root.addEventListener('drop', (e) => {
+      const t = dropTarget(e); if (!dragId || !t) return; e.preventDefault();
+      const it = byId.get(dragId); const to = targetId(t) || null;
+      if (to && !targetsFor(it).some((f) => f.id === to)) { toast('ย้ายโฟลเดอร์เข้าไปในตัวเองไม่ได้', true); return; }
+      move(it, to);
+    });
+    // Paste a link anywhere on the page (not into a field) to add it as a card here.
+    const onPaste = (e) => {
+      if (!document.body.contains(root)) { document.removeEventListener('paste', onPaste); return; }
+      if (e.target.closest?.('input, textarea, select, [contenteditable]') || $('.dlg-back')) return;
+      const text = (e.clipboardData?.getData('text') || '').trim();
+      if (!/^https?:\/\/\S+$/i.test(text)) return;
+      e.preventDefault();
+      post('/library', { kind: 'link', url: text, name: libKind(text)[0], parent: here })
+        .then((r) => { toast(`เพิ่ม ${r.item.name} แล้ว · กด ⋯ เพื่อตั้งชื่อ`); redraw(); }).catch(fail);
+    };
+    document.addEventListener('paste', onPaste);
   }
 
   /* ---------- Reminders through Centel (การแจ้งเตือน) ---------- */

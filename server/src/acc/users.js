@@ -284,6 +284,8 @@ export async function guard(req) {
     case 'accounts': case 'journal': if (!any('accounting')) deny(); return;
     case 'contacts': case 'items': if (write && !any('sales', 'purchase')) deny(); return;
     case 'stock': return;
+    // คลังเอกสาร: anyone in the business can open it; adding and editing needs edit rights somewhere.
+    case 'library': if (!any('sales', 'purchase', 'accounting', 'settings')) deny(); return;
     case 'scan': if (!any('purchase')) deny(); return;
     case 'attachment': if (!any('purchase', 'accounting')) deny(); return;
     case 'integrations': if (!any('settings')) deny(); return;
