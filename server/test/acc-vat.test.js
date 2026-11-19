@@ -45,7 +45,19 @@ test('sales by document: tax invoices and 0% cash sales, no double rows', async 
   assert.equal(zero.rate, 0);
   assert.equal(zero.zero, 8600);
   assert.deepEqual([s.totals.value, s.totals.base, s.totals.zero, s.totals.vat], [18600, 10000, 8600, 700]);
-  assert.equal((await get(`${P}/reports/vat_sales?month=2026-10&status=void`)).rows.length, 0);
+});
+
+test('cancelled sales documents are left out of the sales VAT report', async () => {
+  const lines = [{ name: 'งานยกเลิก', qty: 1, price: 5000, account: '41200' }];
+  const re = await doc({ type: 'RE', date: '2026-10-20', contact_id: customer.id, tax_invoice: true, lines, pay: { account: '11200' } });
+  let s = await get(`${P}/reports/vat_sales?month=2026-10`);
+  assert.ok(s.rows.find((r) => r.id === re.id));
+  await post(`${P}/docs/${re.id}/void`, { reason: 'ทดสอบ' });
+  s = await get(`${P}/reports/vat_sales?month=2026-10`);
+  assert.ok(!s.rows.find((r) => r.id === re.id));
+  assert.equal(s.totals.count, 2);
+  assert.equal(s.totals.vat, 700);
+  assert.equal((await get(`${P}/reports/vat_sales?month=2026-10&status=void`)).rows.length, 2);
 });
 
 test('purchase documents: waiting, claimed later, foreign service', async () => {
