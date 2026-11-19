@@ -136,6 +136,7 @@
     print: I('<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/>'),
     link: I('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+    calendar: I('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h2M14 14h2M8 17.5h2"/>'),
     bell: I('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
     folder: I('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
     scan: I('<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/>'),
@@ -304,7 +305,7 @@
   /* ---------- Shell and routing ---------- */
 
   const NAV = [
-    ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home], ['reminders', 'การแจ้งเตือน', ICON.bell]]],
+    ['ภาพรวม', [['dashboard', 'หน้าหลัก', ICON.home], ['reminders', 'การแจ้งเตือน', ICON.bell], ['taxcal', 'ปฏิทินภาษี', ICON.calendar]]],
     ['รายรับ', [['docs/QT', 'ใบเสนอราคา', ICON.qt], ['docs/IV', 'ใบแจ้งหนี้', ICON.iv], ['docs/RE', 'ใบเสร็จรับเงิน', ICON.re]]],
     ['รายจ่าย', [['docs/EX', 'ค่าใช้จ่าย', ICON.ex], ['scan', 'สแกนบิลซื้อ', ICON.scan]]],
     ['ภาษี', 'vat'],
@@ -319,7 +320,7 @@
     dashboard: ['accounting'], 'docs/QT': ['sales', 'accounting'], 'docs/IV': ['sales', 'accounting'], 'docs/RE': ['sales', 'accounting'],
     'docs/EX': ['purchase', 'accounting'], scan: ['purchase', 'accounting'], contacts: ['sales', 'purchase', 'accounting'], items: ['sales', 'purchase', 'accounting'],
     journal: ['accounting'], accounts: ['accounting'], reports: ['accounting'],
-    'vat/purchases': ['purchase', 'accounting'], 'vat/returns': ['accounting'], 'report/vat_sales': ['accounting'], 'report/vat_purchase': ['accounting'], integrations: ['settings'], channels: ['settings'], reminders: ['accounting', 'settings'], settings: ['settings'],
+    'vat/purchases': ['purchase', 'accounting'], 'vat/returns': ['accounting'], 'report/vat_sales': ['accounting'], 'report/vat_purchase': ['accounting'], integrations: ['settings'], channels: ['settings'], reminders: ['accounting', 'settings'], taxcal: ['accounting', 'settings'], settings: ['settings'],
   };
   const pageOk = (r) => !PAGE_AREA[r] || PAGE_AREA[r].some((a) => can(a));
   // Where someone lands: the dashboard, or their first page when the dashboard is not theirs.
@@ -405,6 +406,7 @@
       else if (r === 'settings') viewSettings(main);
       else if (r === 'channels') viewChannels(main);
       else if (r === 'reminders') await viewReminders(main);
+      else if (r === 'taxcal') await viewTaxcal(main, q, parts[1]);
       else if (r === 'library') await viewLibrary(main, parts[1], q);
       else if (r === 'profile') await viewProfile(main);
       else if (r === 'users' && parts[1] === 'new') await viewInvite(main);
@@ -3300,6 +3302,214 @@
   const remDays = (n) => (REM_DAYS.find(([k]) => k === n) || REM_DAYS[2])[1];
   const CENTEL_MARK = '<span class="cn-mark" aria-hidden="true">C</span>';
 
+  /* ---------- ปฏิทินภาษี (tax filing calendar) ---------- */
+  // The year's filing and payment deadlines of a company, from a one-time setup (which forms apply,
+  // fiscal year, shareholders' meeting), reminded through Centel (server/src/acc/taxcal.js).
+
+  const TC_INFO = {
+    pp30: ['ภาษีมูลค่าเพิ่ม', 'ทุกเดือน ภายในวันที่ 15 ของเดือนถัดไป (ออนไลน์ 23) ยื่นแม้ยอดขายเป็นศูนย์'],
+    pnd1: ['หัก ณ ที่จ่าย เงินเดือน', 'เดือนที่จ่ายเงินเดือนแล้วมีภาษีต้องหัก ภายในวันที่ 7 (ออนไลน์ 15)'],
+    sso: ['เงินสมทบประกันสังคม', 'ทุกเดือนที่มีลูกจ้างในระบบ ภายในวันที่ 15 ของเดือนถัดไป'],
+    pnd1a: ['สรุปเงินเดือนทั้งปี', 'ปีละครั้ง ภายในสิ้นเดือนกุมภาพันธ์ของปีถัดไป แม้ทั้งปีไม่มีภาษีต้องหัก'],
+    pnd3: ['หัก ณ ที่จ่าย บุคคลธรรมดา', 'เดือนที่จ่ายค่าบริการ/ค่าจ้างให้บุคคลธรรมดาแล้วหักภาษีไว้ ภายในวันที่ 7 (ออนไลน์ 15)'],
+    pnd53: ['หัก ณ ที่จ่าย นิติบุคคล', 'เดือนที่จ่ายให้นิติบุคคลไทยแล้วหักภาษีไว้ ภายในวันที่ 7 (ออนไลน์ 15)'],
+    pnd51: ['ภาษีนิติบุคคลครึ่งปี', 'ภายใน 2 เดือนหลังครบ 6 เดือนแรกของรอบบัญชี (ออนไลน์ +8 วัน) รอบบัญชีแรกที่สั้นกว่า 12 เดือนได้ยกเว้น'],
+    agm: ['ประชุมสามัญผู้ถือหุ้น', 'อนุมัติงบการเงินที่ผู้สอบบัญชีตรวจแล้ว ภายใน 4 เดือนหลังปิดบัญชี'],
+    boj5: ['บัญชีรายชื่อผู้ถือหุ้น', 'ปีละครั้ง ภายใน 14 วันหลังประชุมสามัญผู้ถือหุ้น (DBD e-Filing)'],
+    fs: ['งบการเงินประจำปี กรมพัฒนาธุรกิจการค้า', 'ภายใน 1 เดือนหลังที่ประชุมผู้ถือหุ้นอนุมัติงบ (DBD e-Filing)'],
+    pnd50: ['ภาษีนิติบุคคลประจำปี', 'ภายใน 150 วันหลังปิดบัญชี (ออนไลน์ +8 วัน) ต้องยื่นแม้ไม่มีรายได้หรือภาษีเป็น 0 บาท'],
+  };
+  const TC_GROUPS = [
+    ['company', 'บริษัทจำกัดต้องยื่นทุกปี', 'แม้ไม่มีรายได้เลย ถ้ายังจดทะเบียนเป็นบริษัทจำกัดอยู่', ['pnd51', 'agm', 'boj5', 'fs', 'pnd50']],
+    ['vat', 'จดทะเบียนภาษีมูลค่าเพิ่ม (VAT) หรือไม่', 'ถ้าจด VAT ต้องยื่น ภ.พ.30 ทุกเดือน', ['pp30']],
+    ['staff', 'มีลูกจ้าง / จ่ายเงินเดือนหรือไม่', 'จ่ายเงินเดือน ค่าจ้างพนักงาน หรือมีลูกจ้างในระบบประกันสังคม', ['pnd1', 'pnd1a', 'sso']],
+    ['wht', 'จ่ายค่าบริการ ค่าจ้างทำของ ที่ต้องหัก ณ ที่จ่ายหรือไม่', 'เช่น ค่าจ้างฟรีแลนซ์ ค่าโฆษณา ค่าเช่า ค่าขนส่ง ที่หักภาษีไว้', ['pnd3', 'pnd53']],
+  ];
+  const TC_AUTO = ['pnd1', 'pnd3', 'pnd53'];
+  const TC_LINKS = {
+    rd: ['เข้า RD e-Filing', 'https://efiling.rd.go.th/rd-efiling-web/login'],
+    dbd: ['เข้า DBD e-Filing', 'https://efiling.dbd.go.th/efiling-web-ui/'],
+    sso: ['เข้า e-Service ประกันสังคม', 'https://www.sso.go.th/wpr/main/login'],
+  };
+  const TH_WD = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+  const dayDiff = (a, b) => Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400e3);
+  const tcMonth = (ym) => { const [y, m] = ym.split('-').map(Number); return `${T.TH_MONTHS[m - 1]} ${String(y + 543).slice(2)}`; };
+  const fyEndText = (fyStart) => { const m = fyStart === 1 ? 12 : fyStart - 1; return `${new Date(Date.UTC(2025, m, 0)).getUTCDate()} ${T.TH_MONTHS_LONG[m - 1]}`; };
+
+  function tcStatus(d, today) {
+    if (d.status === 'done') return ['done', d.done?.vat ? 'ยื่นแล้ว (จากหน้าแบบภาษีรายเดือน)' : 'ยื่นแล้ว'];
+    if (d.status === 'none') return ['none', 'ไม่มีรายการจ่ายที่เข้าเกณฑ์ ไม่ต้องยื่น'];
+    if (d.status === 'overdue') return ['late', 'เลยกำหนดแล้ว'];
+    if (d.status === 'past') return ['none', 'ก่อนเริ่มใช้ปฏิทิน'];
+    const left = dayDiff(d.date, today);
+    const when = left === 0 ? 'วันนี้' : left === 1 ? 'พรุ่งนี้' : left <= 45 ? `อีก ${left} วัน` : '';
+    if (d.auto && d.need === 'need') return ['need', `มีรายการ ${d.evidence.n} รายการ ต้องยื่น${when ? ` · ${when}` : ''}`];
+    if (d.auto && d.need === 'wait') return ['wait', 'ยื่นเมื่อเดือนนั้นมีรายการจ่ายที่หักภาษี'];
+    return [left <= 7 ? 'soon' : 'up', when || 'รอถึงกำหนด'];
+  }
+
+  async function taxcalSetup(main, data) {
+    const p = data.profile;
+    const b = biz();
+    const f = p?.forms || {
+      pnd51: true, agm: true, boj5: true, fs: true, pnd50: true, pp30: !!b.vat_registered,
+      pnd1: 'auto', pnd1a: false, sso: false, pnd3: 'auto', pnd53: 'auto',
+    };
+    if (!p) { f.pnd1 = false; } // ask about employees first
+    const qOn = { company: true, vat: !!(p ? f.pp30 : b.vat_registered), staff: !!(f.pnd1 || f.pnd1a || f.sso), wht: !!(f.pnd3 || f.pnd53) };
+    const formRow = (k) => {
+      const [name, when] = TC_INFO[k];
+      return `<div class="tc-form"><label class="check"><input type="checkbox" name="f_${k}" ${f[k] ? 'checked' : ''}><span><b>${esc(data.forms[k].tag)}</b> ${esc(name)}<small>${esc(when)}</small></span></label>
+        ${TC_AUTO.includes(k) ? `<select name="m_${k}" aria-label="เตือนเมื่อไร"><option value="auto" ${f[k] !== true ? 'selected' : ''}>เตือนเฉพาะเดือนที่มีรายการจ่าย</option><option value="always" ${f[k] === true ? 'selected' : ''}>เตือนทุกเดือน</option></select>` : ''}</div>`;
+    };
+    const months = T.TH_MONTHS_LONG.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+    main.innerHTML = `<div data-tcs><div class="page-h"><div><h1>${p ? 'ตั้งค่าปฏิทินภาษี' : 'เริ่มใช้ปฏิทินภาษี'}</h1><div class="sub">ตอบคำถามสั้นๆ ระบบจะเลือกแบบที่ต้องยื่น คำนวณวันครบกำหนดทั้งปี แล้วเตือนทุกเดือนผ่านแอป Centel</div></div></div>
+      <div class="grid tc-setup">
+        <section class="card card-pad"><h2><span class="tc-step">1</span>รอบบัญชีและการประชุมผู้ถือหุ้น</h2>
+          <div class="grid g2">
+            <label class="field"><span>เดือนเริ่มรอบบัญชี</span><select name="fyStart">${T.TH_MONTHS_LONG.map((m, i) => `<option value="${i + 1}" ${data.fyStart === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}</select><small data-fye>ปิดบัญชีวันที่ ${fyEndText(data.fyStart)} ของทุกปี</small></label>
+            <label class="field"><span>วันจดทะเบียนบริษัท (ไม่บังคับ)</span><input type="date" name="registered" value="${esc(p?.registered || '')}"><small>รอบบัญชีแรกที่สั้นกว่า 12 เดือน ไม่ต้องยื่น ภ.ง.ด.51</small></label>
+            <div class="field span2"><span>วันประชุมสามัญผู้ถือหุ้นประจำปี</span>
+              <div class="tc-agm"><select name="agm_day"><option value="">วันที่</option>${Array.from({ length: 31 }, (_, i) => `<option ${p?.agm_day === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select>
+              <select name="agm_month"><option value="">ยังไม่กำหนด</option>${months}</select></div>
+              <small>ใช้คำนวณ บอจ.5 (ภายใน 14 วัน) และงบการเงิน (ภายใน 1 เดือน) ถ้ายังไม่กำหนด ระบบใช้วันสุดท้ายที่ประชุมได้ คือ 4 เดือนหลังปิดบัญชี</small></div>
+          </div></section>
+
+        <section class="card card-pad"><h2><span class="tc-step">2</span>แบบที่ต้องยื่น</h2>
+          ${TC_GROUPS.map(([g, q, hint, keys]) => `<div class="tc-group" data-g="${g}">
+            <div class="tc-q"><div><b>${esc(q)}</b><small>${esc(hint)}</small></div>
+              ${g === 'company' ? '<span class="chip accent">ต้องยื่น</span>' : `<div class="seg" role="group"><button type="button" data-yes="${g}" class="${qOn[g] ? 'on' : ''}">ใช่</button><button type="button" data-no="${g}" class="${qOn[g] ? '' : 'on'}">ไม่</button></div>`}</div>
+            <div class="tc-forms" ${qOn[g] ? '' : 'hidden'}>${keys.map(formRow).join('')}</div></div>`).join('')}
+        </section>
+
+        <section class="card card-pad"><h2><span class="tc-step">3</span>การแจ้งเตือน</h2>
+          <div class="grid g2">
+            <label class="field"><span>ยื่นทางไหน (ใช้เป็นวันครบกำหนดที่เตือน)</span><select name="filing"><option value="online" ${p?.filing !== 'paper' ? 'selected' : ''}>ยื่นออนไลน์ (e-Filing)</option><option value="paper" ${p?.filing === 'paper' ? 'selected' : ''}>ยื่นแบบกระดาษ</option></select></label>
+            <label class="field"><span>เตือนใน Centel</span><select name="remind_days">${[[0, 'วันกำหนด 09:00'], [1, 'ล่วงหน้า 1 วัน'], [2, 'ล่วงหน้า 2 วัน'], [3, 'ล่วงหน้า 3 วัน'], [7, 'ล่วงหน้า 7 วัน']].map(([k, l]) => `<option value="${k}" ${(p?.remind_days ?? 2) === k ? 'selected' : ''}>${l}</option>`).join('')}</select><small>แบบประจำปีขึ้นใน Centel ล่วงหน้า 30 วัน และเตือนล่วงหน้าอย่างน้อย 7 วัน</small></label>
+            <label class="check span2"><input type="checkbox" name="digest" ${p?.digest !== false ? 'checked' : ''}> สรุปภาษีที่ต้องยื่นของเดือน ทุกวันที่ 1 เวลา 09:00</label>
+          </div>
+          <div class="tc-centel">${CENTEL_MARK}<div style="flex:1">${data.links ? '<b>เชื่อมต่อ Centel แล้ว</b><div class="muted">การแจ้งเตือนจะขึ้นเป็นสิ่งที่ต้องทำใน Centel แล้วเด้งบน iPhone และกลุ่ม LINE</div>' : '<b>ยังไม่ได้เชื่อมต่อ Centel</b><div class="muted">ปฏิทินใช้ได้เลย แต่ต้องเชื่อมต่อ Centel ที่หน้าการแจ้งเตือนก่อนจึงจะเด้งเตือน</div>'}</div>
+            ${data.links ? '' : '<a class="btn sm" href="#/reminders">เชื่อมต่อ</a>'}</div>
+          ${data.legacy.length ? `<p class="muted" style="font-size:12px;margin:10px 0 0">การแจ้งเตือน ${data.legacy.map((k) => data.forms[k].tag).join(', ')} ที่ตั้งไว้ในหน้าการแจ้งเตือน จะย้ายมาอยู่ในปฏิทินนี้ เพื่อไม่ให้เตือนซ้ำ</p>` : ''}
+        </section>
+        <div class="actions tc-save">${p ? '<a class="btn ghost" href="#/taxcal">ยกเลิก</a>' : ''}<button class="btn primary" data-save>${p ? 'บันทึก' : 'บันทึกและดูปฏิทิน'}</button></div>
+      </div></div>`;
+    const root = $('[data-tcs]', main);
+    if (p?.agm_month) $('[name=agm_month]', root).value = String(p.agm_month);
+    $('[name=fyStart]', root).onchange = (e) => { $('[data-fye]', root).textContent = `ปิดบัญชีวันที่ ${fyEndText(Number(e.target.value))} ของทุกปี`; };
+    root.addEventListener('click', async (e) => {
+      const yes = e.target.closest('[data-yes]'); const no = e.target.closest('[data-no]');
+      if (yes || no) {
+        const g = (yes || no).dataset.yes || (yes || no).dataset.no;
+        const box = $(`[data-g="${g}"]`, root);
+        $(`[data-yes="${g}"]`, box).classList.toggle('on', !!yes); $(`[data-no="${g}"]`, box).classList.toggle('on', !!no);
+        $('.tc-forms', box).hidden = !yes;
+        if (yes && !$$('.tc-forms input:checked', box).length) for (const c of $$('.tc-forms input', box)) c.checked = true;
+        return;
+      }
+      if (!e.target.closest('[data-save]')) return;
+      const d = formData(root);
+      const forms = {};
+      for (const [g, , , keys] of TC_GROUPS) {
+        const on = g === 'company' || $(`[data-yes="${g}"]`, root).classList.contains('on');
+        for (const k of keys) forms[k] = on && d[`f_${k}`] ? (TC_AUTO.includes(k) && d[`m_${k}`] === 'auto' ? 'auto' : true) : false;
+      }
+      if (!!d.agm_day !== !!d.agm_month) { toast('เลือกทั้งวันที่และเดือนของการประชุมผู้ถือหุ้น หรือเว้นว่างทั้งคู่', true); return; }
+      const vat = $('[data-yes="vat"]', root).classList.contains('on');
+      const btn = e.target.closest('[data-save]'); btn.disabled = true;
+      try {
+        const r = await put('/taxcal/profile', {
+          forms, registered: d.registered || null, agm_day: d.agm_day || null, agm_month: d.agm_month || null,
+          filing: d.filing, remind_days: Number(d.remind_days), digest: d.digest, fyStart: Number(d.fyStart), vat_registered: vat,
+        });
+        const vatChanged = vat !== !!b.vat_registered;
+        b.vat_registered = vat; b.settings = { ...(b.settings || {}), fyStart: Number(d.fyStart) };
+        toast(r.moved?.length ? `บันทึกแล้ว ย้าย ${r.moved.length} การแจ้งเตือนภาษีรายเดือนมาไว้ในปฏิทิน` : 'บันทึกแล้ว');
+        if (vatChanged) { S.boot = null; location.hash = '#/taxcal'; await start(); } else if (location.hash === '#/taxcal') render(); else location.hash = '#/taxcal';
+      } catch (err) { fail(err); } finally { btn.disabled = false; }
+    });
+  }
+
+  function taxcalItem(d, data) {
+    const [st, text] = tcStatus(d, data.today);
+    const [, dd] = d.due.split('-').slice(1).map(Number);
+    return `<button type="button" class="tc-item s-${st}" data-k="${d.form}:${d.period}">
+      <span class="tc-d"><b>${dd}</b><small>${TH_WD[new Date(`${d.due}T00:00:00Z`).getUTCDay()]}</small></span>
+      <span class="tc-t"><span class="tc-tag">${esc(d.tag)}${d.month ? ` <small>${tcMonth(d.month)}</small>` : ''}</span><span class="tc-s">${esc(text)}</span></span>
+      <span class="tc-mark" aria-hidden="true">${st === 'done' ? '✓' : st === 'none' ? '–' : ''}</span></button>`;
+  }
+
+  async function taxcalDetail(d, data) {
+    const [st, text] = tcStatus(d, data.today);
+    const [name, when] = TC_INFO[d.form];
+    const link = TC_LINKS[d.agency];
+    const inApp = d.form === 'pp30' ? ['เตรียมแบบ ภ.พ.30', `#/vat/returns`] : ['pnd1', 'pnd3', 'pnd53'].includes(d.form) ? ['รายงานภาษีหัก ณ ที่จ่าย', `#/report/wht_pay?month=${d.month}`] : null;
+    const ev = d.evidence?.n ? (d.form === 'pnd1' ? `บันทึกจ่ายเงินเดือน/ค่าจ้าง ${d.evidence.n} รายการ รวม ฿${money(d.evidence.amount)} ถ้ามีภาษีต้องหัก ให้ยื่น ภ.ง.ด.1`
+      : `รายการจ่ายที่หัก ณ ที่จ่าย ${d.evidence.n} รายการ ภาษีที่หักไว้ ฿${money(d.evidence.amount)}`) : '';
+    const done = d.status === 'done';
+    const body = `<div class="tc-detail">
+      <div class="tc-dh"><span class="chip ${st === 'done' ? 'good' : st === 'late' ? 'bad' : st === 'none' ? '' : st === 'need' || st === 'soon' ? 'warn' : 'info'}">${esc(text)}</span><span class="muted">${esc(name)}</span></div>
+      <dl class="tc-dl">
+        <dt>สำหรับ</dt><dd>${esc(d.periodLabel || '')}</dd>
+        <dt>${d.form === 'agm' ? 'ประชุมภายใน' : d.paper !== d.online ? 'ยื่นแบบกระดาษ' : 'กำหนด'}</dt><dd>${T.thDate(d.paper)}</dd>
+        ${d.paper !== d.online ? `<dt>ยื่นออนไลน์</dt><dd>${T.thDate(d.online)}</dd>` : ''}
+        ${d.date !== d.due ? `<dt>เตือนให้ทำ</dt><dd>${T.thDate(d.date)} (วันศุกร์ก่อนวันหยุด)</dd>` : ''}
+        ${['boj5', 'fs'].includes(d.form) ? `<dt>นับจากวันประชุม</dt><dd>${T.thDate(d.agm)}${d.planned ? '' : ' (ยังไม่กำหนดวันประชุม ใช้วันสุดท้ายที่ทำได้)'}</dd>` : ''}
+        ${d.form === 'agm' && d.agmLate ? `<dt>หมายเหตุ</dt><dd class="bad-t">วันประชุมที่ตั้งไว้เลย 4 เดือนหลังปิดบัญชี (${T.thDate(d.latest)})</dd>` : ''}
+        ${ev ? `<dt>จากรายการของเดือน</dt><dd>${esc(ev)}</dd>` : d.auto ? `<dt>จากรายการของเดือน</dt><dd class="muted">ยังไม่มีค่าใช้จ่ายที่ชำระแล้วและ${d.form === 'pnd1' ? 'เป็นเงินเดือน/ค่าจ้าง' : `หัก ณ ที่จ่ายแบบ ${esc(d.tag)}`} ในเดือนนั้น</dd>` : ''}
+        ${done && d.done.ref ? `<dt>เลขอ้างอิง</dt><dd>${esc(d.done.ref)}</dd>` : ''}
+      </dl>
+      <p class="muted" style="font-size:13px;margin:10px 0">${esc(when)}</p>
+      <div class="tc-links">${link ? `<a class="btn sm" href="${link[1]}" target="_blank" rel="noopener">${link[0]}</a>` : ''}${inApp ? `<a class="btn sm ghost" href="${inApp[1]}" data-x>${inApp[0]}</a>` : ''}</div>
+      ${done || d.done?.vat ? '' : `<label class="field" style="margin-top:12px"><span>เลขอ้างอิงการยื่น / ชำระ (ไม่บังคับ)</span><input type="text" name="ref" maxlength="100" placeholder="เช่น เลขที่ใบเสร็จ e-Filing"></label>`}
+    </div>`;
+    const r = await dialog({
+      title: `${d.tag} · ${d.form === 'agm' ? 'ประชุมภายใน' : 'ครบกำหนด'} ${T.thDate(d.due)}`, body, wide: false,
+      ok: d.done?.vat ? null : done ? 'ยกเลิกว่ายื่นแล้ว' : d.form === 'agm' ? 'ประชุมแล้ว' : d.form === 'sso' ? 'นำส่งแล้ว' : 'ยื่นแล้ว', cancel: 'ปิด',
+      onOk: async (el) => {
+        await post('/taxcal/done', { form: d.form, period: d.period, done: !done, ref: $('[name=ref]', el)?.value || null });
+        return true;
+      },
+    });
+    return r;
+  }
+
+  async function viewTaxcal(main, q, sub) {
+    const year = Number(q.get('year')) || null;
+    const data = await get(`/taxcal${year ? `?year=${year}` : ''}`);
+    if (!data.profile || sub === 'setup') return taxcalSetup(main, data);
+    const { items, today } = data;
+    const y = data.year;
+    const next = items.filter((d) => d.status === 'upcoming' && d.due >= today && !(d.auto && d.need === 'wait')).slice(0, 4);
+    const late = items.filter((d) => d.status === 'overdue' && !(d.auto && d.need !== 'need'));
+    const byMonth = Array.from({ length: 12 }, (_, i) => items.filter((d) => Number(d.due.slice(5, 7)) === i + 1));
+    const curM = today.slice(0, 4) === String(y) ? Number(today.slice(5, 7)) : 0;
+    const p = data.profile;
+    const on = Object.entries(p.forms).filter(([, v]) => v).map(([k]) => data.forms[k].tag);
+    main.innerHTML = `<div data-tc><div class="page-h"><div><h1>ปฏิทินภาษี</h1><div class="sub">ปิดบัญชี ${fyEndText(data.fyStart)} · ${p.filing === 'paper' ? 'ยื่นแบบกระดาษ' : 'ยื่นออนไลน์'} · ${data.links ? 'เตือนผ่าน Centel' : 'ยังไม่ได้เชื่อมต่อ Centel'}</div></div>
+      <div class="actions"><div class="tc-year"><a class="icon-btn" href="#/taxcal?year=${y - 1}" aria-label="ปีก่อน">‹</a><b>${y + 543}</b><a class="icon-btn" href="#/taxcal?year=${y + 1}" aria-label="ปีถัดไป">›</a></div>
+        <a class="btn" href="#/taxcal/setup">${ICON.settings}ตั้งค่า</a></div></div>
+      ${data.links ? '' : `<div class="card card-pad tc-warn">${CENTEL_MARK}<div style="flex:1"><b>เชื่อมต่อ Centel เพื่อรับการแจ้งเตือน</b><div class="muted" style="font-size:13px">ปฏิทินพร้อมแล้ว แต่ยังไม่มีแอป Centel ที่จะเด้งเตือนทุกเดือน</div></div><a class="btn primary sm" href="#/reminders">เชื่อมต่อ</a></div>`}
+      <div class="tc-top">
+        <div class="card card-pad"><h2>ถัดไป</h2>${next.length ? `<div class="tc-next">${next.map((d) => taxcalItem(d, data)).join('')}</div>` : `<p class="muted" style="margin:0">ไม่มีกำหนดยื่นที่เหลือใน${curM ? 'ปีนี้' : `ปี ${y + 543}`}</p>`}
+          ${late.length ? `<p class="tc-late">เลยกำหนดและยังไม่ได้ทำเครื่องหมายว่ายื่นแล้ว ${late.length} รายการ</p>` : ''}</div>
+        <div class="card card-pad tc-on"><h2>เตือนแบบไหนบ้าง</h2><div class="tc-chips">${on.map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div>
+          <p class="muted" style="font-size:12px;margin:10px 0 0">ภ.ง.ด.1/3/53 แบบ "เฉพาะเดือนที่มีรายการจ่าย" ดูจากค่าใช้จ่ายที่ชำระแล้วของเดือนนั้น (หัก ณ ที่จ่าย / หมวดเงินเดือน) ถ้าไม่มี จะไม่เตือน</p></div>
+      </div>
+      <div class="tc-legend"><span class="s-up">รอถึงกำหนด</span><span class="s-soon">ใกล้ครบกำหนด</span><span class="s-need">ต้องยื่นจากรายการของเดือน</span><span class="s-done">ยื่นแล้ว</span><span class="s-late">เลยกำหนด</span></div>
+      <div class="tc-months">${byMonth.map((list, i) => `<section class="card tc-month${i + 1 === curM ? ' now' : ''}"><div class="tc-mh"><b>${T.TH_MONTHS_LONG[i]} ${y + 543}</b>${i + 1 === curM ? '<span class="chip accent">เดือนนี้</span>' : `<small class="muted">${list.length ? `${list.length} รายการ` : ''}</small>`}</div>
+        ${list.length ? list.map((d) => taxcalItem(d, data)).join('') : '<div class="tc-empty">ไม่มีกำหนดยื่น</div>'}</section>`).join('')}</div>
+      <p class="muted" style="font-size:12px">วันครบกำหนดตามที่กฎหมายกำหนดตามปกติ ถ้าตรงวันหยุดราชการอาจเลื่อนตามประกาศของหน่วยงาน ระบบเตือนตามวันปกติ (หรือวันศุกร์ก่อนหน้าเมื่อตรงเสาร์-อาทิตย์) จึงไม่เตือนช้ากว่ากำหนด ตรวจสอบกับผู้ทำบัญชีหรือผู้สอบบัญชีของคุณอีกครั้ง</p></div>`;
+    const root = $('[data-tc]', main);
+    root.addEventListener('click', async (e) => {
+      const it = e.target.closest('[data-k]');
+      if (!it) return;
+      const d = items.find((x) => `${x.form}:${x.period}` === it.dataset.k);
+      try { if (await taxcalDetail(d, data)) { toast(d.status === 'done' ? 'ยกเลิกแล้ว' : 'บันทึกว่ายื่นแล้ว'); render(); } } catch (err) { fail(err); }
+    });
+  }
+
+
   // The link dialog: a code to approve in Centel, closed by itself once Centel says yes.
   async function linkCentel(before) {
     const c = await post('/centel/code');
@@ -3371,6 +3581,7 @@
   async function viewReminders(main) {
     const data = await get('/reminders');
     S.remPresets = data.presets;
+    data.taxcal = await get('/taxcal').then((x) => !!x.profile).catch(() => false);
     const { reminders: list, links, prefs } = data;
     const has = (k) => list.some((r) => r.kind === k);
     const contactName = (id) => (S.boot.contacts || []).find((c) => c.id === id)?.name;
@@ -3396,11 +3607,9 @@
             <button class="btn ${links.length ? '' : 'primary'}" data-link-new>${links.length ? 'เพิ่มบัญชี Centel' : 'เชื่อมต่อกับ Centel'}</button></div>
           ${linkRows ? `<div class="cn-people">${linkRows}</div>` : ''}</div>
 
-        <div class="card card-pad"><h2 style="margin-top:0">ภาษีรายเดือน</h2><p class="muted" style="margin-top:0">กดเพื่อเพิ่ม กำหนดยื่นออนไลน์ของเดือนถัดไป</p>
-          <div class="rem-presets">${Object.entries(REM_PRESET_TAG).map(([k, tag]) => `<button class="rem-preset${has(k) ? ' on' : ''}" data-preset="${k}" ${has(k) ? 'disabled' : ''}>
-            <b>${tag}</b><span>${k === 'pp30' ? 'ภาษีมูลค่าเพิ่ม' : k === 'pnd1' ? 'หัก ณ ที่จ่าย เงินเดือน' : k === 'pnd3' ? 'หัก ณ ที่จ่าย บุคคลธรรมดา' : 'หัก ณ ที่จ่าย นิติบุคคล'}</span>
-            <small>${has(k) ? '✓ เพิ่มแล้ว' : `ทุกวันที่ ${data.presets[k].day}`}</small></button>`).join('')}</div>
-          ${!biz().vat_registered && !has('pp30') ? '<p class="muted" style="font-size:12px;margin:8px 0 0">ภ.พ.30 ใช้เฉพาะกิจการที่จด VAT</p>' : ''}</div>
+        <a class="card card-pad int-card tc-link" href="#/taxcal"><span class="tc-ic">${ICON.calendar}</span><div style="flex:1"><h2 style="margin:0 0 2px">ปฏิทินภาษี</h2>
+          <div class="muted" style="font-size:13px">กำหนดยื่น ภ.พ.30 ภ.ง.ด.1/3/53 สปส.1-10 ภ.ง.ด.50/51 งบการเงิน บอจ.5 ทั้งปี ตามรอบบัญชีของกิจการ เตือนทุกเดือนผ่าน Centel</div></div>
+          <span class="btn sm">${data.taxcal ? 'เปิดปฏิทิน' : 'เริ่มตั้งค่า'}</span></a>
 
         <div class="card"><div class="tbl-wrap"><table class="tbl rem-tbl"><thead><tr><th>การแจ้งเตือน</th><th>รอบ</th><th>เตือน</th><th>ครั้งถัดไป</th><th>สถานะ</th><th></th></tr></thead>
           <tbody>${list.length ? list.map(row).join('') : `<tr><td colspan="6"><div class="empty"><b>ยังไม่มีการแจ้งเตือน</b>เพิ่มภาษีรายเดือนจากด้านบน หรือสร้างการแจ้งเตือนจ่ายคู่ค้า รับเงิน และเรื่องอื่นๆ</div></td></tr>`}</tbody></table></div></div>
