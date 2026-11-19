@@ -493,9 +493,13 @@
       const { doc, ref, issuer } = await get(`/docs/${id}`);
       docs.push({ ...doc, ref, issuer });
     }
-    const html = docs.map((d) => T.renderSet(d, signedBy(d.issuer), opts)).join('');
+    const html = docs.map((d) => T.renderSet(d, signedBy(d.issuer), { ...opts, payFrom: payFromName(d) })).join('');
     await T.downloadPdf(html, docs.length === 1 ? `${docs[0].number}.pdf` : `เอกสาร-${T.today()}.pdf`);
   }
+
+  // Name of the money account an expense was paid from, printed on the payment voucher.
+  const payFromName = (d) => (d.type === 'EX' && d.pay ? S.boot.acc.get(d.pay.account)?.name || '' : '');
+  const VFORM_HINT = { pv: 'หลักฐานการจ่ายเงินให้ผู้ขาย / ผู้รับเงิน', rc: 'ใช้เมื่อผู้รับเงินออกใบเสร็จให้ไม่ได้', gr: 'บันทึกว่ารับสินค้าอะไรเข้ามาบ้าง' };
 
   // The business as printed on a document: the issuer's own signature (ข้อมูลส่วนตัว) when they have one.
   const signedBy = (issuer) => (issuer?.signature ? { ...biz(), signature: issuer.signature } : biz());
@@ -506,7 +510,9 @@
       body: `<div class="grid g2"><label class="field"><span>วันที่จ่าย</span><input type="date" name="date" value="${T.today()}"></label>
         <label class="field"><span>จ่ายจาก</span><select name="account">${moneyAccounts().map((m) => `<option value="${m.code}" ${m.sys === 'bank' ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
         <label class="field"><span>วิธีชำระ</span><select name="method">${Object.entries(T.PAY_METHOD).map(([k, v]) => `<option value="${k}" ${k === 'transfer' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-        <label class="field"><span>ค่าธรรมเนียม</span><input type="number" step="0.01" name="fee" class="num" placeholder="0"></label></div>
+        <label class="field"><span>ค่าธรรมเนียม</span><input type="number" step="0.01" name="fee" class="num" placeholder="0"></label>
+        <label class="field"><span>ธนาคาร / บัญชีผู้รับเงิน</span><input type="text" name="bank" maxlength="120" placeholder="เช่น กสิกรไทย 123-4-56789-0"></label>
+        <label class="field"><span>เลขที่เช็ค / อ้างอิงการโอน</span><input type="text" name="ref" maxlength="60"></label></div>
         <p class="muted">ยอดจ่าย ${money(doc.total - doc.wht)} บาท${doc.wht ? ` (หัก ณ ที่จ่าย ${money(doc.wht)} บาท ระบบออกเลขที่ 50 ทวิ ให้)` : ''}</p>`,
       onOk: async (el) => post(`/docs/${doc.id}/pay`, { pay: formData(el) }),
     });
@@ -623,7 +629,7 @@
     let showTotal = false;
     const sel = new Set();
     main.innerHTML = `<div class="page-h"><div><h1>${LIST_TITLE[type]}</h1><div class="sub">${docs.length} เอกสาร</div></div>
-      <div class="actions"><button class="btn" data-xls title="ดาวน์โหลด Excel">ดาวน์โหลด Excel</button>${isEx ? `<a class="btn" href="#/scan">${ICON.scan}สแกนบิลซื้อ</a>` : ''}<a class="btn primary" href="#/new/${type}">${ICON.plus}${NEW_LABEL[type]}</a></div></div>
+      <div class="actions"><button class="btn" data-xls title="ดาวน์โหลด Excel">ดาวน์โหลด Excel</button>${isEx ? `<a class="btn" href="#/scan">${ICON.scan}สแกนบิลซื้อ</a><a class="btn" href="#/new/EX?form=pv">${ICON.plus}สร้างใบสำคัญจ่าย</a>` : ''}<a class="btn primary" href="#/new/${type}">${ICON.plus}${NEW_LABEL[type]}</a></div></div>
       <div class="card">
         <div class="filters">
           <div class="seg" data-s><button data-v="" class="${status ? '' : 'on'}">ทั้งหมด</button>${statuses.map((s) => `<button data-v="${s}" class="${s === status ? 'on' : ''}">${T.statusName(type, s)}</button>`).join('')}</div>
@@ -1004,6 +1010,7 @@
         Object.assign(doc, {
           contact_id: src.contact_id, contact: src.contact, price_mode: src.price_mode, vat_rate: Number(src.vat_rate),
           lines: src.lines.map((l) => ({ ...l })), discount: src.discount, tax_invoice: type === 'IV' ? src.tax_invoice : false,
+          ...(type === 'EX' && src.type === 'EX' ? { voucher: src.voucher ? { ...src.voucher } : null } : {}),
         });
         if (q.get('copy') !== '1') doc.ref_id = src.id; else src = null;
       }
@@ -1018,7 +1025,12 @@
     const vatReg = b.vat_registered;
     const lineTypes = isEx ? ['expense', 'asset'] : ['income'];
     const contacts = () => S.boot.contacts.filter((c) => !c.archived && (isEx ? c.kind !== 'customer' : c.kind !== 'vendor'));
-    let paidNow = isEx ? !!doc.pay : false;
+    // ใบสำคัญจ่าย details (who prepared / approved / received, and the form printed by default).
+    const vForm = q.get('form');
+    const asVoucher = isEx && !!T.VOUCHER_FORMS[vForm];
+    let voucher = isEx ? { form: 'pv', prepared_by: editId ? '' : (S.user?.name || ''), approved_by: '', received_by: '', received_id: '', ...(doc.voucher || {}) } : null;
+    if (asVoucher && !editId) voucher.form = vForm;
+    let paidNow = isEx ? !!doc.pay || (asVoucher && !editId && vForm !== 'gr') : false;
     if (isEx && !doc.pay) doc.pay = null;
     let payDraft = doc.pay || { date: T.today(), account: sysAcc('bank') || sysAcc('cash'), method: 'transfer', fee: 0 };
     let vatMode = Number(doc.vat_rate) > 0 ? doc.price_mode : 'none';
@@ -1027,8 +1039,9 @@
     // A bill from the scan page (#/scan) opened here for review.
     let scanItem = isEx && !editId && q.get('scan') ? scans().find((x) => x.id === q.get('scan') && x.status !== 'saved') || null : null;
     const scanAll = scans().filter((x) => x.status !== 'failed');
-    const title = editId ? `แก้ไข ${doc.number}` : src ? `${NEW_LABEL[type]} จาก ${src.number}` : scanItem ? `ตรวจบิลที่สแกน${scanAll.length > 1 ? ` ใบที่ ${scanAll.indexOf(scanItem) + 1} จาก ${scanAll.length}` : ''}` : NEW_LABEL[type];
-    main.innerHTML = `<div class="page-h"><div><h1>${esc(title)}</h1><div class="sub">${esc(T.docTitle({ ...doc, tax_invoice: doc.tax_invoice || (type === 'RE' && vatReg) }).join(' · '))}</div></div>
+    const newLabel = asVoucher ? `สร้าง${T.VOUCHER_FORMS[vForm][0]}` : NEW_LABEL[type];
+    const title = editId ? `แก้ไข ${doc.number}` : src ? `${newLabel} จาก ${src.number}` : scanItem ? `ตรวจบิลที่สแกน${scanAll.length > 1 ? ` ใบที่ ${scanAll.indexOf(scanItem) + 1} จาก ${scanAll.length}` : ''}` : newLabel;
+    main.innerHTML = `<div class="page-h"><div><h1>${esc(title)}</h1><div class="sub">${esc(isEx ? 'บันทึกค่าใช้จ่าย · พิมพ์เป็นใบสำคัญจ่าย ใบรับรองแทนใบเสร็จ หรือใบรับสินค้าได้' : T.docTitle({ ...doc, tax_invoice: doc.tax_invoice || (type === 'RE' && vatReg) }).join(' · '))}</div></div>
       <div class="actions"><a class="btn ghost" href="${editId ? `#/doc/${editId}` : scanItem ? '#/scan' : `#/docs/${type}`}">${scanItem ? 'กลับไปรายการสแกน' : 'ยกเลิก'}</a><button class="btn primary" data-save>บันทึก</button></div></div>
       <div class="editor${scanItem ? ' has-scan' : ''}">
         ${isEx && !editId ? '<div class="scan-pane" data-scanbox hidden></div>' : ''}
@@ -1057,6 +1070,7 @@
             <label class="field"><span>หมายเหตุในเอกสาร</span><textarea name="notes" rows="3" placeholder="${esc(b.settings?.notes?.[type] || '')}">${esc(doc.notes || '')}</textarea></label>
             <div class="field" data-whtbox></div>
           </div></div>
+          ${isEx ? '<div class="card card-pad" data-vbox></div>' : ''}
         </div>
         <div class="side">
           <div class="card card-pad"><h2>สรุปยอด</h2><table class="sum-tbl" data-sum></table><div class="words" data-words></div></div>
@@ -1180,6 +1194,7 @@
       }
       drawWht();
       drawPay();
+      drawVoucher();
     }
 
     // WHT note / income type on expenses
@@ -1199,6 +1214,30 @@
       if (!doc.wht_cert) doc.wht_cert = { form, income: 'ค่าบริการ' };
     }
 
+    // ใบสำคัญจ่าย: the printed header and the people who sign it.
+    function drawVoucher() {
+      const box = $('[data-vbox]', main);
+      if (!box || box.dataset.drawn) return;
+      box.dataset.drawn = '1';
+      const s = b.settings || {};
+      box.innerHTML = `<div class="vbox-h"><h2>ใบสำคัญจ่าย</h2><small class="muted">พิมพ์จากหน้าเอกสารได้ทั้ง 3 หัว เลือกหัวที่ใช้บ่อยเป็นค่าเริ่มต้น</small></div>
+        <div class="seg vform-seg" data-vf>${Object.entries(T.VOUCHER_FORMS).map(([k, [n]]) => `<button type="button" data-v="${k}" class="${voucher.form === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <p class="muted vf-hint" data-vh>${VFORM_HINT[voucher.form]}</p>
+        <div class="grid g2">
+          <label class="field"><span>ผู้จัดทำ</span><input type="text" data-v="prepared_by" maxlength="120" value="${esc(voucher.prepared_by || '')}" placeholder="ชื่อผู้ทำเอกสาร"></label>
+          <label class="field"><span>ผู้อนุมัติ</span><input type="text" data-v="approved_by" maxlength="120" value="${esc(voucher.approved_by || '')}" placeholder="${esc(s.signer || 'ชื่อผู้อนุมัติจ่าย')}"></label>
+          <label class="field"><span>ผู้รับเงิน</span><input type="text" data-v="received_by" maxlength="120" value="${esc(voucher.received_by || '')}" placeholder="ใช้ชื่อผู้ขายถ้าไม่กรอก"></label>
+          <label class="field"><span>เลขประจำตัวผู้รับเงิน <small class="muted">(ใบรับรองแทนใบเสร็จ)</small></span><input type="text" inputmode="numeric" data-v="received_id" maxlength="17" value="${esc(voucher.received_id || '')}" placeholder="เลขบัตรประชาชน 13 หลัก"></label>
+        </div>`;
+      box.addEventListener('input', (e) => { const k = e.target.dataset.v; if (k && e.target.tagName === 'INPUT') voucher[k] = e.target.value; });
+      $('[data-vf]', box).onclick = (e) => {
+        const bt = e.target.closest('button'); if (!bt) return;
+        voucher.form = bt.dataset.v;
+        $$('[data-vf] button', box).forEach((x) => x.classList.toggle('on', x === bt));
+        $('[data-vh]', box).textContent = VFORM_HINT[voucher.form];
+      };
+    }
+
     // Payment box (receipts always; expenses when paid now)
     function drawPay() {
       const box = $('[data-paybox]', main);
@@ -1208,7 +1247,8 @@
         <label class="field"><span>${isEx ? 'จ่ายจาก' : 'รับเข้า'}</span><select data-p="account">${moneyAccounts().map((a) => `<option value="${a.code}" ${a.code === payDraft.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
         <label class="field"><span>วิธีชำระ</span><select data-p="method">${Object.entries(T.PAY_METHOD).map(([k, v]) => `<option value="${k}" ${k === payDraft.method ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <label class="field"><span>ค่าธรรมเนียมธนาคาร</span><input type="number" step="0.01" class="num" data-p="fee" value="${payDraft.fee || ''}" placeholder="0"></label>
-        ${isEx ? '' : `<label class="field"><span>ธนาคาร (พิมพ์ในใบเสร็จ)</span><input type="text" data-p="bank" list="pay-banks" maxlength="120" value="${esc(payDraft.bank || '')}" placeholder="เช่น กสิกรไทย ออมทรัพย์"><datalist id="pay-banks">${[...new Set((biz().settings?.banks || []).map((b) => b && b.bank).filter(Boolean))].map((b) => `<option value="${esc(b)}">`).join('')}</datalist></label>
+        ${isEx ? `<label class="field"><span>ธนาคาร / บัญชีผู้รับเงิน</span><input type="text" data-p="bank" maxlength="120" value="${esc(payDraft.bank || '')}" placeholder="เช่น กสิกรไทย 123-4-56789-0"></label>
+        <label class="field"><span>เลขที่เช็ค / อ้างอิงการโอน</span><input type="text" data-p="ref" maxlength="60" value="${esc(payDraft.ref || '')}"></label>` : `<label class="field"><span>ธนาคาร (พิมพ์ในใบเสร็จ)</span><input type="text" data-p="bank" list="pay-banks" maxlength="120" value="${esc(payDraft.bank || '')}" placeholder="เช่น กสิกรไทย ออมทรัพย์"><datalist id="pay-banks">${[...new Set((biz().settings?.banks || []).map((b) => b && b.bank).filter(Boolean))].map((b) => `<option value="${esc(b)}">`).join('')}</datalist></label>
         <label class="field"><span>เลขที่ (เช็ค / บัญชี / อ้างอิง)</span><input type="text" data-p="ref" maxlength="60" value="${esc(payDraft.ref || '')}"></label>`}</div>`;
       if (box.dataset.drawn) return;
       box.dataset.drawn = '1';
@@ -1309,7 +1349,7 @@
         };
         if (!body.contact_id && !body.contact) throw new Error('เลือกหรือเพิ่ม' + (isEx ? 'ผู้ขาย' : 'ลูกค้า'));
         if (type === 'RE') body.pay = payDraft;
-        if (isEx) body.pay = paidNow ? payDraft : null;
+        if (isEx) { body.pay = paidNow ? payDraft : null; body.voucher = voucher; }
         const r = editId ? await put(`/docs/${editId}`, body) : await post('/docs', body);
         if (scanItem) {
           Object.assign(scanItem, { status: 'saved', doc: { id: r.doc.id, number: r.doc.number } });
@@ -1961,11 +2001,14 @@
     const billing = t === 'QT' || t === 'IV';
     const P = printPrefs(b);
     main.innerHTML = `<div class="page-h"><div><h1><span class="mono">${esc(doc.number)}</span></h1><div class="sub">${esc(T.docTitle(doc)[0])} · ${statusChip(t, doc.status)}</div></div>
-      <div class="actions">${acts.join('')}<button class="btn" data-act="pdf">ดาวน์โหลด PDF</button><button class="btn dark" data-act="print">${ICON.print}พิมพ์</button></div></div>
+      <div class="actions">${acts.join('')}<button class="btn" data-act="pdf">ดาวน์โหลด PDF</button>${t === 'EX'
+        ? `<span class="split"><button class="btn dark" data-act="print">${ICON.print}พิมพ์</button><button class="btn dark split-chev" data-act="printas" aria-label="เลือกหัวเอกสารที่จะพิมพ์">${CHEV}</button></span>`
+        : `<button class="btn dark" data-act="print">${ICON.print}พิมพ์</button>`}</div></div>
       <div class="view">
         <div class="paper-wrap" data-paper></div>
         <div class="side">
-          <div class="card card-pad po"><h2>${esc(T.TYPE_NAME[t])}</h2>
+          <div class="card card-pad po"><h2>${esc(t === 'EX' ? 'หัวเอกสารที่พิมพ์' : T.TYPE_NAME[t])}</h2>
+            ${t === 'EX' ? `<div class="vform" role="radiogroup" aria-label="หัวเอกสาร">${Object.entries(T.VOUCHER_FORMS).map(([k, [n]]) => `<label class="vform-opt"><input type="radio" name="vform" data-po="form" value="${k}" ${k === (doc.voucher?.form || 'pv') ? 'checked' : ''}><span><b>${n}</b><small>${VFORM_HINT[k]}</small></span></label>`).join('')}</div>` : ''}
             <div class="po-row"><label class="check"><input type="checkbox" data-po="original" ${P.original ? 'checked' : ''}> ต้นฉบับ</label>
               ${t !== 'EX' ? `<label class="check"><input type="checkbox" data-po="copy" ${P.copy ? 'checked' : ''}> สำเนา</label><input type="number" min="1" max="5" data-po="copies" value="${P.copies}" class="po-n" aria-label="จำนวนสำเนา">` : ''}</div>
             ${billing ? `<label class="sw-row"><span>ข้อมูลการรับชำระ</span><input type="checkbox" class="sw" data-po="pay" ${P.pay ? 'checked' : ''}></label>` : ''}
@@ -1975,6 +2018,8 @@
           </div>
           <div class="card card-pad"><dl class="kv">
             <dt>${t === 'EX' ? 'ผู้ขาย' : 'ลูกค้า'}</dt><dd>${esc(doc.contact?.name || '')}</dd>
+            ${doc.voucher?.prepared_by ? `<dt>ผู้จัดทำ</dt><dd>${esc(doc.voucher.prepared_by)}</dd>` : ''}
+            ${doc.voucher?.approved_by ? `<dt>ผู้อนุมัติ</dt><dd>${esc(doc.voucher.approved_by)}</dd>` : ''}
             <dt>ยอดรวม</dt><dd class="num">${money(doc.total)}</dd>
             ${doc.vat ? `<dt>ภาษีมูลค่าเพิ่ม</dt><dd class="num">${money(doc.vat)}</dd>` : ''}
             ${doc.wht ? `<dt>หัก ณ ที่จ่าย</dt><dd class="num">${money(doc.wht)}</dd>` : ''}
@@ -1995,13 +2040,15 @@
     // Options → preview of the first page, and what print / download produce.
     const opts = () => {
       const o = { ...P };
-      $$('[data-po]', main).forEach((i) => { o[i.dataset.po] = i.type === 'checkbox' ? i.checked : i.type === 'number' ? Number(i.value) || 1 : i.value; });
+      $$('[data-po]', main).forEach((i) => { if (i.type === 'radio' && !i.checked) return; o[i.dataset.po] = i.type === 'checkbox' ? i.checked : i.type === 'number' ? Number(i.value) || 1 : i.value; });
       if (!canSign) o.sign = false;
+      if (t === 'EX') o.payFrom = payFromName(doc);
       return o;
     };
     const preview = () => {
       const o = opts();
-      savePrintPrefs(o);
+      const { form, payFrom, ...keep } = o;
+      savePrintPrefs(keep);
       const html = T.renderSet(printable, b, o);
       const n = (html.match(/<article class="paper/g) || []).length;
       const first = !o.original && o.copy !== false && t !== 'EX' ? 'copy' : 'original';
@@ -2020,7 +2067,16 @@
           a.disabled = true;
           const label = a.textContent;
           a.textContent = 'กำลังสร้าง PDF…';
-          try { await T.downloadPdf(T.renderSet(printable, b, opts()), `${doc.number}.pdf`); } finally { a.disabled = false; a.textContent = label; }
+          const o = opts();
+          const fname = t === 'EX' && o.form && o.form !== 'pv' ? `${doc.number}-${T.VOUCHER_FORMS[o.form][0]}.pdf` : `${doc.number}.pdf`;
+          try { await T.downloadPdf(T.renderSet(printable, b, o), fname); } finally { a.disabled = false; a.textContent = label; }
+        }
+        if (act === 'printas') {
+          popMenu(a, Object.entries(T.VOUCHER_FORMS).map(([k, [n]]) => [`พิมพ์${n}`, () => {
+            const r = $(`[data-po=form][value="${k}"]`, main);
+            if (r) { r.checked = true; preview(); }
+            printHtml(T.renderSet(printable, b, { ...opts(), form: k }));
+          }]));
         }
         if (act === 'print') printHtml(T.renderSet(printable, b, opts()));
         if (act === 'wht') whtDialog(doc, b);

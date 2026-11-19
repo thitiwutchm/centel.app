@@ -410,6 +410,19 @@ const whtFormFor = (c) => {
   if (id.length === 13) return id[0] === '0' ? 'pnd53' : 'pnd3';
   return c?.is_company === false ? 'pnd3' : 'pnd53';
 };
+// Payment voucher details on an expense (printed on ใบสำคัญจ่าย / ใบรับรองแทนใบเสร็จรับเงิน / ใบรับสินค้า).
+const VOUCHER_FORMS = ['pv', 'rc', 'gr'];
+function cleanVoucher(v) {
+  if (!v || typeof v !== 'object') return null;
+  const out = {
+    form: VOUCHER_FORMS.includes(v.form) ? v.form : 'pv',
+    prepared_by: str(v.prepared_by, 120),
+    approved_by: str(v.approved_by, 120),
+    received_by: str(v.received_by, 120),
+    received_id: str(String(v.received_id || '').replace(/[^\d-]/g, ''), 20),
+  };
+  return Object.entries(out).some(([k, x]) => x && !(k === 'form' && x === 'pv')) ? out : null;
+}
 const WHT_INCOME = ['ค่าบริการ', 'ค่าจ้างทำของ', 'ค่าเช่า', 'ค่าโฆษณา', 'ค่าขนส่ง', 'ค่าวิชาชีพอิสระ', 'ค่านายหน้า', 'ดอกเบี้ย', 'เงินปันผล', 'ค่ารางวัล', 'อื่น ๆ'];
 
 // Builds a document row from what the browser sent. `cur` is the stored document when editing.
@@ -483,6 +496,7 @@ async function buildDoc(db, req, body, cur) {
     subtotal: t.subtotal, vat_base: t.vat_base, vat: t.vat, total: t.total, wht: t.wht,
     ref_id: refId, ref_no: str(body.ref_no, 60), ref_date: isDate(body.ref_date) ? body.ref_date : null,
     pay, wht_cert: whtCert, notes: str(body.notes, 2000),
+    voucher: type !== 'EX' ? null : body.voucher !== undefined ? cleanVoucher(body.voucher) : (cur?.voucher ?? null),
     ref_title: type !== 'EX' ? null : body.ref_title !== undefined ? str(body.ref_title, 120) : (cur?.ref_title ?? null),
     project: body.project !== undefined ? str(body.project, 80) : (cur?.project ?? null),
     attachment: typeof body.attachment === 'string' && body.attachment.startsWith(`acc/${bizId}/`) ? body.attachment.slice(0, 200) : (cur?.attachment || null),
@@ -490,8 +504,8 @@ async function buildDoc(db, req, body, cur) {
 }
 
 const COLS = ['type', 'date', 'due_date', 'status', 'contact_id', 'contact', 'tax_invoice', 'price_mode', 'vat_rate', 'lines', 'discount',
-  'subtotal', 'vat_base', 'vat', 'total', 'wht', 'ref_id', 'ref_no', 'ref_date', 'pay', 'wht_cert', 'notes', 'attachment', 'ref_title', 'project'];
-const jsonCols = new Set(['contact', 'lines', 'pay', 'wht_cert']);
+  'subtotal', 'vat_base', 'vat', 'total', 'wht', 'ref_id', 'ref_no', 'ref_date', 'pay', 'wht_cert', 'notes', 'attachment', 'ref_title', 'project', 'voucher'];
+const jsonCols = new Set(['contact', 'lines', 'pay', 'wht_cert', 'voucher']);
 const val = (k, v) => (jsonCols.has(k) && v != null ? JSON.stringify(v) : v);
 
 // After a document changes: number the WHT certificate, update the source document's status, post.
