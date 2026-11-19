@@ -370,6 +370,71 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pp-void { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-18deg); font-size: 84px; font-weight: 700; color: rgba(201, 42, 42, .18); border: 6px solid rgba(201, 42, 42, .18); padding: 0 30px; border-radius: 16px; pointer-events: none; }
 .pp-box { display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1px solid #1B1D21; font-size: 11px; vertical-align: -2px; }
 
+/* ---------- Expense papers: ใบสำคัญจ่าย / ใบรับรองแทนใบเสร็จรับเงิน / ใบรับสินค้า ---------- */
+.pv-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.pv-top .pp-head { max-width: 80mm; min-width: 0; }
+.pv-top .pp-logo { max-height: 22mm; width: auto; min-width: 0; max-width: 100%; }
+.pv-title { text-align: right; padding-top: 3mm; }
+.pv-title h1 { margin: 2px 0 0; font-size: 26px; line-height: 1.2; font-weight: 700; color: #1B1D21; }
+.pv-title .pp-en { margin: 0; }
+.pv-info { display: grid; grid-template-columns: 1fr 70mm; gap: 18px; margin-top: 7mm; }
+.pv-parties { min-width: 0; }
+.pv-party { padding: 7px 0; }
+.pv-party + .pv-party { border-top: 1px solid #D9D6D0; }
+.pv-party dl { display: grid; grid-template-columns: 24mm 1fr; gap: 2px 8px; margin: 0; }
+.pv-party dt, .pv-meta dt { font-weight: 600; color: #1B1D21; }
+.pv-party dd { margin: 0; min-width: 0; color: #2E3138; }
+.pv-pname { font-weight: 600; }
+.pv-side { display: flex; flex-direction: column; gap: 8px; }
+.pv-meta { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; padding: 10px 12px; background: var(--pp-soft); border-radius: 8px; border-top: 2px solid var(--pp-accent); }
+.pv-meta dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.pv-prep { padding: 0 12px; }
+.pv-dim { color: #80848D; }
+.pv-lines { width: 100%; border-collapse: collapse; margin-top: 6mm; }
+.pv-lines th { background: var(--pp-soft); font-weight: 600; font-size: 11.5px; padding: 7px 8px; text-align: left; }
+.pv-lines th:first-child { border-radius: 6px 0 0 6px; }
+.pv-lines th:last-child { border-radius: 0 6px 6px 0; }
+.pv-lines td { padding: 7px 8px; vertical-align: top; border-bottom: 1px solid #F0EEEA; }
+.pv-lines .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pv-lines .c { text-align: center; width: 16mm; }
+.pv-lines .pv-d { width: 26mm; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pv-n { display: inline-block; min-width: 18px; color: #4A4E57; }
+.pv-ind { padding-left: 18px; }
+.pv-foot { margin-top: auto; padding-top: 8mm; }
+.pv-sec { display: grid; grid-template-columns: 22mm 1fr; gap: 10px; padding: 9px 0; border-top: 1px solid #D9D6D0; }
+.pv-h { font-weight: 700; color: #1B1D21; }
+.pv-h::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 2px; background: var(--pp-accent); margin-right: 6px; vertical-align: 1px; }
+.pv-body { min-height: 5mm; }
+.pv-sum { grid-template-columns: 22mm 1fr 72mm; }
+.pv-sum table { width: 100%; border-collapse: collapse; }
+.pv-sum th { text-align: left; font-weight: 600; padding: 2px 0; white-space: nowrap; }
+.pv-sum td { text-align: right; padding: 2px 0 2px 10px; font-variant-numeric: tabular-nums; }
+.pv-sum-l td { color: #2E3138; }
+.pv-words td { font-weight: 400; }
+.pv-total { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--pp-soft); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+.pv-total span { font-weight: 600; }
+.pv-total b { font-size: 19px; color: var(--pp-accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pv-total small { font-size: 11.5px; color: #4A4E57; font-weight: 400; }
+.pv-sum-r th { text-align: right; padding-right: 0; }
+.pv-net th, .pv-net td { font-weight: 700; }
+.pv-pay { grid-template-columns: 22mm auto 1fr auto; align-items: start; }
+.pv-pay-l { display: grid; grid-template-columns: auto auto; gap: 2px 14px; margin: 0; }
+.pv-pay-l dt { font-weight: 600; }
+.pv-pay-l dd { margin: 0; font-variant-numeric: tabular-nums; }
+.pv-pay-m { display: flex; flex-direction: column; gap: 2px; padding-left: 10px; }
+.pv-pay-r { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pv-pf { margin-top: 0; gap: 8px; }
+.pv-hint { margin-left: auto; font-size: 11px; }
+.pv-sgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5mm; }
+.pv-signer { text-align: center; min-width: 0; }
+.pv-role { font-weight: 600; font-size: 11.5px; }
+.pv-mark { position: relative; height: 15mm; }
+.pv-sline { border-bottom: 1px dotted #80848D; margin: 0 2mm 3px; }
+.pv-sname, .pv-sdate { font-size: 11px; color: #2E3138; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-sdate { color: #80848D; font-variant-numeric: tabular-nums; }
+.pv-seal { height: 26mm; display: flex; align-items: center; justify-content: center; border: 1px dashed #D9D6D0; border-radius: 8px; margin-top: 2px; }
+.pv-seal .pp-stamp { max-height: 24mm; max-width: 100%; }
+
 /* ---------- Dialogs, toast, auth ---------- */
 .dlg-back { position: fixed; inset: 0; background: rgba(15, 16, 19, .45); display: grid; place-items: center; z-index: 60; padding: 16px; }
 .dlg { background: var(--panel); border-radius: 16px; width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
@@ -906,3 +971,16 @@ button.bs-empty:hover .bs-illo { transform: translateY(-2px); transition: transf
 .lib-folder.drop-on, .lib-crumbs a.drop-on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
 .dragging { opacity: .45; }
 @media (max-width: 560px) { .lib-grid { grid-template-columns: 1fr; } .lib-tip { display: none; } .lib-tools input { max-width: none; } }
+
+/* Expense document: which header to print (ใบสำคัญจ่าย / ใบรับรองแทนใบเสร็จ / ใบรับสินค้า) */
+.vform { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.vform-opt { display: flex; gap: 10px; align-items: flex-start; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.vform-opt input { margin-top: 3px; accent-color: var(--accent); }
+.vform-opt b { display: block; font-size: 14px; }
+.vform-opt small { display: block; color: var(--muted); font-size: 12px; }
+.vform-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft, rgba(232, 89, 12, .08)); }
+.vbox-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.vbox-h h2 { margin: 0; }
+.vform-seg { flex-wrap: wrap; }
+.vf-hint { font-size: 12.5px; margin: 6px 0 10px; }
+.pv-pay.pv-blank { grid-template-columns: 22mm 1fr; }
