@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>CENTEL ลูกพ่อ</title>
+  <meta name="description" content="CENTEL ลูกพ่อ">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="icon" type="image/png" href="/icons/centel-192.png">
+  <link rel="apple-touch-icon" href="/icons/centel-180.png">
+  <script>
+    /* Home-screen installs made before the home page existed still open "/". Send those
+       (and only those) on to the app at /app; a normal browser stays on this page. */
+    (function () {
+      try {
+        var standalone = window.navigator.standalone === true ||
+          (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+        if (standalone) location.replace('/app' + location.search + location.hash);
+      } catch (e) { /* stay here */ }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;700&display=swap">
+  <style>
+    :root {
+      --bg: #0b1220;
+      --fg: #f5f7fb;
+      --muted: rgba(245, 247, 251, .55);
+      --accent: #ff7a1a;
+      --accent-2: #ffb347;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Anuphan', -apple-system, 'Segoe UI', 'Noto Sans Thai', sans-serif;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      -webkit-font-smoothing: antialiased;
+    }
+    .glow {
+      position: fixed;
+      inset: -20vmax;
+      background:
+        radial-gradient(40vmax 40vmax at 30% 35%, rgba(255, 122, 26, .28), transparent 60%),
+        radial-gradient(35vmax 35vmax at 72% 68%, rgba(255, 179, 71, .18), transparent 60%);
+      filter: blur(20px);
+      animation: drift 18s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+    @keyframes drift { to { transform: translate3d(4vmax, -3vmax, 0) scale(1.05); } }
+    main { position: relative; text-align: center; animation: rise .9s cubic-bezier(.2, .8, .2, 1) both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+    .logo {
+      width: 88px; height: 88px; border-radius: 22px;
+      box-shadow: 0 18px 50px rgba(255, 122, 26, .35);
+      margin-bottom: 28px;
+    }
+    h1 { line-height: 1.05; font-weight: 700; }
+    .brand {
+      display: block;
+      font-size: clamp(56px, 15vw, 150px);
+      letter-spacing: .06em;
+      background: linear-gradient(180deg, #fff 30%, #ffd9b8);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .tag {
+      display: block;
+      margin-top: .18em;
+      font-size: clamp(34px, 8vw, 80px);
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    footer {
+      position: fixed; left: 0; right: 0;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      text-align: center; font-size: 13px; color: var(--muted);
+    }
+    @media (prefers-reduced-motion: reduce) { .glow, main { animation: none; } }
+  </style>
+</head>
+<body>
+  <div class="glow" aria-hidden="true"></div>
+  <main>
+    <img class="logo" src="/icons/centel-192.png" alt="">
+    <h1><span class="brand">CENTEL</span><span class="tag">ลูกพ่อ</span></h1>
+  </main>
+  <footer>© <span id="y">2026</span> centel.app</footer>
+  <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
+</body>
+</html>
