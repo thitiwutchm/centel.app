@@ -410,6 +410,19 @@ const whtFormFor = (c) => {
   if (id.length === 13) return id[0] === '0' ? 'pnd53' : 'pnd3';
   return c?.is_company === false ? 'pnd3' : 'pnd53';
 };
+// Payment voucher details on an expense (printed on ใบสำคัญจ่าย / ใบรับรองแทนใบเสร็จรับเงิน / ใบรับสินค้า).
+const VOUCHER_FORMS = ['pv', 'rc', 'gr'];
+function cleanVoucher(v) {
+  if (!v || typeof v !== 'object') return null;
+  const out = {
+    form: VOUCHER_FORMS.includes(v.form) ? v.form : 'pv',
+    prepared_by: str(v.prepared_by, 120),
+    approved_by: str(v.approved_by, 120),
+    received_by: str(v.received_by, 120),
+    received_id: str(String(v.received_id || '').replace(/[^\d-]/g, ''), 20),
+  };
+  return Object.entries(out).some(([k, x]) => x && !(k === 'form' && x === 'pv')) ? out : null;
+}
 const WHT_INCOME = ['ค่าบริการ', 'ค่าจ้างทำของ', 'ค่าเช่า', 'ค่าโฆษณา', 'ค่าขนส่ง', 'ค่าวิชาชีพอิสระ', 'ค่านายหน้า', 'ดอกเบี้ย', 'เงินปันผล', 'ค่ารางวัล', 'อื่น ๆ'];
 
 // Builds a document row from what the browser sent. `cur` is the stored document when editing.
@@ -483,6 +496,7 @@ async function buildDoc(db, req, body, cur) {
     subtotal: t.subtotal, vat_base: t.vat_base, vat: t.vat, total: t.total, wht: t.wht,
     ref_id: refId, ref_no: str(body.ref_no, 60), ref_date: isDate(body.ref_date) ? body.ref_date : null,
     pay, wht_cert: whtCert, notes: str(body.notes, 2000),
+    voucher: type !== 'EX' ? null : body.voucher !== undefined ? cleanVoucher(body.voucher) : (cur?.voucher ?? null),
     ref_title: type !== 'EX' ? null : body.ref_title !== undefined ? str(body.ref_title, 120) : (cur?.ref_title ?? null),
     project: body.project !== undefined ? str(body.project, 80) : (cur?.project ?? null),
     attachment: typeof body.attachment === 'string' && body.attachment.startsWith(`acc/${bizId}/`) ? body.attachment.slice(0, 200) : (cur?.attachment || null),
@@ -490,8 +504,8 @@ async function buildDoc(db, req, body, cur) {
 }
 
 const COLS = ['type', 'date', 'due_date', 'status', 'contact_id', 'contact', 'tax_invoice', 'price_mode', 'vat_rate', 'lines', 'discount',
-  'subtotal', 'vat_base', 'vat', 'total', 'wht', 'ref_id', 'ref_no', 'ref_date', 'pay', 'wht_cert', 'notes', 'attachment', 'ref_title', 'project'];
-const jsonCols = new Set(['contact', 'lines', 'pay', 'wht_cert']);
+  'subtotal', 'vat_base', 'vat', 'total', 'wht', 'ref_id', 'ref_no', 'ref_date', 'pay', 'wht_cert', 'notes', 'attachment', 'ref_title', 'project', 'voucher'];
+const jsonCols = new Set(['contact', 'lines', 'pay', 'wht_cert', 'voucher']);
 const val = (k, v) => (jsonCols.has(k) && v != null ? JSON.stringify(v) : v);
 
 // After a document changes: number the WHT certificate, update the source document's status, post.
@@ -1099,6 +1113,88 @@ export function startAccJobs() {
   setInterval(tick, 60 * 60000);
   startReminderJob();
 }
+
+/* ---------- คลังเอกสาร: folders and link cards (migrations/046_acc_library.sql) ---------- */
+// A card is only a name and a link to where the file lives (Google Drive and so on).
+
+const LIB_COLORS = ['orange', 'blue', 'green', 'purple', 'pink', 'gray'];
+const libUrl = (v) => {
+  let s = String(v ?? '').trim();
+  if (!s) return null;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = `https://${s}`;
+  try {
+    const u = new URL(s);
+    return (u.protocol === 'https:' || u.protocol === 'http:') && u.hostname.includes('.') && s.length <= 2000 ? u.href : null;
+  } catch { return null; }
+};
+const libRow = (r) => ({ id: r.id, parent: r.parent_id, kind: r.kind, name: r.name, url: r.url, note: r.note, color: r.color, createdAt: r.created_at, updatedAt: r.updated_at });
+
+// The folder something goes into: null (top level) or a folder of this business that is not
+// the item itself or inside it, so a folder can't be moved into its own subfolder.
+async function libParent(db, bizId, parent, self) {
+  if (parent == null || parent === '') return null;
+  if (!isUuid(parent)) throw bad('bad_folder');
+  const f = (await db.query(`select id from acc_library where id = $1 and business_id = $2 and kind = 'folder'`, [parent, bizId])).rows[0];
+  if (!f) throw bad('bad_folder');
+  if (self) {
+    const loop = (await db.query(
+      `with recursive up(id, parent_id) as (select id, parent_id from acc_library where id = $1
+         union all select l.id, l.parent_id from acc_library l join up on l.id = up.parent_id)
+       select 1 from up where id = $2 limit 1`, [parent, self])).rows[0];
+    if (loop) throw bad('bad_folder');
+  }
+  return parent;
+}
+
+biz.get('/library', wrap(async (req, res) => {
+  const rows = await tx(req, async (db) => (await db.query(
+    'select * from acc_library where business_id = $1 order by kind, lower(name), created_at limit 5000', [B(req)])).rows);
+  res.json({ items: rows.map(libRow) });
+}));
+
+biz.post('/library', rateLimit(600, 60 * 60000), wrap(async (req, res) => {
+  const b = req.body || {};
+  const kind = b.kind === 'folder' ? 'folder' : 'link';
+  const url = kind === 'link' ? libUrl(b.url) : null;
+  if (kind === 'link' && !url) throw bad('bad_url');
+  const name = str(b.name, 200) || (url ? new URL(url).hostname.replace(/^www\./, '') : null);
+  if (!name) throw bad('bad_name');
+  const row = await tx(req, async (db) => {
+    const n = (await db.query('select count(*)::int as n from acc_library where business_id = $1', [B(req)])).rows[0].n;
+    if (n >= 5000) throw bad('too_many');
+    const parent = await libParent(db, B(req), b.parent);
+    return (await db.query(
+      `insert into acc_library (business_id, parent_id, kind, name, url, note, color, created_by) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+      [B(req), parent, kind, name, url, str(b.note, 1000), LIB_COLORS.includes(b.color) ? b.color : null, req.user.id])).rows[0];
+  });
+  res.json({ item: libRow(row) });
+}));
+
+biz.put('/library/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const b = req.body || {};
+  const row = await tx(req, async (db) => {
+    const cur = (await db.query('select * from acc_library where id = $1 and business_id = $2', [req.params.id, B(req)])).rows[0];
+    if (!cur) throw bad('not_found', 404);
+    const next = { ...cur };
+    if (b.name !== undefined) { next.name = str(b.name, 200); if (!next.name) throw bad('bad_name'); }
+    if (b.url !== undefined && cur.kind === 'link') { next.url = libUrl(b.url); if (!next.url) throw bad('bad_url'); }
+    if (b.note !== undefined) next.note = str(b.note, 1000);
+    if (b.color !== undefined) next.color = LIB_COLORS.includes(b.color) ? b.color : null;
+    if (b.parent !== undefined) next.parent_id = await libParent(db, B(req), b.parent, cur.id);
+    return (await db.query(
+      `update acc_library set name = $2, url = $3, note = $4, color = $5, parent_id = $6, updated_at = now() where id = $1 returning *`,
+      [cur.id, next.name, next.url, next.note, next.color, next.parent_id])).rows[0];
+  });
+  res.json({ item: libRow(row) });
+}));
+
+biz.delete('/library/:id', wrap(async (req, res) => {
+  if (!isUuid(req.params.id)) throw bad('not_found', 404);
+  const n = await tx(req, async (db) => (await db.query('delete from acc_library where id = $1 and business_id = $2', [req.params.id, B(req)])).rowCount);
+  if (!n) throw bad('not_found', 404);
+  res.json({ ok: true });
+}));
 
 /* ---------- Public shapes ---------- */
 
