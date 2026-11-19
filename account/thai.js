@@ -206,6 +206,7 @@
   // opts: copy ('ต้นฉบับ' | 'สำเนา' | 'original' | 'copy'), lang ('th' | 'en'), pay (show payment details, default on),
   //       sign (put the saved signature and stamp on the issuer's line), page (number in the corner).
   function renderDoc(doc, business, opts = {}) {
+    if (doc.type === 'EX') return renderVoucher(doc, business, opts);
     const s = business.settings || {};
     const lang = opts.lang || s.lang || 'th';
     const t = L[lang] || L.th;
@@ -330,6 +331,205 @@
     </article>`;
   }
 
+  /* ---------- Expense documents: ใบสำคัญจ่าย / ใบรับรองแทนใบเสร็จรับเงิน / ใบรับสินค้า ---------- */
+
+  // The three headers an expense prints under. pv: payment voucher, rc: receipt substitute, gr: goods received.
+  const VOUCHER_FORMS = {
+    pv: ['ใบสำคัญจ่าย', 'Payment Voucher'],
+    rc: ['ใบรับรองแทนใบเสร็จรับเงิน', 'Receipt Substitute'],
+    gr: ['ใบรับสินค้า', 'Goods Received Note'],
+  };
+  const VL = {
+    th: {
+      buyer: 'ผู้ซื้อ', seller: 'ผู้ขาย', payer: 'ผู้จ่ายเงิน', payee: 'ผู้รับเงิน', addr: 'ที่อยู่', taxId: 'เลขที่ภาษี', idNo: 'เลขประจำตัว', contact: 'ติดต่อ',
+      no: 'เลขที่เอกสาร', date: 'วันที่ออก', billNo: 'อ้างอิงบิลผู้ขาย', billDate: 'วันที่ในบิล', due: 'ครบกำหนดจ่าย', preparer: 'ผู้จัดทำ',
+      desc: 'คำอธิบาย', qty: 'จำนวน', unit: 'หน่วย', price: 'ราคา', disc: 'ส่วนลด', vat: 'VAT', none: 'ไม่มี', amount: 'มูลค่า', amountRc: 'จำนวนเงิน',
+      rcDate: 'วัน เดือน ปี', rcDesc: 'รายละเอียดรายจ่าย', check: 'ตรวจรับ',
+      summary: 'สรุป', subtotal: 'รวมเป็นเงิน', discount: 'ส่วนลด', vatBase: 'มูลค่าที่คำนวณภาษี', exempt: 'มูลค่าไม่มีหรือยกเว้นภาษี', vatAmt: 'ภาษีมูลค่าเพิ่ม',
+      grand: 'จำนวนเงินทั้งสิ้น', words: 'ตัวอักษร', wht: 'จำนวนเงินที่ถูกหัก ณ ที่จ่าย', paidAmt: 'จำนวนเงินที่ชำระ', baht: 'บาท',
+      payment: 'ชำระเงิน', payDate: 'วันที่ชำระ', method: 'วิธีชำระ', from: 'จ่ายจาก', toBank: 'ธนาคาร / เลขที่', fee: 'ค่าธรรมเนียม',
+      notPaid: 'ยังไม่ได้บันทึกการจ่ายเงิน กรอกด้วยมือเมื่อจ่าย', bankLine: 'ธนาคาร', refLine: 'เลขที่', notes: 'หมายเหตุ', sign: 'รับรอง',
+      pm: { cash: 'เงินสด', cheque: 'เช็ค', transfer: 'โอนเงิน', card: 'บัตร', other: 'อื่น ๆ' },
+      roles: {
+        pv: ['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'], rc: ['ผู้รับเงิน', 'ผู้จ่ายเงิน', 'ผู้อนุมัติ'], gr: ['ผู้ส่งสินค้า', 'ผู้รับสินค้า', 'ผู้อนุมัติ'],
+      },
+      stamp: 'ตราประทับ', signDate: 'วันที่',
+      certify: (who, biz) => `ข้าพเจ้า ${who} ขอรับรองว่ารายจ่ายข้างต้นนี้ไม่อาจเรียกเก็บใบเสร็จรับเงินจากผู้รับเงินได้ และได้จ่ายไปเพื่อกิจการของ ${biz} โดยแท้`,
+      certifyH: 'คำรับรอง', grNote: 'ได้รับสินค้าตามรายการข้างต้นไว้ถูกต้องและอยู่ในสภาพเรียบร้อยแล้ว',
+      original: 'ต้นฉบับ', void: 'ยกเลิก', ho: 'สำนักงานใหญ่',
+    },
+    en: {
+      buyer: 'Buyer', seller: 'Vendor', payer: 'Payer', payee: 'Payee', addr: 'Address', taxId: 'Tax ID', idNo: 'ID no.', contact: 'Contact',
+      no: 'Document no.', date: 'Issue date', billNo: 'Vendor bill no.', billDate: 'Bill date', due: 'Due date', preparer: 'Prepared by',
+      desc: 'Description', qty: 'Qty', unit: 'Unit', price: 'Price', disc: 'Discount', vat: 'VAT', none: 'None', amount: 'Amount', amountRc: 'Amount',
+      rcDate: 'Date', rcDesc: 'Expense details', check: 'Checked',
+      summary: 'Summary', subtotal: 'Subtotal', discount: 'Discount', vatBase: 'Taxable amount', exempt: 'Non-VAT / exempt amount', vatAmt: 'VAT',
+      grand: 'Grand total', words: 'In words', wht: 'Withholding tax', paidAmt: 'Amount paid', baht: 'THB',
+      payment: 'Payment', payDate: 'Paid on', method: 'Method', from: 'Paid from', toBank: 'Bank / ref.', fee: 'Fee',
+      notPaid: 'No payment recorded yet. Fill in by hand when paid.', bankLine: 'Bank', refLine: 'No.', notes: 'Notes', sign: 'Sign-off',
+      pm: { cash: 'Cash', cheque: 'Cheque', transfer: 'Transfer', card: 'Card', other: 'Other' },
+      roles: {
+        pv: ['Prepared by', 'Approved by', 'Received by'], rc: ['Received by', 'Paid by', 'Approved by'], gr: ['Delivered by', 'Received by', 'Approved by'],
+      },
+      stamp: 'Company stamp', signDate: 'Date',
+      certify: (who, biz) => `I, ${who}, certify that no receipt could be obtained from the payee for the expenses above, and that they were paid solely for the business of ${biz}.`,
+      certifyH: 'Certification', grNote: 'The goods listed above were received complete and in good condition.',
+      original: 'Original', void: 'VOID', ho: 'Head office',
+    },
+  };
+
+  // doc: an EX document. opts: form ('pv' | 'rc' | 'gr', default the document's own), lang, sign, page,
+  //       payFrom (name of the money account the payment came from).
+  function renderVoucher(doc, business, opts = {}) {
+    const s = business.settings || {};
+    const lang = opts.lang === 'en' ? 'en' : opts.lang === 'th' ? 'th' : (s.lang === 'en' ? 'en' : 'th');
+    const t = VL[lang];
+    const v = doc.voucher || {};
+    const form = VOUCHER_FORMS[opts.form] ? opts.form : VOUCHER_FORMS[v.form] ? v.form : 'pv';
+    const [th, en] = VOUCHER_FORMS[form];
+    const fmtDate = lang === 'en' ? enDate : slashDate;
+    const color = s.color || '#E8590C';
+    const lines = doc.lines || [];
+    const bizName = lang === 'en' && business.name_en ? business.name_en : business.name;
+    const c = doc.contact || {};
+    const pay = doc.pay || null;
+    const net = Math.round((doc.total - (doc.wht || 0)) * 100) / 100;
+    const vatOn = Number(doc.vat_rate) > 0;
+    const showDisc = lines.some((l) => Number(l.disc) > 0);
+    const br = (x) => esc(x).replace(/\n/g, '<br>');
+    const dash = '<span class="pv-dim">-</span>';
+    const sign = opts.sign !== undefined ? !!opts.sign : !!s.signAuto;
+
+    // Parties: our business pays (ผู้ซื้อ / ผู้จ่ายเงิน), the contact is paid (ผู้ขาย / ผู้รับเงิน).
+    const party = (label, p, id) => `<div class="pv-party"><dl>
+        <dt>${esc(label)}</dt><dd class="pv-pname">${esc(p.name || '') || dash}</dd>
+        <dt>${t.addr}</dt><dd>${p.address ? br(p.address) : dash}</dd>
+        <dt>${esc(id.label)}</dt><dd>${id.value ? esc(id.value) : dash}</dd>
+        ${p.phone || p.email ? `<dt>${t.contact}</dt><dd>${esc([p.phone, p.email].filter(Boolean).join(' · '))}</dd>` : ''}
+      </dl></div>`;
+    const bizTax = business.tax_id ? `${taxIdFmt(business.tax_id)} (${branchText(business.branch || '00000', lang)})` : '';
+    const cTax = c.tax_id ? `${taxIdFmt(c.tax_id)}${c.branch ? ` (${branchText(c.branch, lang)})` : ''}` : '';
+    const payeeId = form === 'rc' && v.received_id ? taxIdFmt(v.received_id) : cTax;
+    const us = { name: bizName, address: business.address, phone: business.phone, email: business.email };
+    const parties = form === 'rc'
+      ? party(t.payee, c, { label: v.received_id ? t.idNo : t.taxId, value: payeeId }) + party(t.payer, us, { label: t.taxId, value: bizTax })
+      : party(t.buyer, us, { label: t.taxId, value: bizTax }) + party(form === 'pv' ? `${t.seller} / ${t.payee}` : t.seller, c, { label: t.taxId, value: cTax });
+
+    const meta = [
+      [t.no, doc.number],
+      [t.date, fmtDate(doc.date)],
+      [t.billNo, doc.ref_no || '-'],
+      doc.ref_date ? [t.billDate, fmtDate(doc.ref_date)] : null,
+      doc.due_date && !pay ? [t.due, fmtDate(doc.due_date)] : null,
+    ].filter(Boolean);
+
+    // Items
+    let table;
+    if (form === 'rc') {
+      table = `<table class="pv-lines"><thead><tr><th class="pv-d">${t.rcDate}</th><th>${t.rcDesc}</th><th class="r">${t.amountRc}</th></tr></thead><tbody>
+        ${lines.map((l, i) => `<tr><td class="pv-d">${i ? '' : esc(fmtDate(doc.ref_date || doc.date))}</td>
+          <td><div class="pp-item">${esc(l.name)}${Number(l.qty) !== 1 ? ` <span class="pv-dim">× ${qtyFmt(l.qty)}${l.unit ? ` ${esc(l.unit)}` : ''}</span>` : ''}</div>${l.desc ? `<div class="pp-desc">${br(l.desc)}</div>` : ''}</td>
+          <td class="r">${money(l.amount ?? (Number(l.qty) * Number(l.price) - (Number(l.disc) || 0)))}</td></tr>`).join('')}
+        </tbody></table>`;
+    } else {
+      const gr = form === 'gr';
+      table = `<table class="pv-lines"><thead><tr><th>${t.desc}</th><th class="r">${t.qty}</th>${gr ? `<th>${t.unit}</th>` : ''}<th class="r">${t.price}</th>
+          ${showDisc ? `<th class="r">${t.disc}</th>` : ''}${vatOn && !gr ? `<th class="r">${t.vat}</th>` : ''}<th class="r">${t.amount}</th>${gr ? `<th class="c">${t.check}</th>` : ''}</tr></thead><tbody>
+        ${lines.map((l, i) => `<tr>
+          <td><div class="pp-item"><span class="pv-n">${i + 1}.</span>${esc(l.name)}</div>${l.desc ? `<div class="pp-desc pv-ind">${br(l.desc)}</div>` : ''}</td>
+          <td class="r">${qtyFmt(l.qty)}</td>${gr ? `<td>${esc(l.unit || '')}</td>` : ''}
+          <td class="r">${money(l.price)}</td>
+          ${showDisc ? `<td class="r">${money(l.disc || 0)}</td>` : ''}
+          ${vatOn && !gr ? `<td class="r">${l.vat !== false ? `${Number(doc.vat_rate)}%` : t.none}</td>` : ''}
+          <td class="r">${money(l.amount ?? (Number(l.qty) * Number(l.price) - (Number(l.disc) || 0)))}</td>
+          ${gr ? '<td class="c"><span class="pp-box"></span></td>' : ''}</tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    // Summary: the breakdown and amount in words on the left, the total (and what was paid) on the right.
+    const exempt = Math.round((doc.total - (doc.vat || 0) - (vatOn ? doc.vat_base : 0)) * 100) / 100;
+    const sumRows = [
+      Number(doc.discount) ? [t.subtotal, money(doc.subtotal)] : null,
+      Number(doc.discount) ? [t.discount, money(-doc.discount)] : null,
+      vatOn ? [t.vatBase, money(doc.vat_base)] : null,
+      !vatOn || Math.abs(exempt) > 0.004 ? [t.exempt, money(exempt)] : null,
+      vatOn ? [`${t.vatAmt} ${Number(doc.vat_rate)}%`, money(doc.vat)] : null,
+    ].filter(Boolean);
+    const words = lang === 'en' ? bahtTextEn(doc.total) : bahtText(doc.total);
+    const hasWht = Number(doc.wht) > 0 && form !== 'gr';
+    const summary = `<section class="pv-sec pv-sum"><div class="pv-h">${t.summary}</div>
+      <div class="pv-sum-l"><table>${sumRows.map(([k, x]) => `<tr><th>${esc(k)}</th><td>${x} ${t.baht}</td></tr>`).join('')}
+        <tr class="pv-words"><th>${t.grand}</th><td>${esc(words)}</td></tr></table></div>
+      <div class="pv-sum-r"><div class="pv-total"><span>${t.grand}</span><b>${money(doc.total)}<small> ${t.baht}</small></b></div>
+        ${hasWht || form === 'pv' ? `<table><tr><th>${t.wht}</th><td>${money(doc.wht || 0)} ${t.baht}</td></tr><tr class="pv-net"><th>${t.paidAmt}</th><td>${money(net)} ${t.baht}</td></tr></table>` : ''}</div>
+    </section>`;
+
+    // Payment: what was recorded, or lines to fill in by hand.
+    let payment = '';
+    if (form !== 'gr') {
+      if (pay) {
+        const pm = t.pm[pay.method] || '';
+        payment = `<section class="pv-sec pv-pay"><div class="pv-h">${t.payment}</div>
+          <dl class="pv-pay-l"><dt>${t.payDate}</dt><dd>${esc(fmtDate(pay.date))}</dd><dt>${t.method}</dt><dd>${esc(pm)}</dd>
+            ${Number(pay.fee) ? `<dt>${t.fee}</dt><dd>${money(pay.fee)} ${t.baht}</dd>` : ''}</dl>
+          <div class="pv-pay-m">${opts.payFrom ? `<div><span class="pv-dim">${t.from}</span> <b>${esc(opts.payFrom)}</b></div>` : ''}
+            ${pay.bank || pay.ref ? `<div><span class="pv-dim">${t.toBank}</span> ${esc([pay.bank, pay.ref].filter(Boolean).join(' · '))}</div>` : ''}</div>
+          <div class="pv-pay-r">${money(net)} ${t.baht}</div></section>`;
+      } else {
+        const box = (k) => `<span class="pp-pf-opt"><span class="pp-box"></span>${esc(t.pm[k])}</span>`;
+        const fill = (label, cls = '') => `<div class="pp-pf-field${cls}"><span>${esc(label)}</span><span class="pp-pf-line">&nbsp;</span></div>`;
+        payment = `<section class="pv-sec pv-pay pv-blank"><div class="pv-h">${t.payment}</div>
+          <div class="pp-pf pv-pf"><div class="pp-pf-row">${['cash', 'transfer', 'cheque', 'card'].map(box).join('')}<span class="pv-dim pv-hint">${t.notPaid}</span></div>
+            <div class="pp-pf-row">${fill(t.bankLine, ' w')}${fill(t.refLine)}${fill(t.payDate)}${fill(t.amountRc)}</div></div></section>`;
+      }
+    }
+
+    const note = doc.notes || (s.notes && s.notes.EX) || '';
+    const notes = `<section class="pv-sec"><div class="pv-h">${t.notes}</div><div class="pv-body">${note ? br(note) : ''}</div></section>`;
+    const blank = '..............................';
+    const certify = form === 'rc'
+      ? `<section class="pv-sec"><div class="pv-h">${t.certifyH}</div><div class="pv-body">${esc(t.certify(v.prepared_by || blank, bizName))}</div></section>`
+      : form === 'gr' ? `<section class="pv-sec"><div class="pv-h">${t.certifyH}</div><div class="pv-body">${esc(t.grNote)}</div></section>` : '';
+
+    // Sign-off: three signers and the company stamp. The saved signature goes on the approver.
+    const roles = t.roles[form];
+    const approver = v.approved_by || s.signer || '';
+    const names = form === 'pv' ? [v.prepared_by, approver, v.received_by || c.name]
+      : form === 'rc' ? [v.received_by || c.name, v.prepared_by, approver]
+        : [c.name, v.received_by || v.prepared_by, approver];
+    const signDate = fmtDate((pay && pay.date) || doc.date);
+    const cell = (role, name, own) => {
+      const mark = own && sign && business.signature;
+      return `<div class="pv-signer"><div class="pv-role">${esc(role)}</div>
+        <div class="pv-mark">${mark ? `<img class="pp-signature" src="${esc(business.signature)}" alt="">` : ''}</div>
+        <div class="pv-sline"></div><div class="pv-sname">${name ? `(${esc(name)})` : `(${blank})`}</div>
+        <div class="pv-sdate">${t.signDate} ${mark ? esc(signDate) : '....../....../......'}</div></div>`;
+    };
+    const ownIdx = form === 'pv' ? 1 : 2;
+    const signs = `<section class="pv-sec pv-signs"><div class="pv-h">${t.sign}</div><div class="pv-sgrid">
+      ${roles.map((r, i) => cell(r, names[i], i === ownIdx)).join('')}
+      <div class="pv-signer"><div class="pv-role">${t.stamp}</div><div class="pv-seal">${sign && business.stamp ? `<img class="pp-stamp" src="${esc(business.stamp)}" alt="">` : ''}</div></div>
+    </div></section>`;
+
+    return `<article class="paper pv pp-lang-${lang}" style="--pp-accent:${esc(color)};--pp-soft:${tint(color, 0.09)};--pp-mid:${tint(color, 0.35)}">
+      <div class="pp-corner"></div>${opts.page ? `<div class="pp-page">${esc(opts.page)}</div>` : ''}
+      ${doc.status === 'void' ? `<div class="pp-void">${t.void}</div>` : ''}
+      <header class="pv-top">
+        <div class="pp-head">${business.logo ? `<img class="pp-logo" src="${esc(business.logo)}" alt="">` : `<div class="pp-biz">${esc(bizName)}</div>`}</div>
+        <div class="pv-title"><div class="pp-copy">${t.original}</div><h1>${esc(lang === 'en' ? en : th)}</h1><div class="pp-en">${esc(lang === 'en' ? th : en)}</div></div>
+      </header>
+      <section class="pv-info">
+        <div class="pv-parties">${parties}</div>
+        <div class="pv-side"><dl class="pv-meta">${meta.map(([k, x]) => `<dt>${esc(k)}</dt><dd>${esc(x)}</dd>`).join('')}</dl>
+          ${v.prepared_by && form !== 'rc' ? `<div class="pv-prep"><div class="pp-label">${t.preparer}</div><div>${esc(v.prepared_by)}</div></div>` : ''}</div>
+      </section>
+      ${table}
+      <div class="pv-foot">
+        ${summary}${payment}${certify}${notes}${signs}
+      </div>
+    </article>`;
+  }
+
   // The account name under the QR as explicit lines: html2canvas misplaces Thai text that the browser wraps itself.
   function qrNameLines(text) {
     const t = String(text || '').trim();
@@ -422,6 +622,6 @@
   g.Thai = {
     downloadPdf, promptPayPayload, promptPayFmt, qrSvg,
     esc, money, qtyFmt, thDate, slashDate, thMonth, today, taxIdFmt, branchFmt, bahtText, computeTotals, WHT_RATES,
-    docTitle, TYPE_NAME, TH_MONTHS, STATUS, statusName, PAY_METHOD, renderDoc, renderSet, TH_MONTHS_LONG, bahtTextEn,
+    docTitle, VOUCHER_FORMS, renderVoucher, TYPE_NAME, TH_MONTHS, STATUS, statusName, PAY_METHOD, renderDoc, renderSet, TH_MONTHS_LONG, bahtTextEn,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
