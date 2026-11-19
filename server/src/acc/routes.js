@@ -14,6 +14,7 @@ import { readPurchaseDoc } from './ai.js';
 import { CATS } from './cats.js';
 import { mountUsers, guard, permsOf, inviteInfo, issuerOf } from './users.js';
 import { mountCentel, startReminderJob } from './centel.js';
+import { mountTaxCal } from './taxcal.js';
 import { ACC_BASE, MCP_PATH } from '../oauth.js';
 import { CC_KINDS, DEFAULT_BASE, ccFetch, cleanBase, cleanKey, reportFor, sinceMonth, toDocBody, venueContact } from './capcourt.js';
 
@@ -123,6 +124,7 @@ router.use('/b/:biz', wrap(async (req, _res, next) => {
 }), biz);
 mountUsers(router, biz, { wrap, rateLimit });
 mountCentel(biz, { wrap });
+mountTaxCal(biz, { wrap });
 
 const B = (req) => req.biz.id;
 

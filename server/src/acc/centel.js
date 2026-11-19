@@ -18,6 +18,7 @@ import { pool } from '../db.js';
 import { requireUser, rateLimit, sha } from '../auth.js';
 import { remindAt } from '../noteparse.js';
 import { pushTo } from '../push.js';
+import { syncTaxCalendar, withdrawTax } from './taxcal.js';
 
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status, expose: true });
 const wrapFn = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -105,7 +106,7 @@ const remindTime = (days, date) => remindAt(date, null, days * 1440);
 /* ---------- Putting deadlines into Centel ---------- */
 
 // Adds one to-do (once: the claim insert stops repeats) to a Centel profile.
-async function addTodo(claimSql, claimArgs, setSql, userId, todo, date, days, now) {
+export async function addTodo(claimSql, claimArgs, setSql, userId, todo, date, days, now) {
   let at = remindTime(days, date);
   // Made late (the reminder time has gone but the day has not): remind now instead.
   if (at < now) at = new Date(now.getTime() + 60000);
@@ -192,6 +193,8 @@ export async function syncReminders({ businessId = null, now = new Date() } = {}
         userId, todo, d.due_date, d.remind_days, now).catch((e) => { console.error('doc reminder', d.id, e.message); return 0; });
     }
   }
+  // ปฏิทินภาษี deadlines (taxcal.js) go out the same way.
+  added += await syncTaxCalendar({ businessId, now }).catch((e) => { console.error('tax calendar', e.message); return 0; });
   return added;
 }
 
@@ -303,6 +306,7 @@ export function mountCentel(biz, { wrap = wrapFn } = {}) {
     const row = (await pool.query('select user_id from acc_centel_links where id = $1 and business_id = $2', [req.params.id, req.biz.id])).rows[0];
     if (!row) throw bad('not_found', 404);
     await withdraw({ businessId: req.biz.id, userId: row.user_id, docs: true });
+    await withdrawTax(req.biz.id, { userId: row.user_id });
     await pool.query('delete from acc_centel_links where id = $1', [req.params.id]);
     res.json({ ok: true });
   }));
@@ -427,6 +431,7 @@ centelLinkRouter.delete('/:id', wrapFn(async (req, res) => {
   const row = (await pool.query('select business_id from acc_centel_links where id = $1 and user_id = $2', [req.params.id, req.user.id])).rows[0];
   if (!row) throw bad('not_found', 404);
   await withdraw({ businessId: row.business_id, userId: req.user.id, docs: true });
+  await withdrawTax(row.business_id, { userId: req.user.id });
   await pool.query('delete from acc_centel_links where id = $1', [req.params.id]);
   res.json({ ok: true });
 }));
