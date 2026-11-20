@@ -48,6 +48,23 @@
 	handle {
 		root * /srv
 
+		# centel.app/ is the public home page (home.html) and the app itself lives at
+		# centel.app/app. The iOS app (its web view adds "CentelApp" to the user agent)
+		# still gets the app at "/"; old home-screen installs are sent on by home.html.
+		@home {
+			path /
+			not header User-Agent *CentelApp*
+			not host account.centel.app invest.centel.app
+		}
+		rewrite @home /home.html
+		@app {
+			path /app
+			not host account.centel.app invest.centel.app
+		}
+		rewrite @app /index.html
+		# The app's files are relative to "/", so /app/ (trailing slash) would break them.
+		redir /app/ /app
+
 		# account.centel.app is the accounting app in /account (account/index.html); its
 		# /api calls go to the same api service above. centel.app/account/ serves it too.
 		@acctsite {
@@ -65,7 +82,7 @@
 		rewrite @investsite /invest{path}
 
 		# Always revalidate the shell and service worker so installed apps pick up updates.
-		@nocache path */ */index.html */sw.js */manifest.webmanifest
+		@nocache path */ */index.html /home.html /app */sw.js */manifest.webmanifest
 		header @nocache Cache-Control "no-cache"
 		@manifest path */manifest.webmanifest
 		header @manifest Content-Type application/manifest+json
